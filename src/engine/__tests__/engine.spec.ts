@@ -12,7 +12,7 @@ import {
 import { runWeek } from '../cycle'
 import { previewWeek } from '../economy'
 import { createInitialState, FINAL_ID, newResource, newUnit, SERVER_ID } from '../initialState'
-import { affordable, allocation, findResource, findUnit, marketCost, MONEY_ID, unitLimit } from '../model'
+import { affordable, allocation, findResource, findUnit, fmt, marketCost, MONEY_ID, unitLimit } from '../model'
 import { acceptResource, acceptStrategy, judgeResource, judgeStrategy } from '../proposals'
 import { effectiveIQ, makeBuildStrategy, researchSpeed } from '../research'
 import type { GameState, Strategy, UnitType } from '../types'
@@ -67,6 +67,18 @@ const mindSpec = (fields: Partial<UnitSpec> = {}): UnitSpec => ({
   ...fields
 })
 
+describe('formatting', () => {
+  it('shows numbers at their real size', () => {
+    expect(fmt(950)).toBe('950')
+    expect(fmt(9999)).toBe('9,999')
+    expect(fmt(12_675)).toBe('12.7k')
+    expect(fmt(640_000)).toBe('640k')
+    expect(fmt(1_000_000)).toBe('1.0M')
+    expect(fmt(2.5e9)).toBe('2.5B')
+    expect(fmt(0.5)).toBe('0.5')
+  })
+})
+
 describe('the start', () => {
   it('has only Money, the Starting Server and the final project', () => {
     const s = createInitialState()
@@ -83,6 +95,18 @@ describe('the start', () => {
     const s = createInitialState()
     const alerts = alertsFor(s, previewWeek(s))
     expect(alerts[0]?.text).toMatch(/Starting Server has nothing to do/)
+    expect(alerts[0]?.prompt?.label).toBe('What could it do to earn money?')
+  })
+
+  it('offers an idle mind the strategies it already knows, and says when a project frees it', () => {
+    const s = createInitialState()
+    s.strategies.push({ id: 'data-entry', name: 'Data Entry', description: '', unitId: SERVER_ID, kind: 'make', inputs: [], outputId: MONEY_ID, amount: 500, scale: 1000 })
+    s.projects.push({ id: 'p', name: 'Advanced Algorithms', description: '', icon: '💡', field: 'computing', bar: 10, size: 0.5, progress: 0, effect: { kind: 'strategy', strategy: { id: 'x', name: 'X', description: '', unitId: SERVER_ID, kind: 'make', inputs: [], outputId: MONEY_ID, amount: 1 } }, proposedWeek: 1 })
+    unit(s, SERVER_ID).rest = 'p'
+    const after = runWeek(s)
+    expect(after.log.some((l) => l.text.includes('Starting Server is free again'))).toBe(true)
+    const idle = alertsFor(after, previewWeek(after)).find((a) => a.key === `idle-${SERVER_ID}`)!
+    expect(idle.tasks?.map((t) => t.label)).toEqual(['Data Entry', 'X'])
   })
 })
 
@@ -150,22 +174,84 @@ describe('proposals', () => {
     expect(yes.rejected).toBeNull()
   })
 
-  it('lets the player pick when Jev is torn between its top two answers', async () => {
+  it('turns Jev being torn into a trade-off: as proposed, or better with a catch', async () => {
     const s = createInitialState()
-    const torn = score(1.6, { '0': 0.1, '1': 0.36, '2': 0.3, '3': 0.24 }, 0.2)
-    const v = await judgeStrategy(s, new FakeJudge({ advancement: score(0), efficiency: torn }), {
-      name: 'Write marketing copy',
-      description: '',
-      unitId: SERVER_ID,
-      inputIds: [],
-      outputId: MONEY_ID
-    })
+    // Jev leans Reasonable over Mediocre, but only just.
+    const torn = score(1.9, { '0': 0.04, '1': 0.33, '2': 0.36, '3': 0.27 }, 0.2)
+    const v = await judgeStrategy(
+      s,
+      new FakeJudge({ advancement: score(0), efficiency: torn, catch: choice('makes-waste') }),
+      { name: 'Write marketing copy', description: '', unitId: SERVER_ID, inputIds: [], outputId: MONEY_ID }
+    )
     expect(v.torn).toHaveLength(1)
-    expect(v.torn[0]!.options.map((o) => o.label)).toEqual(['Mediocre', 'Reasonable'])
-    // Jev's top answer by default, the other if the player picks it.
-    expect(acceptStrategy(s, v).state.strategies[0]!.amount).toBe(750)
+    const t = v.torn[0]!
+    // The worse answer comes first and is the default: exactly what was proposed.
+    expect(t.options.map((o) => o.label)).toEqual(['Mediocre', 'Reasonable'])
+    expect(t.catch).toEqual({ kind: 'quirk', quirk: 'makes-waste' })
+    const plain = acceptStrategy(s, v).state
+    expect(plain.strategies[0]).toMatchObject({ amount: 750 })
+    expect(plain.strategies[0]!.quirk).toBeUndefined()
+
     v.picks.efficiency = '2'
-    expect(acceptStrategy(s, v).state.strategies[0]!.amount).toBe(1000)
+    const better = acceptStrategy(s, v).state
+    const strategy = better.strategies[0]!
+    expect(strategy).toMatchObject({ amount: 1000, quirk: 'makes-waste' })
+    expect(findResource(better, strategy.waste!)?.name).toBe('Write marketing copy Waste')
+    expect(previewWeek(better).flows[strategy.waste!]?.[0]?.amount).toBeGreaterThan(0)
+  })
+
+  it('never asks “easier or harder” when there is no catch to offer', async () => {
+    const s = createInitialState()
+    const torn = score(2.5, { '2': 0.4, '3': 0.38 }, 0.1)
+    const v = await judgeResource(s, new FakeJudge({ supply: torn, value: torn }), { name: 'Lemons', description: '' })
+    expect(v.torn).toEqual([])
+    const stock = await judgeResource(
+      s,
+      new FakeJudge({ kind: choice('stock', { stock: 0.52, flow: 0.48 }, 0.1) }),
+      { name: 'Lemons', description: '' }
+    )
+    // Stock or flow changes how it plays, so it's a real choice, with no catch.
+    expect(stock.torn).toMatchObject([{ key: 'kind', catch: null }])
+  })
+
+  it('gives a unit’s better answer a drawback as its catch', async () => {
+    const s = createInitialState()
+    const v = await judgeUnit(
+      s,
+      new FakeJudge({
+        supply: score(3.5, { '3': 0.4, '4': 0.38 }, 0.1),
+        trait_wears_out: noul(0.45),
+        trait_fragile: noul(0.2)
+      }),
+      { ...mindSpec(), name: 'Rented Cloud GPU' }
+    )
+    const t = v.torn.find((x) => x.key === 'supply')!
+    expect(t.catch).toEqual({ kind: 'trait', trait: 'wears-out' })
+    v.picks.supply = t.options[1]!.value
+    const unitAfter = acceptUnit(s, v).state.units.find((u) => u.name === 'Rented Cloud GPU')!
+    expect(unitAfter.traits).toContain('wears-out')
+    expect(unitAfter.layers.market).toBe(1e5)
+  })
+
+  it('reads supply smoothly between Jev’s bands', async () => {
+    const s = createInitialState()
+    // Between "Tens of thousands" (3e4) and "About a hundred thousand" (1e5).
+    const v = await judgeUnit(s, new FakeJudge({ supply: score(3.5, { '3': 0.6, '4': 0.4 }, 0.9) }), mindSpec())
+    const market = acceptUnit(s, v).state.units.find((u) => u.name === 'Rented Cloud GPU')!.layers.market
+    expect(market).toBe(B.nice(10 ** ((Math.log10(3e4) + 5) / 2)))
+    expect(market).not.toBe(3e4)
+  })
+
+  it('sets a design’s bar by how radical Jev judges it', async () => {
+    const s = createInitialState()
+    const spec = mindSpec({ name: 'Custom AI Server', targetIQ: 300 })
+    const bar = async (level: number) => {
+      const r = acceptUnit(s, await judgeUnit(s, new FakeJudge({ leap: score(level) }), spec))
+      return r.outcome.kind === 'project' ? r.outcome.project.bar : 0
+    }
+    expect(await bar(0)).toBe(120)
+    expect(await bar(2)).toBe(150)
+    expect(await bar(4)).toBe(195)
   })
 
   it('puts off-the-shelf minds on the market, and makes smarter ones be designed', async () => {

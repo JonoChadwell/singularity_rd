@@ -60,6 +60,7 @@
       >
         max {{ fmtCount(maxBuy) }}
       </button>
+      <span v-if="cost > money" class="warn">You need {{ fmt(cost - money) }} more Money.</span>
     </div>
     <p v-else-if="soldOut" class="small warn wall">
       Humanity has no more to sell. How will you make your own?

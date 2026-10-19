@@ -250,6 +250,32 @@ export const TRAITS: Record<TraitId, Trait> = {
 export const has = (unit: { traits: readonly TraitId[] }, trait: TraitId) =>
   unit.traits.includes(trait)
 
+/** Catches a strategy can come with, when the player takes Jev's better answer. */
+export const QUIRK_IDS = ['makes-waste', 'slow-to-start', 'picky'] as const
+export type QuirkId = (typeof QUIRK_IDS)[number]
+
+export const QUIRKS: Record<QuirkId, { name: string; icon: string; rule: string }> = {
+  'makes-waste': {
+    name: 'Makes waste',
+    icon: '☣️',
+    rule: 'Also makes a waste stock. Past a limit, it stops until something uses the waste up.'
+  },
+  'slow-to-start': {
+    name: 'Slow to start',
+    icon: '🐢',
+    rule: 'Takes a few weeks of running to reach full output.'
+  },
+  picky: {
+    name: 'Picky',
+    icon: '🧐',
+    rule: 'Runs only when every input and upkeep is fully met.'
+  }
+}
+
+/** Drawbacks that can be a unit's catch: ones that need no extra choice, for this kind of unit. */
+export const catchTraits = (mind: boolean, except: readonly TraitId[] = []) =>
+  traitsFor(mind).filter((t) => t.kind === 'drawback' && !t.param && !except.includes(t.id))
+
 /** Traits Jev can give a unit of this kind. */
 export function traitsFor(mind: boolean): Trait[] {
   return TRAIT_IDS.map((id) => TRAITS[id]).filter((t) => mind || !t.thinkers)

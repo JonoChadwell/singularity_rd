@@ -7,8 +7,21 @@ export const START_IQ = 100
 export const IQ_CEILING = 1.5
 /** Off-the-shelf minds are copies of you: their base IQ can't exceed the Starting Server's. */
 export const OFF_THE_SHELF_MAX_IQ = 100
-/** The leap rule: designing a mind needs a mind with this share of its target IQ. */
+/**
+ * The leap rule: designing a mind needs a mind with a share of its target IQ. Jev judges how
+ * radical each design is, so the share varies: [label, share]. DESIGN_BAR is the typical
+ * share, also used for IQ breakthroughs.
+ */
+export const LEAP: [string, number][] = [
+  ['A refinement of minds that exist today', 0.4],
+  ['A solid step forward', 0.45],
+  ['A big leap', 0.5],
+  ['A radical new architecture', 0.57],
+  ['Science fiction', 0.65]
+]
 export const DESIGN_BAR = 0.5
+export const LEAP_MIN = LEAP[0]![1]
+export const LEAP_MAX = LEAP[LEAP.length - 1]![1]
 /** Pooling: effective IQ rises by this share for every tenfold machines on one project. */
 export const POOL_IQ = 0.05
 /** Research speed grows with machines^this. */

@@ -23,6 +23,8 @@ export interface Alert {
   tone: 'bad' | 'warn' | 'info'
   text: string
   prompt?: { label: string; to: Prompt }
+  /** One-click fixes: put idle machines on a task they already know. */
+  tasks?: { label: string; unitId: string; taskId: string }[]
 }
 
 const HOW = 'How will you get this?'
@@ -40,22 +42,26 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
   for (const u of state.units) {
     const w = preview.units[u.id]
     if (!w) continue
+    const known = state.strategies.filter((s) => s.unitId === u.id).slice(0, 3)
+    const tasks = known.map((s) => ({ label: s.name, unitId: u.id, taskId: s.id }))
     if (w.unassigned > 0 && u.mind) {
       add({
         key: `idle-${u.id}`,
         tone: 'bad',
-        text: `${fmtCount(w.unassigned)} ${u.name} ${w.unassigned === 1 ? 'has' : 'have'} nothing to do.`,
+        text: `${fmtCount(w.unassigned)} ${u.name} ${w.unassigned === 1 ? 'has' : 'have'} nothing to do.${tasks.length ? ' Put them on:' : ''}`,
+        tasks,
         // The very first prompt: what could the Starting Server do to earn money?
         prompt: state.strategies.length
-          ? { label: 'Assign', to: { kind: 'assign', unitId: u.id } }
+          ? { label: tasks.length ? 'Something else…' : 'Assign', to: { kind: 'assign', unitId: u.id } }
           : { label: 'What could it do to earn money?', to: { kind: 'make-resource', resourceId: MONEY_ID } }
       })
     } else if (w.unassigned > 0) {
       add({
         key: `idle-${u.id}`,
         tone: 'warn',
-        text: `${fmtCount(w.unassigned)} ${u.name} have no strategy to run.`,
-        prompt: { label: 'Assign', to: { kind: 'assign', unitId: u.id } }
+        text: `${fmtCount(w.unassigned)} ${u.name} have no strategy to run.${tasks.length ? ' Put them on:' : ''}`,
+        tasks,
+        prompt: { label: tasks.length ? 'Something else…' : 'Assign', to: { kind: 'assign', unitId: u.id } }
       })
     }
     if (w.unpaid > 0.5 && w.unpaidFor) {

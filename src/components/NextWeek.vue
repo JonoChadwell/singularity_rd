@@ -10,6 +10,14 @@
     <ul v-if="game.alerts.length" class="plain-list alerts" aria-label="Before you press">
       <li v-for="a in shown" :key="a.key" :class="a.tone">
         <span>{{ a.text }}</span>
+        <button
+          v-for="t in a.tasks ?? []"
+          :key="t.taskId"
+          class="link task"
+          @click="game.assignRest(t.unitId, t.taskId)"
+        >
+          {{ t.label }}
+        </button>
         <button v-if="a.prompt" class="link" @click="follow(a)">{{ a.prompt.label }}</button>
       </li>
       <li v-if="game.alerts.length > shown.length" class="info">
@@ -90,6 +98,11 @@ function follow(a: Alert) {
 
 .alerts li.info {
   color: var(--muted);
+}
+
+.alerts .task {
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 .calm {

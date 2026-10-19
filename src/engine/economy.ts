@@ -32,6 +32,8 @@ interface Runner {
   /** Share of full output. Below `f` only for Hardy units short of upkeep. */
   o: number
   limitedBy: string | null
+  /** Runs only when every need is fully met. */
+  picky: boolean
 }
 
 function emptyUnitWeek(): UnitWeek {
@@ -117,7 +119,8 @@ function buildRunners(state: GameState, report: WeekReport): Runner[] {
         project: null,
         f: 1,
         o: 1,
-        limitedBy: null
+        limitedBy: null,
+        picky: has(u, 'picky')
       }
       const project = state.projects.find((p) => p.id === taskId)
       const strategy = state.strategies.find((s) => s.id === taskId)
@@ -131,9 +134,20 @@ function buildRunners(state: GameState, report: WeekReport): Runner[] {
         for (const f of rate.inputs) {
           runner.needs.set(f.resourceId, (runner.needs.get(f.resourceId) ?? 0) + f.amount)
         }
+        if (strategy.quirk === 'picky') runner.picky = true
+        if (strategy.waste) {
+          const waste = findResource(state, strategy.waste)
+          if (waste && waste.amount >= B.WASTE_LIMIT_WEEKS * machines * wastePerMachine(u)) {
+            week.choked = true
+            continue
+          }
+          runner.makes.set(strategy.waste, wastePerMachine(u))
+        }
         if (strategy.kind === 'make') {
           const out = findResource(state, strategy.outputId)
-          runner.makes.set(strategy.outputId, rate.amount * factor)
+          const warm =
+            strategy.quirk === 'slow-to-start' ? Math.min(1, ((strategy.weeksRun ?? 0) + 1) / B.SLOW_WEEKS) : 1
+          runner.makes.set(strategy.outputId, rate.amount * factor * warm)
           const by = u.byproduct ? findResource(state, u.byproduct) : undefined
           if (by && out && by.id !== out.id) {
             const value = rate.amount * factor * out.value * B.BY_PRODUCT_SHARE
@@ -184,7 +198,7 @@ function settle(runner: Runner, shares: Map<string, number>, skip?: string) {
     if (runner.upkeep.has(id)) upkeep = Math.min(upkeep, s)
     else inputs = Math.min(inputs, s)
   }
-  if (has(u, 'picky') && lowest < 1 - 1e-9) return { f: 0, o: 0, limitedBy }
+  if (runner.picky && lowest < 1 - 1e-9) return { f: 0, o: 0, limitedBy }
   if (has(u, 'hardy') && upkeep < 1) {
     return { f: inputs, o: inputs * Math.max(B.HARDY, upkeep), limitedBy, upkeepShare: upkeep }
   }
@@ -380,6 +394,9 @@ export function simulateWeek(state: GameState): WeekReport {
       week.lost += lost
     }
     if (runners.some((r) => r.unit === u && r.o > 0)) u.weeksRun += 1
+  }
+  for (const s of state.strategies) {
+    if (runners.some((r) => r.strategy === s && r.o > 0)) s.weeksRun = (s.weeksRun ?? 0) + 1
   }
 
   for (const p of [...state.projects]) {

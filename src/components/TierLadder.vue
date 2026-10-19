@@ -23,8 +23,11 @@
       <div>
         Best effective IQ <strong class="num ai">{{ Math.floor(best) }}</strong>
       </div>
-      <div class="muted" title="The leap rule: designing a mind needs a mind with half its target IQ.">
-        You could design up to IQ <strong class="num">{{ designable }}</strong>
+      <div
+        class="muted"
+        :title="`Designing a mind needs a mind with ${Math.round(LEAP_MIN * 100)}–${Math.round(LEAP_MAX * 100)}% of its target IQ. Jev judges how radical each design is.`"
+      >
+        Designs within reach: IQ <strong class="num">{{ range[0] }}–{{ range[1] }}</strong>
       </div>
     </div>
   </section>
@@ -34,7 +37,8 @@
 import { computed } from 'vue'
 import { FINAL_ID } from '@/engine/initialState'
 import { currentIQ, fmtCount } from '@/engine/model'
-import { bestEffectiveIQ, designableIQ } from '@/engine/research'
+import { LEAP_MAX, LEAP_MIN } from '@/engine/balance'
+import { bestEffectiveIQ, designRange } from '@/engine/research'
 import { useGameStore } from '@/stores/game'
 
 const game = useGameStore()
@@ -44,7 +48,7 @@ const finalProgress = computed(() =>
   final.value ? final.value.progress / final.value.size : game.state.status === 'won' ? 1 : 0
 )
 const best = computed(() => bestEffectiveIQ(game.state))
-const designable = computed(() => designableIQ(game.state))
+const range = computed(() => designRange(game.state))
 
 const steps = computed(() => {
   const s = game.state

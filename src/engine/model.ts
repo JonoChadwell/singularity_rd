@@ -5,12 +5,13 @@ import type { Flow, GameState, Layer, Project, Resource, Strategy, UnitType } fr
 
 // ---------------------------------------------------------------- formatting
 
-const SUFFIXES: [number, string][] = [
-  [1e15, 'Q'],
-  [1e12, 'T'],
-  [1e9, 'B'],
-  [1e6, 'M'],
-  [1e4, 'k']
+/** [shown from, divided by, suffix]. Thousands only get a suffix from 10k. */
+const SUFFIXES: [number, number, string][] = [
+  [1e15, 1e15, 'Q'],
+  [1e12, 1e12, 'T'],
+  [1e9, 1e9, 'B'],
+  [1e6, 1e6, 'M'],
+  [1e4, 1e3, 'k']
 ]
 
 /** Short, readable numbers: 950, 12.4k, 3.1M, 2.0B. */
@@ -19,8 +20,8 @@ export function fmt(n: number): string {
   const sign = n < 0 ? '−' : ''
   const a = Math.abs(n)
   if (a >= 1e18) return `${sign}${a.toExponential(1).replace('e+', 'e')}`
-  for (const [size, suffix] of SUFFIXES) {
-    if (a >= size) return `${sign}${(a / size).toFixed(a / size >= 100 ? 0 : 1)}${suffix}`
+  for (const [from, size, suffix] of SUFFIXES) {
+    if (a >= from) return `${sign}${(a / size).toFixed(a / size >= 100 ? 0 : 1)}${suffix}`
   }
   if (a >= 100) return `${sign}${Math.round(a).toLocaleString('en-US')}`
   if (a >= 10) return `${sign}${a.toFixed(1).replace(/\.0$/, '')}`

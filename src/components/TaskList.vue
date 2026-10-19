@@ -19,6 +19,9 @@
       <div class="what">
         <div class="name">
           {{ row.icon }} {{ row.name }}
+          <span v-if="row.strategy?.quirk" class="chip quirk" :title="QUIRKS[row.strategy.quirk].rule">
+            {{ QUIRKS[row.strategy.quirk].icon }} {{ QUIRKS[row.strategy.quirk].name }}
+          </span>
           <button
             v-if="unit.count > 1 && row.count < unit.count"
             class="link"
@@ -109,6 +112,7 @@ import {
   unitLimit
 } from '@/engine/model'
 import { effectiveIQ, finishWeek, strategyRate } from '@/engine/research'
+import { QUIRKS } from '@/engine/traits'
 import type { Project, Strategy, UnitType } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
@@ -250,6 +254,12 @@ function startProject(e: Event) {
   color: var(--accent);
   border-color: var(--accent-dim);
   margin-top: 3px;
+}
+
+.quirk {
+  color: var(--warn);
+  border-color: rgb(251 191 36 / 0.35);
+  cursor: help;
 }
 
 .teach {

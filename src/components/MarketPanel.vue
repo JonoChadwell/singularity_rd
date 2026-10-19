@@ -38,6 +38,7 @@
         >
           max {{ fmtCount(affordable(u, money, reserve)) }}
         </button>
+        <span v-if="unitCost(u) > money" class="warn small">You need {{ fmt(unitCost(u) - money) }} more Money.</span>
       </div>
     </div>
 
@@ -61,6 +62,9 @@
           Buy for {{ fmt((amounts[r.id] ?? 0) * r.value) }}
         </button>
         <button class="link" @click="amounts[r.id] = maxStock(r)">max</button>
+        <span v-if="(amounts[r.id] ?? 0) * r.value > money" class="warn small">
+          You need {{ fmt((amounts[r.id] ?? 0) * r.value - money) }} more Money.
+        </span>
       </div>
     </div>
   </div>

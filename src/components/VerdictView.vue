@@ -18,8 +18,8 @@
     <p v-else-if="verdict.duplicateOf" class="ai">🔁 Jev thinks that’s the same as {{ verdict.duplicateOf }}.</p>
     <template v-else>
       <fieldset v-for="t in verdict.torn" :key="t.key" class="torn">
-        <legend class="small">Jev is torn: <span class="muted">{{ t.question }}</span></legend>
-        <label v-for="o in t.options" :key="o.value" class="choice">
+        <legend class="small">Jev is torn on {{ t.topic }}.</legend>
+        <label v-for="(o, i) in t.options" :key="o.value" class="choice">
           <input
             type="radio"
             :name="`torn-${t.key}`"
@@ -27,28 +27,38 @@
             :checked="(verdict.picks[t.key] ?? t.options[0]!.value) === o.value"
             @change="emit('pick', t.key, o.value)"
           />
-          <span>{{ o.label }}</span>
-          <span class="muted small num">{{ pct(o.p) }}</span>
+          <span>
+            <strong>{{ o.label }}</strong>
+            <template v-if="t.catch && i === 0"><span class="muted">: exactly what you proposed</span></template>
+            <template v-else-if="t.catch">
+              <span class="muted">, but </span>
+              <span class="warn" :title="complicationName(t.catch).rule">
+                {{ complicationName(t.catch).icon }} {{ complicationName(t.catch).name }}
+              </span>
+              <span class="muted small">({{ lower(complicationName(t.catch).rule) }})</span>
+            </template>
+          </span>
         </label>
       </fieldset>
 
-      <div v-if="verdict.kind === 'unit' && verdict.traitOdds.length" class="traits">
-        <div class="small muted">Traits (up to {{ MAX_TRAITS }}). Perks raise the price; drawbacks lower it.</div>
-        <label
-          v-for="t in verdict.traitOdds"
-          :key="t.trait"
-          class="choice trait"
-          :title="TRAITS[t.trait].rule"
-        >
-          <input
-            type="checkbox"
-            :checked="kept.has(t.trait)"
-            :disabled="!nearLine(t) || (!kept.has(t.trait) && kept.size >= MAX_TRAITS)"
-            @change="emit('trait', t.trait, !kept.has(t.trait))"
-          />
-          <span>{{ TRAITS[t.trait].icon }} {{ TRAITS[t.trait].name }}</span>
-          <span class="muted small">{{ TRAITS[t.trait].kind }} · {{ pct(t.p) }}{{ nearLine(t) ? ' · your call' : '' }}</span>
-        </label>
+      <div v-if="verdict.kind === 'unit'" class="traits small">
+        <div class="row">
+          <span class="muted">Traits:</span>
+          <TraitChips v-if="keptList.length" :traits="keptList" />
+          <span v-else class="muted">none</span>
+        </div>
+        <div v-if="optional.length" class="row">
+          <span class="muted" title="Jev wasn’t sure. Perks raise the price; drawbacks lower it.">Your call:</span>
+          <label v-for="t in optional" :key="t.trait" class="choice" :title="TRAITS[t.trait].rule">
+            <input
+              type="checkbox"
+              :checked="kept.has(t.trait)"
+              :disabled="!kept.has(t.trait) && kept.size >= MAX_TRAITS"
+              @change="emit('trait', t.trait, !kept.has(t.trait))"
+            />
+            {{ TRAITS[t.trait].icon }} {{ TRAITS[t.trait].name }}
+          </label>
+        </div>
       </div>
 
       <label v-if="verdict.kind === 'unit' && needsBuilder(verdict)" class="field builder">
@@ -102,7 +112,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { MAX_TRAITS, type PartKind } from '@/engine/balance'
-import { NAME_MAX } from '@/engine/proposals'
+import { complicationName, NAME_MAX } from '@/engine/proposals'
+import TraitChips from './TraitChips.vue'
 import { TRAITS } from '@/engine/traits'
 import { chosenTraits, nearLine, needsBuilder, type PushbackReply } from '@/engine/unitProposal'
 import { useGameStore, type Verdict } from '@/stores/game'
@@ -134,9 +145,11 @@ const PLACEHOLDERS: Record<PartKind, string> = {
 
 const pct = (p: number) => `${Math.round(p * 100)}%`
 const missing = computed(() => ('missing' in props.verdict ? props.verdict.missing : []))
-const kept = computed(() =>
-  props.verdict.kind === 'unit' ? new Set(chosenTraits(props.verdict).map((t) => t.trait)) : new Set<string>()
-)
+const keptList = computed(() => (props.verdict.kind === 'unit' ? chosenTraits(props.verdict).map((t) => t.trait) : []))
+const kept = computed(() => new Set<string>(keptList.value))
+/** Traits near the line that the player decides. A few at most, so the list stays readable. */
+const optional = computed(() => (props.verdict.kind === 'unit' ? props.verdict.traitOdds.filter(nearLine).slice(0, 4) : []))
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$/, '')
 const builderMissing = computed(() => props.verdict.kind === 'unit' && needsBuilder(props.verdict))
 
 const replies = ref<PushbackReply[]>([])

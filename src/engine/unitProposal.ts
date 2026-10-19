@@ -1,9 +1,12 @@
 import { answerFor, ranked, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
-import { findResource, findUnit, makeId, minds } from './model'
+import { currentIQ, findResource, findUnit, makeId, minds } from './model'
 import {
   baseVerdict,
+  catchesOf,
   cleanText,
+  type Complication,
+  type TornSpec,
   fieldQuestion,
   gate,
   iconQuestion,
@@ -20,7 +23,7 @@ import {
 } from './proposals'
 import { addUnit, costMultiplier, crewPer, designableIQ, projectSize } from './research'
 import { proposalText } from './stateText'
-import { traitsFor, TRAITS, type TraitId } from './traits'
+import { catchTraits, traitsFor, TRAITS, type TraitId } from './traits'
 import { FIELDS, type Field, type Flow, type GameState, type UnitType } from './types'
 import { newUnit } from './initialState'
 
@@ -190,6 +193,14 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     field: fieldQuestion,
     icon: iconQuestion
   }
+  const best = Math.max(0, ...state.units.filter((u) => u.mind).map((u) => Math.round(currentIQ(u))))
+  if (spec.mind && spec.targetIQ > B.OFF_THE_SHELF_MAX_IQ) {
+    questions.leap = {
+      type: 'score',
+      instructions: `The smartest mind the AI has is IQ ${best}; this design targets IQ ${spec.targetIQ}. Judging by its description and parts, how radical a design is it?`,
+      criteria: scale(B.LEAP)
+    }
+  }
   if (!spec.mind) {
     questions.value = { type: 'score', instructions: 'How much is a single one worth?', criteria: scale(B.UNIT_VALUE) }
     questions.difficulty = {
@@ -239,14 +250,7 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     'unit'
   )
 
-  const base = baseVerdict('unit', questions, answers, 'feasible', [
-    'availability',
-    'supply',
-    'value',
-    'difficulty',
-    ...spec.upkeep.map((_, i) => `upkeep_${i}`)
-  ])
-  const read = reader(base)
+  const read = reader({ answers, picks: {} })
   const traitOdds: TraitOdds[] = traitList
     .map((t) => ({
       trait: t.id,
@@ -255,6 +259,27 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     }))
     .filter((t) => t.p >= B.TRAIT_NEAR)
     .sort((a, b) => b.p - a.p)
+
+  // A better answer's catch is the drawback Jev finds most fitting, among those not already kept.
+  const kept = chosenTraits({ traitOdds, traitPicks: {} }).map((t) => t.trait)
+  const drawbacks: Complication[] = catchTraits(spec.mind, kept)
+    .map((t) => ({ trait: t.id, p: read.has(`trait_${key(t.id)}`) ? read.noul(`trait_${key(t.id)}`) : 0 }))
+    .sort((a, b) => b.p - a.p)
+    .map((t) => ({ kind: 'trait', trait: t.trait }))
+  const designed = spec.mind && spec.targetIQ > B.OFF_THE_SHELF_MAX_IQ
+  const torn: TornSpec[] = [
+    // Above IQ 100 a mind must be designed whoever could make it, so that's no choice.
+    ...(designed ? [] : [{ key: 'availability', topic: 'who could make it', better: AVAILABILITY_KEYS }]),
+    { key: 'supply', topic: 'how many humanity could supply', better: 'higher' },
+    { key: 'difficulty', topic: 'how hard it is to design', better: 'lower' },
+    { key: 'leap', topic: 'how radical a design it is', better: 'lower' },
+    ...spec.upkeep.map((id, i) => ({
+      key: `upkeep_${i}`,
+      topic: `how much ${findResource(state, id)!.name} it runs on`,
+      better: 'lower' as const
+    }))
+  ]
+  const base = baseVerdict('unit', questions, answers, 'feasible', torn, { list: drawbacks, shared: false })
   const v: UnitVerdict = {
     ...base,
     kind: 'unit',
@@ -332,6 +357,8 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   const availability = availabilityOf(v)
   const traits = chosenTraits(v)
   const ids = traits.map((t) => t.trait)
+  // Catches the player took on come on top of the usual traits.
+  for (const c of catchesOf(v)) if (c.kind === 'trait' && !ids.includes(c.trait)) ids.push(c.trait)
   const param = (id: TraitId) => traits.find((t) => t.trait === id)?.param ?? null
 
   const iq = spec.mind ? spec.targetIQ : 0
@@ -345,7 +372,7 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
         Math.max(1e-9, findResource(state, id)!.value)
     )
   }))
-  const supply = B.pick(B.UNIT_SUPPLY, read.level('supply', B.UNIT_SUPPLY.length))[1]
+  const supply = read.amount('supply', B.UNIT_SUPPLY)
   const market = availability === 'only_you' ? 0 : supply
   const own = availability === 'only_you' || spec.builderId ? supply * B.OWN_LAYER : 0
 
@@ -377,7 +404,8 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   let bar = 0
   let size = 0
   if (!immediate && spec.mind) {
-    bar = Math.ceil(iq * B.DESIGN_BAR)
+    const share = read.has('leap') ? B.pick(B.LEAP, read.level('leap', B.LEAP.length))[1] : B.DESIGN_BAR
+    bar = Math.ceil(iq * share)
     size = projectSize(bar, B.TIER_DESIGN_WEEKS, multiplier)
   } else if (!immediate) {
     const [, b, weeks] = B.pick(B.DIFFICULTY, read.level('difficulty', B.DIFFICULTY.length))

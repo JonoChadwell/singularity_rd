@@ -61,9 +61,12 @@
           <span>Add trait</span>
           <select v-model="form.addTrait">
             <option value="">None</option>
-            <option v-for="t in addable" :key="t.id" :value="t.id">{{ t.icon }} {{ t.name }} ({{ t.kind }}): {{ t.rule }}</option>
+            <optgroup v-for="g in addableGroups" :key="g.label" :label="g.label">
+              <option v-for="t in g.traits" :key="t.id" :value="t.id">{{ t.icon }} {{ t.name }}</option>
+            </optgroup>
           </select>
         </label>
+        <p v-if="form.addTrait" class="small muted rule">{{ TRAITS[form.addTrait].rule }}</p>
         <label v-if="paramOptions.length" class="field">
           <span>Applies to</span>
           <select v-model="form.param">
@@ -146,7 +149,7 @@
       @edit="verdict = null"
     >
       <div v-if="draft" class="small outcome">
-        <div v-for="c in verdict.spec.changes" :key="JSON.stringify(c)">• {{ describeChange(game.state, verdict.spec.target, c) }}</div>
+        <div v-for="c in withCatches(verdict)" :key="JSON.stringify(c)">• {{ describeChange(game.state, verdict.spec.target, c) }}</div>
         <div class="warn">Research project: bar IQ {{ draft.bar }}, size {{ fmt(draft.size) }} ({{ FIELD_LABELS[draft.field] }}).</div>
       </div>
     </VerdictView>
@@ -163,6 +166,7 @@ import {
   OUTPUT_FACTORS,
   precheckBreakthrough,
   previewChanges,
+  withCatches,
   type BreakthroughSpec,
   type BreakthroughVerdict
 } from '@/engine/breakthroughProposal'
@@ -222,6 +226,17 @@ watch(targetKey, () => Object.assign(form, blankForm()))
 const iqSteps = computed(() => (unit.value ? IQ_STEPS.filter((s) => s <= iqRoom(unit.value!) + 1e-9) : []))
 const addable = computed(() =>
   unit.value ? traitsFor(unit.value.mind).filter((t) => !unit.value!.traits.includes(t.id)) : []
+)
+const addableGroups = computed(() =>
+  (
+    [
+      ['Perks', 'perk'],
+      ['Mixed', 'mixed'],
+      ['Drawbacks', 'drawback']
+    ] as const
+  )
+    .map(([label, kind]) => ({ label, traits: addable.value.filter((t) => t.kind === kind) }))
+    .filter((g) => g.traits.length)
 )
 const paramOptions = computed(() => {
   const t = form.addTrait ? TRAITS[form.addTrait] : null
@@ -382,6 +397,10 @@ form {
 
 .choice input {
   width: auto;
+}
+
+.rule {
+  margin: -4px 0 0 100px;
 }
 
 .compare {

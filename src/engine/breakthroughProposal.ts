@@ -1,17 +1,21 @@
-import type { JevQuestion, Judge } from '@/ai/jev'
+import { ranked, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
 import { currentIQ, findResource, findStrategy, findUnit, iqRoom, layerSize } from './model'
 import {
   baseVerdict,
+  catchesOf,
   cleanText,
   fieldQuestion,
   gate,
   logProposal,
   newProject,
   precheckName,
+  quirkQuestion,
+  rankedQuirks,
   reader,
   scale,
   type Accepted,
+  type Complication,
   type VerdictBase
 } from './proposals'
 import {
@@ -23,7 +27,7 @@ import {
   type TraitParam
 } from './research'
 import { proposalText } from './stateText'
-import { TRAITS } from './traits'
+import { catchTraits, QUIRK_IDS, QUIRKS, TRAITS, type TraitId } from './traits'
 import { FIELDS, type Change, type Field, type GameState, type Strategy, type UnitType } from './types'
 import { missingKinds, priceParts, recipeQuestions } from './unitProposal'
 
@@ -76,6 +80,8 @@ export function describeChange(state: GameState, target: BreakthroughSpec['targe
       return `Output ×${c.factor}`
     case 'input':
       return `${res(c.resourceId)} used ${pct(c.factor)}`
+    case 'quirk':
+      return `Becomes ${QUIRKS[c.quirk].name}`
   }
 }
 
@@ -127,7 +133,7 @@ export function previewChanges(
     return { state: copy, unit }
   }
   const strategy = findStrategy(copy, spec.target.id)
-  if (strategy) applyStrategyChanges(strategy, spec.changes)
+  if (strategy) applyStrategyChanges(copy, strategy, spec.changes)
   return { state: copy, strategy }
 }
 
@@ -169,6 +175,19 @@ export async function judgeBreakthrough(
     const recipe = layer.parts.map((id) => findResource(state, id)?.name ?? '?').join(', ')
     Object.assign(questions, recipeQuestions(`one ${name}`, recipe))
   }
+  // The catch if the player takes the easier research: a drawback for a unit, a quirk for a strategy.
+  const unit = spec.target.kind === 'unit' ? findUnit(state, spec.target.id) : undefined
+  const adding = spec.changes.flatMap((c) => (c.kind === 'trait' && c.add ? [c.trait] : []))
+  const drawbacks = unit ? catchTraits(unit.mind, [...unit.traits, ...adding]) : []
+  if (unit && drawbacks.length) {
+    questions.catch = {
+      type: 'choice',
+      instructions: 'If this research were done the quick way, which drawback would come with it?',
+      criteria: Object.fromEntries(drawbacks.map((t) => [t.id, `${t.name}: ${t.rule}`]))
+    }
+  } else if (!unit) {
+    questions.catch = quirkQuestion(QUIRK_IDS)
+  }
   const answers = await judge.ask(
     proposalText(state, [
       `The player proposes a breakthrough for ${name}.`,
@@ -180,8 +199,20 @@ export async function judgeBreakthrough(
     questions,
     'breakthrough'
   )
+  const catches: Complication[] = unit
+    ? (answers.catch ? ranked(answers.catch).map(([k]) => k) : [])
+        .filter((k): k is TraitId => drawbacks.some((t) => t.id === k))
+        .map((trait) => ({ kind: 'trait', trait }))
+    : rankedQuirks(answers, QUIRK_IDS)
   const v: BreakthroughVerdict = {
-    ...baseVerdict('breakthrough', questions, answers, 'plausible', ['difficulty']),
+    ...baseVerdict(
+      'breakthrough',
+      questions,
+      answers,
+      'plausible',
+      [{ key: 'difficulty', topic: 'how hard the research is', better: 'lower' }],
+      { list: catches, shared: false }
+    ),
     kind: 'breakthrough',
     spec,
     missing: [],
@@ -207,6 +238,14 @@ export function draftBreakthrough(state: GameState, v: BreakthroughVerdict): { b
   return { bar, size: projectSize(bar, weeks, costMultiplier(v.plausibility, v.bar)), field: read.choice('field', FIELDS) }
 }
 
+/** The proposed changes, plus any catch the player took on for easier research. */
+export function withCatches(v: BreakthroughVerdict): Change[] {
+  const extra: Change[] = catchesOf(v).map((c) =>
+    c.kind === 'trait' ? { kind: 'trait', trait: c.trait, add: true } : { kind: 'quirk', quirk: c.quirk }
+  )
+  return [...v.spec.changes, ...extra]
+}
+
 export function acceptBreakthrough(current: GameState, v: BreakthroughVerdict): Accepted {
   if (v.rejected || v.duplicateOf) throw new Error('This proposal was not accepted.')
   if (v.missing.length) throw new Error('Answer Jev’s pushback first.')
@@ -214,9 +253,10 @@ export function acceptBreakthrough(current: GameState, v: BreakthroughVerdict): 
   const { bar, size, field } = draftBreakthrough(state, v)
   const layer = layerChange(v.spec)
   const unit = v.spec.target.kind === 'unit' ? findUnit(state, v.spec.target.id) : undefined
+  const changes = withCatches(v)
   const project = newProject(state, {
     name: v.spec.name,
-    description: v.spec.changes.map((c) => describeChange(state, v.spec.target, c)).join('; '),
+    description: changes.map((c) => describeChange(state, v.spec.target, c)).join('; '),
     icon: '💡',
     field,
     bar,
@@ -224,7 +264,7 @@ export function acceptBreakthrough(current: GameState, v: BreakthroughVerdict): 
     effect: {
       kind: 'breakthrough',
       target: v.spec.target,
-      changes: v.spec.changes,
+      changes,
       parts: layer && unit ? priceParts(state, layer.parts, unit.value) : undefined,
       params: v.spec.params
     }

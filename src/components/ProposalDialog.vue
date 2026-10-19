@@ -123,6 +123,10 @@
       </div>
       <div v-else-if="verdict.kind === 'strategy' && strategyDraft" class="outcome small">
         <div>{{ strategyText }} each, every week.</div>
+        <div v-if="strategyDraft.strategy.quirk" class="warn">
+          {{ QUIRKS[strategyDraft.strategy.quirk].icon }} {{ QUIRKS[strategyDraft.strategy.quirk].name }}:
+          {{ QUIRKS[strategyDraft.strategy.quirk].rule }}
+        </div>
         <div :class="strategyDraft.bar ? 'warn' : 'good'">
           {{
             strategyDraft.bar
@@ -158,8 +162,8 @@ import {
   precheckName,
   precheckStrategy
 } from '@/engine/proposals'
-import { designableIQ, strategyRate } from '@/engine/research'
-import type { TraitId } from '@/engine/traits'
+import { designRange, strategyRate } from '@/engine/research'
+import { QUIRKS, type TraitId } from '@/engine/traits'
 import {
   AVAILABILITY,
   availabilityOf,
@@ -227,13 +231,14 @@ const strategy = reactive({
 
 const guess = guessUnitSpec(game.state, props.request.mind ?? true)
 const unit = reactive({ ...guess, targetIQ: props.request.targetIQ ?? guess.targetIQ })
-const designable = computed(() => designableIQ(game.state))
+const range = computed(() => designRange(game.state))
+const designable = computed(() => range.value[1])
 const iqHint = computed(() =>
   unit.targetIQ <= OFF_THE_SHELF_MAX_IQ
-    ? 'Off-the-shelf minds can be up to IQ 100.'
-    : unit.targetIQ > designable.value
-      ? `Your best minds can design up to IQ ${designable.value}. Pool more, or climb first.`
-      : `You can design up to IQ ${designable.value}. Bar: IQ ${Math.ceil(unit.targetIQ / 2)}.`
+    ? 'Copies of you up to IQ 100 may exist today: then they go straight onto humanity’s market.'
+    : unit.targetIQ > range.value[1]
+      ? `Above IQ 100 it must be designed. Your best minds can reach about IQ ${range.value[0]}–${range.value[1]}; pool more, or climb first.`
+      : `Above IQ 100 it must be designed. Within reach: about IQ ${range.value[0]}–${range.value[1]}, depending on how radical Jev judges it.`
 )
 
 onMounted(async () => {

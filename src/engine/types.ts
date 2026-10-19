@@ -1,5 +1,5 @@
 import type { JevAnswer } from '@/ai/jev'
-import type { TraitId } from './traits'
+import type { QuirkId, TraitId } from './traits'
 
 export const FIELDS = ['computing', 'energy', 'materials', 'biology', 'physics', 'engineering'] as const
 export type Field = (typeof FIELDS)[number]
@@ -110,6 +110,12 @@ export interface Strategy {
   carry?: number
   /** Make only: the runner's labour when the amounts were set. Mind strategies scale with IQ. */
   scale?: number
+  /** A catch the player accepted for a better result. */
+  quirk?: QuirkId
+  /** Weeks it has run (Slow to start). */
+  weeksRun?: number
+  /** Makes waste: the waste stock. */
+  waste?: string
 }
 
 export type Change =
@@ -120,6 +126,7 @@ export type Change =
   | { kind: 'layer'; layer: 'own' | 'earth'; builderId: string | null; parts: string[] }
   | { kind: 'output'; factor: number }
   | { kind: 'input'; resourceId: string; factor: number }
+  | { kind: 'quirk'; quirk: QuirkId }
 
 export type ProjectEffect =
   | { kind: 'unit'; unit: UnitType; strategies: Strategy[] }

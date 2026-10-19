@@ -41,8 +41,14 @@ export function bestEffectiveIQ(state: GameState): number {
   )
 }
 
-/** The leap rule: the highest IQ you could design right now. */
+/** The leap rule: the highest IQ you could design right now, for a typical design. */
 export const designableIQ = (state: GameState) => Math.floor(bestEffectiveIQ(state) / B.DESIGN_BAR)
+
+/** The leap rule's range: from the most radical design to the most modest. */
+export function designRange(state: GameState): [number, number] {
+  const best = bestEffectiveIQ(state)
+  return [Math.floor(best / B.LEAP_MAX), Math.floor(best / B.LEAP_MIN)]
+}
 
 // ---------------------------------------------------------------- project sizes
 
@@ -145,24 +151,39 @@ export function addUnitExtras(state: GameState, unit: UnitType) {
   if (crew && unit.crew && !exists('crew', crew.id)) {
     strategies.push(makeCrewStrategy(state, unit, crew, unit.crew.per))
   }
-  if (has(unit, 'makes-waste') && !unit.waste) {
-    const id = makeId(state, `${unit.name} waste`)
-    state.resources.push({
-      id,
-      name: `${unit.name} Waste`,
-      description: `Waste from ${unit.name}. Past a limit they stop until something uses it up.`,
-      icon: B.ICONS.waste!,
-      kind: 'stock',
-      band: 0,
-      value: 0.1,
-      amount: 0,
-      stored: 0,
-      market: 0,
-      boughtThisWeek: 0
-    })
-    unit.waste = id
-  }
+  if (has(unit, 'makes-waste') && !unit.waste) unit.waste = addWaste(state, unit.name)
   defaultTask(state, unit)
+}
+
+/** Creates the waste stock for something that Makes waste. */
+function addWaste(state: GameState, owner: string): string {
+  const id = makeId(state, `${owner} waste`)
+  state.resources.push({
+    id,
+    name: `${owner} Waste`,
+    description: `Waste from ${owner}. Past a limit it stops until something uses the waste up.`,
+    icon: B.ICONS.waste!,
+    kind: 'stock',
+    band: 0,
+    value: 0.1,
+    amount: 0,
+    stored: 0,
+    market: 0,
+    boughtThisWeek: 0
+  })
+  return id
+}
+
+/** Adds a strategy to the world, with the waste stock its quirk may need. */
+export function addStrategy(state: GameState, s: Strategy) {
+  state.strategies.push(s)
+  addStrategyExtras(state, s)
+  const runner = findUnit(state, s.unitId)
+  if (runner) defaultTask(state, runner)
+}
+
+function addStrategyExtras(state: GameState, s: Strategy) {
+  if (s.quirk === 'makes-waste' && !s.waste) s.waste = addWaste(state, s.name)
 }
 
 // ---------------------------------------------------------------- breakthroughs
@@ -187,12 +208,16 @@ export function gainOf(changes: Change[]): number {
         break
       case 'trait': {
         const kind = TRAITS[c.trait].kind
+        // Taking on a drawback costs no research.
+        if (c.add && kind === 'drawback') break
         const good = c.add ? kind !== 'drawback' : kind !== 'perk'
         gain += good ? 2 : 0.5
         break
       }
       case 'layer':
         gain += c.layer === 'own' ? 3 : 4
+        break
+      case 'quirk':
         break
     }
   }
@@ -276,8 +301,9 @@ function removeTrait(state: GameState, unit: UnitType, trait: TraitId) {
   if (trait === 'overclockable') unit.overclocked = false
 }
 
-export function applyStrategyChanges(s: Strategy, changes: Change[]) {
+export function applyStrategyChanges(state: GameState, s: Strategy, changes: Change[]) {
   for (const c of changes) {
+    if (c.kind === 'quirk') s.quirk = c.quirk
     if (c.kind === 'output') s.amount *= c.factor
     if (c.kind === 'input') {
       s.inputs = s.inputs
@@ -285,6 +311,7 @@ export function applyStrategyChanges(s: Strategy, changes: Change[]) {
         .filter((f) => f.amount > 0)
     }
   }
+  addStrategyExtras(state, s)
 }
 
 // ---------------------------------------------------------------- finishing projects
@@ -305,10 +332,13 @@ export function addUnit(state: GameState, unit: UnitType, strategies: Strategy[]
 export function completeProject(state: GameState, project: Project): string {
   state.projects = state.projects.filter((p) => p.id !== project.id)
   // Machines on a finished project are idle until the player moves them.
+  const freed: string[] = []
   for (const u of state.units) {
+    if (u.rest === project.id || u.assign[project.id]) freed.push(u.name)
     delete u.assign[project.id]
     if (u.rest === project.id) u.rest = null
   }
+  const free = freed.length && state.status === 'playing' ? ` ${freed.join(' and ')} ${freed.length === 1 && freed[0] === 'Starting Server' ? 'is' : 'are'} free again.` : ''
   const effect = project.effect
   switch (effect.kind) {
     case 'final':
@@ -321,13 +351,11 @@ export function completeProject(state: GameState, project: Project): string {
         : effect.unit.builderId
           ? `Set a build target for ${findUnit(state, effect.unit.builderId)?.name ?? 'its builder'}.`
           : 'Nothing can build it yet.'
-      return `${effect.unit.icon} ${effect.unit.name} is designed. ${where}`
+      return `${effect.unit.icon} ${effect.unit.name} is designed. ${where}${free}`
     }
     case 'strategy': {
-      state.strategies.push(effect.strategy)
-      const runner = findUnit(state, effect.strategy.unitId)
-      if (runner) defaultTask(state, runner)
-      return `${project.icon} ${effect.strategy.name} is ready.`
+      addStrategy(state, effect.strategy)
+      return `${project.icon} ${effect.strategy.name} is ready.${free}`
     }
     case 'breakthrough': {
       const { target, changes } = effect
@@ -337,9 +365,9 @@ export function completeProject(state: GameState, project: Project): string {
         if (unit) applyUnitChanges(state, unit, changes, effect.parts, effect.params)
       } else {
         const s = findStrategy(state, target.id)
-        if (s) applyStrategyChanges(s, changes)
+        if (s) applyStrategyChanges(state, s, changes)
       }
-      return `${project.icon} ${project.name}: breakthrough.`
+      return `${project.icon} ${project.name}: breakthrough.${free}`
     }
   }
 }

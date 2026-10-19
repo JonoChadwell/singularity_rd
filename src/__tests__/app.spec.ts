@@ -117,7 +117,7 @@ describe('App', () => {
 
     const unit = await render((_, ui) => ui.openInvent({ kind: 'unit', mind: true, targetIQ: 250 }))
     expect(unit).toContain('Target IQ')
-    expect(unit).toContain('Your best minds can design up to IQ 200')
+    expect(unit).toContain('Within reach: about IQ 153–250')
 
     const breakthrough = await render((_, ui) =>
       ui.openInvent({ kind: 'breakthrough', target: { kind: 'unit', id: SERVER_ID } })

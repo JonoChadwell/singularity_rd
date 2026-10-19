@@ -1,17 +1,20 @@
 import {
   answerFor,
+  ranked,
   readChoice,
   readLevel,
   readNoul,
+  readScore,
   tornPair,
   type JevAnswer,
   type JevQuestion,
   type Judge
 } from '@/ai/jev'
 import * as B from './balance'
-import { defaultTask, findResource, findUnit, labour, makeId, namesInUse, runsOn } from './model'
-import { costMultiplier, projectSize } from './research'
+import { findResource, findUnit, labour, makeId, namesInUse, runsOn } from './model'
+import { addStrategy, costMultiplier, projectSize } from './research'
 import { proposalText } from './stateText'
+import { QUIRK_IDS, QUIRKS, TRAITS, type QuirkId, type TraitId } from './traits'
 import { FIELDS, type Field, type GameState, type Project, type Resource, type Strategy } from './types'
 
 export const NAME_MAX = 40
@@ -20,12 +23,33 @@ export const MAX_INPUTS = 2
 
 export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'breakthrough'
 
-/** A question Jev was torn on: the player picks one of its top two answers. */
+/** What the better of two answers costs: a drawback for a unit, a quirk for a strategy. */
+export type Complication = { kind: 'trait'; trait: TraitId } | { kind: 'quirk'; quirk: QuirkId }
+
+/**
+ * A question Jev was torn on. When the two answers differ in quality, it's a trade-off:
+ * `options[0]` is the worse result, exactly as proposed, and `options[1]` the better one with
+ * `catch` attached. Otherwise (`catch` null) it's a plain choice between two different things.
+ */
 export interface TornPick {
   key: string
-  question: string
+  /** What Jev was torn about, as a phrase: "how well it works". */
+  topic: string
+  catch: Complication | null
   options: { value: string; label: string; p: number }[]
 }
+
+/** Which questions the player may settle, and how. */
+export interface TornSpec {
+  key: string
+  topic: string
+  /** For quality questions: which way is better. Scores compare levels; choices use this order, best first. */
+  better?: 'higher' | 'lower' | readonly string[]
+  /** The catch on the better answer. A quality question with no catch isn't asked. */
+  catch?: Complication | null
+}
+
+export const complicationName = (c: Complication) => (c.kind === 'trait' ? TRAITS[c.trait] : QUIRKS[c.quirk])
 
 /** Jev's verdict on a proposal, before the player accepts it. */
 export interface VerdictBase {
@@ -81,30 +105,90 @@ export const fieldQuestion: JevQuestion = {
   criteria: Object.fromEntries(FIELDS.map((f) => [f, B.FIELD_LABELS[f]!]))
 }
 
-/** Finds the questions Jev was torn on, among the ones the player may settle. */
+/**
+ * Finds the questions Jev was torn on, among the ones the player may settle. Never offers
+ * "easier" against "harder": a quality question becomes a trade-off with a catch, or isn't
+ * asked at all (Jev's top answer stands).
+ */
 export function findTorn(
   questions: Record<string, JevQuestion>,
   answers: Record<string, JevAnswer>,
-  keys: string[]
+  specs: TornSpec[],
+  catches: Catches = NO_CATCHES
 ): TornPick[] {
   const torn: TornPick[] = []
-  for (const key of keys) {
-    const q = questions[key]
-    const a = answers[key]
+  let next = 0
+  for (const s of specs) {
+    const q = questions[s.key]
+    const a = answers[s.key]
     if (!q || !a || q.type === 'noul') continue
     const pair = tornPair(a, B.TORN_CONFIDENCE, B.TORN_GAP)
     if (!pair) continue
+    // Only questions that actually come up take a catch, most fitting first.
+    const spec = s.better && s.catch === undefined ? { ...s, catch: catches.list[catches.shared ? 0 : next] ?? null } : s
+    if (spec.better && !spec.catch) continue
+    if (spec.better && !catches.shared) next++
     const probabilities = (a.type !== 'noul' && a.probabilities) || {}
     const label = (value: string) =>
       q.type === 'score' ? (q.criteria[Number(value)] ?? value) : (q.criteria[value] ?? value)
+    let [first, second] = pair
+    if (spec.better) {
+      const rank = (value: string) =>
+        spec.better === 'higher'
+          ? -Number(value)
+          : spec.better === 'lower'
+            ? Number(value)
+            : (spec.better as readonly string[]).indexOf(value)
+      // Worse first: that's exactly what was proposed.
+      if (rank(first) < rank(second)) [first, second] = [second, first]
+    }
     torn.push({
-      key,
-      question: q.instructions,
-      options: pair.map((value) => ({ value, label: label(value), p: probabilities[value] ?? 0 }))
+      key: spec.key,
+      topic: spec.topic,
+      catch: spec.better ? (spec.catch ?? null) : null,
+      options: [first, second].map((value) => ({ value, label: label(value), p: probabilities[value] ?? 0 }))
     })
   }
   return torn
 }
+
+/** Asks which quirk would be a strategy's most natural catch. */
+export function quirkQuestion(quirks: readonly QuirkId[]): JevQuestion {
+  return {
+    type: 'choice',
+    instructions: 'If doing this well came with a catch, which would be most natural?',
+    criteria: Object.fromEntries(quirks.map((q) => [q, `${QUIRKS[q].name}: ${QUIRKS[q].rule}`]))
+  }
+}
+
+/** Quirks, most fitting first, from the answer to `quirkQuestion`. */
+export function rankedQuirks(answers: Record<string, JevAnswer>, quirks: readonly QuirkId[]): Complication[] {
+  const a = answers.catch
+  const order = a ? ranked(a).map(([k]) => k) : []
+  return [...order, ...quirks]
+    .filter((k, i, all): k is QuirkId => (quirks as readonly string[]).includes(k) && all.indexOf(k) === i)
+    .map((quirk) => ({ kind: 'quirk', quirk }))
+}
+
+/** The catches the player took on, by choosing Jev's better answers. */
+export function catchesOf(v: Pick<VerdictBase, 'torn' | 'picks'>): Complication[] {
+  const out: Complication[] = []
+  for (const t of v.torn) {
+    if (!t.catch || v.picks[t.key] !== t.options[1]?.value) continue
+    if (!out.some((c) => JSON.stringify(c) === JSON.stringify(t.catch))) out.push(t.catch)
+  }
+  return out
+}
+
+/**
+ * Candidate catches for trade-offs, most fitting first. Strategies share one quirk
+ * (`shared`); units and breakthroughs take a different drawback for each trade-off.
+ */
+export interface Catches {
+  list: Complication[]
+  shared: boolean
+}
+const NO_CATCHES: Catches = { list: [], shared: false }
 
 /** Reads answers, honouring the player's picks where Jev was torn. */
 export function reader(v: Pick<VerdictBase, 'answers' | 'picks'>) {
@@ -120,6 +204,25 @@ export function reader(v: Pick<VerdictBase, 'answers' | 'picks'>) {
       if (pick !== undefined && Number.isFinite(Number(pick))) return Number(pick)
       return readLevel(answerFor(v.answers, key), levels)
     },
+    /**
+     * An amount from a table of log-spaced bands, following Jev's answer smoothly rather than
+     * snapping to a band, so supplies read 640k rather than a round 1.0M. A band of 0 ("none")
+     * stays 0.
+     */
+    amount(key: string, table: readonly [string, number][]): number {
+      const levels = table.length
+      const pick = v.picks[key]
+      if (pick !== undefined) return B.pick(table, Number(pick))[1]
+      const answer = answerFor(v.answers, key)
+      const level = readLevel(answer, levels)
+      if (B.pick(table, level)[1] === 0) return 0
+      const score = Math.max(table.findIndex(([, n]) => n > 0), readScore(answer, levels))
+      const lo = Math.floor(score)
+      const hi = Math.min(levels - 1, lo + 1)
+      const a = Math.log10(B.pick(table, lo)[1])
+      const b = Math.log10(B.pick(table, hi)[1])
+      return B.nice(10 ** (a + (b - a) * (score - lo)))
+    },
     has: (key: string) => key in v.answers
   }
 }
@@ -129,15 +232,19 @@ export function baseVerdict(
   questions: Record<string, JevQuestion>,
   answers: Record<string, JevAnswer>,
   plausibilityKey: string,
-  tornKeys: string[]
+  torn: TornSpec[],
+  catches: Catches = NO_CATCHES
 ): VerdictBase {
   const plausibility = readNoul(answerFor(answers, plausibilityKey))
   const bar = B.BARS[kind]
+  const found = findTorn(questions, answers, torn, catches)
+  // Trade-offs start on the answer that does exactly what was proposed.
+  const picks = Object.fromEntries(found.filter((t) => t.catch).map((t) => [t.key, t.options[0]!.value]))
   return {
     kind,
     answers,
-    picks: {},
-    torn: findTorn(questions, answers, tornKeys),
+    picks,
+    torn: found,
     plausibility,
     bar,
     rejected: null,
@@ -237,7 +344,7 @@ export function resourceFrom(
   const read = reader(v)
   const band = read.level(`${prefix}value`, B.RESOURCE_VALUE.length)
   const kind = read.choice(`${prefix}kind`, ['stock', 'flow'] as const)
-  const supply = B.pick(B.RESOURCE_SUPPLY, read.level(`${prefix}supply`, B.RESOURCE_SUPPLY.length))[1]
+  const supply = read.amount(`${prefix}supply`, B.RESOURCE_SUPPLY)
   return {
     id: makeId(state, spec.name),
     name: spec.name,
@@ -269,7 +376,11 @@ export async function judgeResource(state: GameState, judge: Judge, raw: Resourc
     'resource'
   )
   const v: ResourceVerdict = {
-    ...baseVerdict('resource', questions, answers, 'is_thing', ['kind', 'value', 'supply']),
+    // Only stock-or-flow is worth asking about: it changes how the thing plays. Value and
+    // supply just take Jev's answer.
+    ...baseVerdict('resource', questions, answers, 'is_thing', [
+      { key: 'kind', topic: 'whether it keeps from week to week' }
+    ]),
     kind: 'resource',
     spec
   }
@@ -353,6 +464,8 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
     },
     field: fieldQuestion
   }
+  const quirks = QUIRK_IDS.filter((q) => q !== 'picky' || inputs.length > 0 || unit.upkeep.length > 0)
+  questions.catch = quirkQuestion(quirks)
   inputs.forEach((r, i) => {
     questions[`input_${i}`] = {
       type: 'score',
@@ -371,12 +484,16 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
     questions,
     'strategy'
   )
+  const torn: TornSpec[] = [
+    { key: 'efficiency', topic: 'how well it works', better: 'higher' },
+    { key: 'advancement', topic: 'how much research it needs', better: 'lower' },
+    ...inputs.map((r, i) => ({ key: `input_${i}`, topic: `how much ${r.name} it uses`, better: 'lower' as const }))
+  ]
   const v: StrategyVerdict = {
-    ...baseVerdict('strategy', questions, answers, 'plausible', [
-      'efficiency',
-      'advancement',
-      ...inputs.map((_, i) => `input_${i}`)
-    ]),
+    ...baseVerdict('strategy', questions, answers, 'plausible', torn, {
+      list: rankedQuirks(answers, quirks),
+      shared: true
+    }),
     kind: 'strategy',
     spec
   }
@@ -410,6 +527,8 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
     amount: B.nice(((work + inputValue) * efficiency) / output.value),
     scale: work
   }
+  const quirk = catchesOf(v).find((c) => c.kind === 'quirk')
+  if (quirk?.kind === 'quirk') strategy.quirk = quirk.quirk
   const size = bar ? projectSize(bar, weeks, costMultiplier(v.plausibility, v.bar)) : 0
   return { strategy, bar, size, field: read.choice('field', FIELDS) }
 }
@@ -422,8 +541,7 @@ export function acceptStrategy(current: GameState, v: StrategyVerdict): Accepted
   state.inventions.push({ week: state.week, icon: unit.icon, name: strategy.name, kind: 'strategy' })
   state.decidedThisWeek = true
   if (!bar) {
-    state.strategies.push(strategy)
-    defaultTask(state, unit)
+    addStrategy(state, strategy)
     // A mind with nothing to do picks up its first strategy.
     if (unit.mind && !unit.rest && Object.keys(unit.assign).length === 0) unit.rest = strategy.id
     logProposal(state, 'good', `${unit.icon} ${strategy.name} is ready.`)
