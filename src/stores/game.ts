@@ -1,199 +1,310 @@
-import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import { computed, ref, toRaw, watch } from 'vue'
+import { CachedJudge, checkJevHealth, JevJudge, type Judge } from '@/ai/jev'
+import * as actions from '@/engine/actions'
+import { alertsFor } from '@/engine/alerts'
+import {
+  acceptBreakthrough,
+  judgeBreakthrough,
+  targetName,
+  type BreakthroughSpec,
+  type BreakthroughVerdict
+} from '@/engine/breakthroughProposal'
+import { runWeek } from '@/engine/cycle'
+import { previewWeek } from '@/engine/economy'
+import { createInitialState } from '@/engine/initialState'
+import {
+  acceptResource,
+  acceptStrategy,
+  judgeResource,
+  judgeStrategy,
+  type Outcome,
+  type ResourceSpec,
+  type ResourceVerdict,
+  type StrategySpec,
+  type StrategyVerdict
+} from '@/engine/proposals'
+import type { GameState } from '@/engine/types'
+import {
+  acceptUnit,
+  answerPushback,
+  judgeUnit,
+  type PushbackReply,
+  type UnitSpec,
+  type UnitVerdict
+} from '@/engine/unitProposal'
+import { logEvent, snapshot } from '@/telemetry'
 
-export interface Intelligence {
-  imagination: number
-  analytics: number
-  persuasiveness: number
-  abstraction: number
-  recall: number
-  hallucinations: number
+const SAVE_KEY = 'singularity-rd/save/v5'
+const BEST_KEY = 'singularity-rd/best'
+
+function load(): GameState | null {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY)
+    const parsed = raw ? (JSON.parse(raw) as GameState) : null
+    return parsed?.version === 5 ? parsed : null
+  } catch {
+    return null
+  }
 }
 
-export interface Costs {
-  buildCost: number
-  wattage: number
-  rackSpace: number
+function save(state: GameState) {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state))
+  } catch {
+    // Saving is a convenience; the game works without it.
+  }
 }
 
-export interface CustomUnit {
-  id: string
-  name: string
-  normalizedName: string
-  icon: string
-  displayFormat: 'plain' | 'xp' | 'percentage'
-  hidden: boolean
-  kind: 'builtin' | 'custom'
-  amountKey?: 'money' | 'watts' | 'rackSpace'
+function loadBest(): number | null {
+  try {
+    const n = Number(localStorage.getItem(BEST_KEY))
+    return n > 0 ? n : null
+  } catch {
+    return null
+  }
 }
+
+export type JevStatus =
+  | { kind: 'checking' }
+  | { kind: 'ready'; model: string }
+  | { kind: 'unconfigured' }
+  | { kind: 'error'; message: string }
+
+export type ProposalInput =
+  | { kind: 'resource'; spec: ResourceSpec }
+  | { kind: 'strategy'; spec: StrategySpec }
+  | { kind: 'unit'; spec: UnitSpec }
+  | { kind: 'breakthrough'; spec: BreakthroughSpec }
+
+export type Verdict = ResourceVerdict | StrategyVerdict | UnitVerdict | BreakthroughVerdict
 
 export const useGameStore = defineStore('game', () => {
-  // Resources
-  const money = ref(1000)
-  const watts = ref(100)
-  const rackSpace = ref(10)
+  const loaded = load()
+  const state = ref<GameState>(loaded ?? createInitialState())
+  const raw = () => toRaw(state.value)
+  let judge: Judge = new CachedJudge(
+    new JevJudge(() => state.value.runId),
+    () => raw().jevCache,
+    () => raw().stats.jevCalls++
+  )
+  const busy = ref(false)
+  const jev = ref<JevStatus>({ kind: 'checking' })
+  const lastError = ref('')
+  const best = ref<number | null>(loadBest())
 
-  // Stats
-  const unitCount = ref(5)
-  const costs = ref<Costs>({
-    buildCost: 50,
-    wattage: 10,
-    rackSpace: 2
-  })
-  const intelligence = ref<Intelligence>({
-    imagination: 5,
-    analytics: 5,
-    persuasiveness: 5,
-    abstraction: 5,
-    recall: 5,
-    hallucinations: 0
-  })
+  watch(state, save, { deep: true })
+  const log = (event: string, data: Record<string, unknown> = {}) =>
+    logEvent(state.value.runId, event, { week: state.value.week, ...data })
+  if (!loaded) log('game_start', { state: snapshot(state.value) })
 
-  // All resources, including built-ins and player-created custom resources.
-  // Built-ins are seeded here so they share the same shape/logic.
-  const customUnits = ref<CustomUnit[]>([
-    {
-      id: 'builtin-money',
-      name: 'Money',
-      normalizedName: 'money',
-      icon: '💰',
-      displayFormat: 'plain',
-      hidden: false,
-      kind: 'builtin',
-      amountKey: 'money'
-    },
-    {
-      id: 'builtin-watts',
-      name: 'Watts',
-      normalizedName: 'watts',
-      icon: '⚡',
-      displayFormat: 'plain',
-      hidden: false,
-      kind: 'builtin',
-      amountKey: 'watts'
-    },
-    {
-      id: 'builtin-rackspace',
-      name: 'Rack Space',
-      normalizedName: 'rack space',
-      icon: '🗄️',
-      displayFormat: 'plain',
-      hidden: false,
-      kind: 'builtin',
-      amountKey: 'rackSpace'
-    },
-    // Example hidden resources that exist from the start but are not shown
-    // until the player interacts with them via the custom resource UI.
-    {
-      id: 'hidden-compute-tokens',
-      name: 'Compute Tokens',
-      normalizedName: 'compute tokens',
-      icon: '⚙️',
-      displayFormat: 'plain',
-      hidden: true,
-      kind: 'builtin'
-    },
-    {
-      id: 'hidden-training-epochs',
-      name: 'Training Epochs',
-      normalizedName: 'training epochs',
-      icon: '📈',
-      displayFormat: 'xp',
-      hidden: true,
-      kind: 'builtin'
-    }
-  ])
+  const playing = computed(() => state.value.status === 'playing')
+  const canPropose = computed(() => jev.value.kind === 'ready' && !busy.value && playing.value)
+  /** Next week, exactly, if nothing changes. The JSON round-trip reads every field, so Vue
+   *  recomputes on any change, and yields a plain copy. */
+  const preview = computed(() => previewWeek(JSON.parse(JSON.stringify(state.value)) as GameState))
+  const alerts = computed(() => alertsFor(state.value, preview.value))
 
-  // Game state
-  const currentDay = ref(1)
-
-  // Actions
-  function nextDay() {
-    // Future per-day logic will go here
-    currentDay.value++
+  /** Takes a new state, keeping Jev's answers and call count from the current one. */
+  function adopt(next: GameState) {
+    next.jevCache = raw().jevCache
+    next.stats.jevCalls = raw().stats.jevCalls
+    state.value = next
   }
 
-  function addUnit() {
-    if (money.value >= costs.value.buildCost && 
-        watts.value >= costs.value.wattage && 
-        rackSpace.value >= costs.value.rackSpace) {
-      money.value -= costs.value.buildCost
-      watts.value -= costs.value.wattage
-      rackSpace.value -= costs.value.rackSpace
-      unitCount.value++
+  function act(name: string, data: Record<string, unknown>, fn: (s: GameState) => GameState): boolean {
+    lastError.value = ''
+    try {
+      adopt(fn(raw()))
+      log('action', { action: name, ...data })
+      return true
+    } catch (err) {
+      lastError.value = (err as Error).message
+      return false
     }
   }
 
-  function addCustomUnit(
-    unit: Omit<
-      CustomUnit,
-      'id' | 'normalizedName' | 'hidden' | 'kind' | 'amountKey'
-    >
-  ) {
-    const normalizedName = unit.name.trim().toLowerCase()
-    const existing = customUnits.value.find(
-      u => u.normalizedName === normalizedName
-    )
-
-    // If a matching resource exists but is hidden, reveal and update it
-    if (existing) {
-      if (existing.hidden) {
-        existing.hidden = false
-        existing.icon = unit.icon
-        existing.displayFormat = unit.displayFormat
-      }
-      return
+  async function checkJev() {
+    jev.value = { kind: 'checking' }
+    try {
+      const health = await checkJevHealth()
+      jev.value = health.configured ? { kind: 'ready', model: health.model } : { kind: 'unconfigured' }
+    } catch (err) {
+      jev.value = { kind: 'error', message: (err as Error).message }
     }
+  }
 
-    customUnits.value.push({
-      ...unit,
-      id: `custom-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      normalizedName,
-      hidden: false,
-      kind: 'custom'
+  function nextWeek() {
+    if (!playing.value) return
+    lastError.value = ''
+    const week = state.value.week
+    adopt(runWeek(raw()))
+    const s = state.value
+    log('week', {
+      week,
+      report: s.lastWeek,
+      events: s.log.filter((e) => e.week === week),
+      alertsIgnored: alerts.value.length,
+      state: snapshot(s)
     })
+    if (s.status === 'won') {
+      if (!best.value || s.week < best.value) {
+        best.value = s.week
+        try {
+          localStorage.setItem(BEST_KEY, String(s.week))
+        } catch {
+          // Best score is a convenience.
+        }
+      }
+      log('game_end', { status: s.status, weeks: s.week, stats: s.stats })
+    }
   }
 
-  const hasOverlappingUnit = (proposedName: string) => {
-    const normalized = proposedName.trim().toLowerCase()
-    if (!normalized) return false
+  const buyUnits = (unitId: string, n: number) => act('buy', { unitId, n }, (s) => actions.buyUnits(s, unitId, n))
+  const buyResource = (resourceId: string, n: number) =>
+    act('buy_resource', { resourceId, n }, (s) => actions.buyResource(s, resourceId, n))
+  const assign = (unitId: string, taskId: string, n: number) =>
+    act('assign', { unitId, taskId, n }, (s) => actions.assign(s, unitId, taskId, n))
+  const assignRest = (unitId: string, taskId: string | null) =>
+    act('assign_rest', { unitId, taskId }, (s) => actions.assignRest(s, unitId, taskId))
+  const assignAll = (unitId: string, taskId: string) =>
+    act('assign_all', { unitId, taskId }, (s) => actions.assignAll(s, unitId, taskId))
+  const setBuildTarget = (strategyId: string, target: number) =>
+    act('build_target', { strategyId, target }, (s) => actions.setBuildTarget(s, strategyId, target))
+  const setOverclock = (unitId: string, on: boolean) =>
+    act('overclock', { unitId, on }, (s) => actions.setOverclock(s, unitId, on))
+  const teach = (strategyId: string, unitId: string) =>
+    act('teach', { strategyId, unitId }, (s) => actions.teachStrategy(s, strategyId, unitId))
 
-    return customUnits.value.some(
-      u =>
-        !u.hidden &&
-        (u.normalizedName === normalized ||
-          u.normalizedName.includes(normalized) ||
-          normalized.includes(u.normalizedName))
-    )
+  /** Asks Jev about a proposal. Returns its verdict for the player to review. */
+  async function propose(reactiveInput: ProposalInput): Promise<Verdict | undefined> {
+    if (!canPropose.value) return
+    busy.value = true
+    lastError.value = ''
+    const input = JSON.parse(JSON.stringify(reactiveInput)) as ProposalInput
+    try {
+      const s = raw()
+      let verdict: Verdict
+      if (input.kind === 'resource') verdict = await judgeResource(s, judge, input.spec)
+      else if (input.kind === 'strategy') verdict = await judgeStrategy(s, judge, input.spec)
+      else if (input.kind === 'unit') verdict = await judgeUnit(s, judge, input.spec)
+      else verdict = await judgeBreakthrough(s, judge, input.spec)
+      state.value.stats.proposals[input.kind]++
+      if (verdict.rejected || verdict.duplicateOf) state.value.stats.rejections++
+      log('proposal', {
+        input,
+        plausibility: verdict.plausibility,
+        rejected: verdict.rejected,
+        duplicateOf: verdict.duplicateOf,
+        torn: verdict.torn.map((t) => t.key),
+        missing: 'missing' in verdict ? verdict.missing : undefined
+      })
+      return verdict
+    } catch (err) {
+      lastError.value = (err as Error).message
+      log('error', { action: 'proposal', input, message: lastError.value })
+    } finally {
+      busy.value = false
+    }
   }
 
-  function revealResource(
-    id: string,
-    overrides?: Partial<Pick<CustomUnit, 'icon' | 'displayFormat'>>
-  ) {
-    const res = customUnits.value.find((r) => r.id === id)
-    if (!res) return
-    res.hidden = false
-    if (overrides?.icon) res.icon = overrides.icon
-    if (overrides?.displayFormat) res.displayFormat = overrides.displayFormat
+  /** Accepts a verdict, with the player's picks. */
+  function accept(reactiveVerdict: Verdict): Outcome | undefined {
+    lastError.value = ''
+    try {
+      const s = raw()
+      // A plain copy, so no reactive proxies end up inside the game state.
+      const verdict = JSON.parse(JSON.stringify(reactiveVerdict)) as Verdict
+      const result =
+        verdict.kind === 'resource'
+          ? acceptResource(s, verdict)
+          : verdict.kind === 'strategy'
+            ? acceptStrategy(s, verdict)
+            : verdict.kind === 'unit'
+              ? acceptUnit(s, verdict)
+              : acceptBreakthrough(s, verdict)
+      adopt(result.state)
+      log('accept', { kind: verdict.kind, picks: verdict.picks, outcome: result.outcome })
+      return result.outcome
+    } catch (err) {
+      lastError.value = (err as Error).message
+    }
+  }
+
+  /** One pushback round. Returns the updated verdict and any replies Jev didn't accept. */
+  async function pushback<V extends UnitVerdict | BreakthroughVerdict>(
+    verdict: V,
+    replies: PushbackReply[]
+  ): Promise<{ verdict: V; failures: string[] } | undefined> {
+    if (!canPropose.value) return
+    busy.value = true
+    lastError.value = ''
+    try {
+      const s = raw()
+      const layer =
+        verdict.kind === 'breakthrough'
+          ? verdict.spec.changes.find((c) => c.kind === 'layer' && c.layer === 'own')
+          : undefined
+      const parts =
+        verdict.kind === 'unit' ? verdict.spec.parts : layer?.kind === 'layer' ? layer.parts : []
+      const subject =
+        verdict.kind === 'unit' ? `one ${verdict.spec.name}` : `one ${targetName(s, verdict.spec.target)}`
+      const result = await answerPushback(s, judge, subject, parts, verdict.missing, replies)
+      adopt(result.state)
+      state.value.stats.pushbacks++
+      const next = JSON.parse(JSON.stringify(verdict)) as V
+      next.missing = result.missing
+      next.pushbackRounds++
+      if (next.kind === 'unit') next.spec.parts = result.parts
+      else {
+        const c = next.spec.changes.find((c) => c.kind === 'layer' && c.layer === 'own')
+        if (c?.kind === 'layer') c.parts = result.parts
+      }
+      log('pushback', { replies, missing: result.missing, failures: result.failures })
+      return { verdict: next as V, failures: result.failures }
+    } catch (err) {
+      lastError.value = (err as Error).message
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** Swaps the proposal judge (used by tests). Keeps the cache. */
+  function setJudge(next: Judge) {
+    judge = new CachedJudge(next, () => raw().jevCache, () => raw().stats.jevCalls++)
+  }
+
+  function newGame() {
+    if (state.value.status === 'playing') log('game_abandoned', { stats: state.value.stats })
+    state.value = createInitialState()
+    lastError.value = ''
+    log('game_start', { state: snapshot(state.value) })
   }
 
   return {
-    // State
-    money,
-    watts,
-    rackSpace,
-    unitCount,
-    costs,
-    intelligence,
-    customUnits,
-    currentDay,
-    
-    // Actions
-    nextDay,
-    addUnit,
-    addCustomUnit,
-    hasOverlappingUnit,
-    revealResource
+    state,
+    busy,
+    jev,
+    lastError,
+    best,
+    playing,
+    canPropose,
+    preview,
+    alerts,
+    checkJev,
+    nextWeek,
+    buyUnits,
+    buyResource,
+    assign,
+    assignRest,
+    assignAll,
+    setBuildTarget,
+    setOverclock,
+    teach,
+    propose,
+    accept,
+    pushback,
+    setJudge,
+    newGame
   }
 })

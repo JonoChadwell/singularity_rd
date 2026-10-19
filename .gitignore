@@ -13,7 +13,7 @@ dist-ssr
 *.local
 
 # Downloaded models
-public/models/
+**/public/models/
 
 # Editor directories and files
 .vscode/*

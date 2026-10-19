@@ -1,28 +1,249 @@
-@import './base.css';
-
-#app {
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 2rem;
-
-  font-weight: normal;
+:root {
+  --bg: #0b0e14;
+  --panel: #121722;
+  --panel-raised: #18202e;
+  --border: #243044;
+  --text: #d8dee9;
+  --muted: #7d8aa3;
+  --accent: #6ee7b7;
+  --accent-dim: #1f4d3f;
+  --ai: #a78bfa;
+  --good: #6ee7b7;
+  --bad: #f87171;
+  --warn: #fbbf24;
+  --progress: linear-gradient(90deg, #34d399, #a78bfa);
+  --radius: 8px;
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
 }
 
-a,
-.green {
-  text-decoration: none;
-  color: hsla(160, 100%, 37%, 1);
-  transition: 0.4s;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-@media (hover: hover) {
-  a:hover {
-    background-color: hsla(160, 100%, 37%, 0.2);
-  }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
-@media (min-width: 1024px) {
-  #app {
-    padding: 0 2rem;
-  }
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #06281d;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.chip {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.delta-up {
+  color: var(--good);
+}
+
+.delta-down {
+  color: var(--bad);
+}
+
+.meter {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.meter > div {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+button.add {
+  font-size: 12px;
+  padding: 3px 10px;
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+button.link {
+  font-size: 11px;
+  padding: 1px 7px;
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: transparent;
+}
+
+button.small {
+  font-size: 12px;
+  padding: 2px 9px;
+}
+
+.small {
+  font-size: 12px;
+}
+
+.good {
+  color: var(--good);
+}
+
+.bad {
+  color: var(--bad);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.ai {
+  color: var(--ai);
+}
+
+.chip.iq {
+  color: var(--ai);
+  border-color: rgb(167 139 250 / 0.4);
+}
+
+.chip.tier {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+input.n {
+  width: 7.5em;
+  padding: 3px 6px;
+  font-family: var(--mono);
+}
+
+select.inline {
+  width: auto;
+  padding: 3px 6px;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.field > span:first-child {
+  color: var(--muted);
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 4px 0;
 }
