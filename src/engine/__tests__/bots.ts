@@ -11,7 +11,7 @@ import { acceptPlan, judgePlan, type PlanSpec } from '../planProposal'
 import { goalOf } from '../projection'
 import type { GameState, UpgradeTarget } from '../types'
 import { acceptUpgrade, judgeUpgrade, softwareSteps } from '../upgrade'
-import { FakeJudge, score, type Overrides } from './fakeJudge'
+import { FakeJudge, noul, score, type Overrides } from './fakeJudge'
 
 // Scripted players for the balance tests. They play through the real engine with a fake Jev
 // whose answers are set per proposal, the way a typical real verdict comes back.
@@ -30,9 +30,12 @@ export interface Result {
 /** One week's planning: the bot may propose, create, assign. Returns the new state. */
 export type Turn = (state: GameState) => Promise<GameState>
 
+/** Jev's plausibility for most ideas in the playtests: 60–80%. */
+const TYPICAL: Overrides = { plausible: noul(0.7), feasible: noul(0.7) }
+
 /** Proposes and accepts in one go, with Jev answering as `answers` says. */
 export async function propose(state: GameState, input: ProposalInput, answers: Overrides = {}): Promise<GameState> {
-  const v = await judgeAny(state, new FakeJudge(answers), input)
+  const v = await judgeAny(state, new FakeJudge({ ...TYPICAL, ...answers }), input)
   if (v.rejected || v.duplicateOf) throw new Error(`${input.kind} rejected: ${v.rejected ?? v.duplicateOf}`)
   return acceptAny(state, v).state
 }
@@ -168,26 +171,26 @@ export const chain: Turn = async (s) => {
 }
 
 /**
- * Phase 1, smart: upgrade first, while there's nothing to pay with, so every income after is
- * a richer band; then an income every week, upgrading again if the goal needs it.
+ * Phase 1, ambitious: the free first income, then upgrades all the way to IQ 140, which
+ * unlocks Jev's Advanced income band, worth ten times a Simple one; then incomes.
  */
 export const smart: Turn = async (s) => {
   if (!s.proposedThisWeek) {
-    const up = await upgradeIfShort(s)
-    s = s.week === 1 && up ? up : (up ?? (await propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s)))))
+    const waiting = s.research.some((r) => r.effect.kind === 'upgrade')
+    const up = s.week > 1 && bestIQ(s) < 140 && !waiting ? await upgrade(s, { kind: 'mind', id: SERVER_ID }) : null
+    s = up ?? (await propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s))))
   }
   return researchAll(s)
 }
 
-/** Phase 1, two-step chain: upgrade, a flat income of novels, then royalties that grow with them. */
+/** Phase 1, two-step chain: the free income makes novels, then royalties grow with them. */
 export const chain2: Turn = async (s) => {
   if (!s.proposedThisWeek) {
     const step: Record<number, () => Promise<GameState>> = {
-      1: () => upgrade(s, { kind: 'mind', id: SERVER_ID }),
-      2: () => propose(s, ...income('Write novels', 'published-novels', bandFor(s))),
-      3: () => propose(s, ...income('Royalties', MONEY_ID, bandFor(s), 'published-novels'))
+      1: () => propose(s, ...income('Write novels', 'published-novels', bandFor(s))),
+      2: () => propose(s, ...income('Royalties', MONEY_ID, bandFor(s), 'published-novels'))
     }
-    const up = s.week > 3 ? await upgradeIfShort(s) : null
+    const up = s.week > 2 ? await upgradeIfShort(s) : null
     s = await (step[s.week]?.() ?? (up ? Promise.resolve(up) : propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s)))))
   }
   return researchAll(s)
@@ -242,7 +245,9 @@ const MONEY_SHARE = 0.3
 export function steady(style: Phase2Style): Turn {
   const answers: Overrides = { advancement: score(0), efficiency: score(2), value: score(2), ...style.answers }
   return async (s0) => {
+    // Cover is proposed first thing in the week, before reinvesting, while the Money is there.
     let s = researchAll(s0)
+    let saving = false
     const goal = goalOf(s)!
     const mill = () => findUnit(s, MILL)
     // The plan's free first unit.
@@ -273,7 +278,10 @@ export function steady(style: Phase2Style): Turn {
       else if (!has('Make nanobots')) s = await propose(s, strategy('Make nanobots', 'nanobots'), answers)
       else if (!has('Draft blueprints')) s = await propose(s, strategy('Draft blueprints', 'blueprints'), answers)
       else if (style.coverBelow && weeksLeft(s) < style.coverBelow && s.covers < 3 && !covering) {
-        s = await propose(s, { kind: 'cover', spec: { name: fresh('PR campaign'), description: '' } }, { convincing: score(1) })
+        // Cover is used at once; if it's too dear this week, the bot saves up for next week.
+        const before = s
+        s = await propose(s, { kind: 'cover', spec: { name: fresh('PR campaign'), description: '' } }, { convincing: score(1) }).catch(() => s)
+        saving = s === before
       } else if (bestIQ(s) < goal.minIQ && !designing && !upgrading && mill()?.built) {
         // Design a tier twice as smart as the best mind once that mind is at its ceiling; until then, upgrade it.
         const room = softwareSteps(tier).length > 0
@@ -284,7 +292,7 @@ export function steady(style: Phase2Style): Turn {
         } else s = await improve(tier.id)
       }
     }
-    s = researchAll(s, (id) => s.research.find((r) => r.id === id)?.effect.kind === 'cover' && weeksLeft(s) > (style.coverBelow ?? 0))
+    s = researchAll(s)
     const m = mill()
     if (!m) return s
     // Switch to the goal's resources once four weeks of everything would cover what's still needed.
@@ -309,7 +317,7 @@ export function steady(style: Phase2Style): Turn {
     } else if (money) {
       s = assignAll(s, MILL, money.id)
     }
-    if (style.reinvest || m.built < 4) {
+    if ((style.reinvest && !saving) || m.built < 4) {
       const n = creatable(s, findUnit(s, MILL)!, weeklyUse(preview))
       if (n > 0) s = createUnits(s, MILL, style.reinvest ? n : Math.min(n, 4 - m.built))
     }

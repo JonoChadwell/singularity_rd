@@ -89,27 +89,22 @@ describe('Phase 1 bots', () => {
     for (const a of APPROACHES) expect((await play(await phase1(a), idle, 12)).lost).toBe(10)
   })
 
-  it('win with an income a week and upgrades as needed, by week 10 and usually 8', async () => {
-    const weeks = await Promise.all(APPROACHES.map(async (a) => (await play(await phase1(a), flat, 12)).won))
-    for (const w of weeks) expect(w).not.toBeNull()
-    expect(Math.max(...(weeks as number[]))).toBeLessThanOrEqual(10)
-    expect(weeks[1]).toBeLessThanOrEqual(8)
-  })
-
-  it('win in weeks 6 to 8 with a growing chain: novels, then royalties that grow with them', async () => {
+  it('win in weeks 7 to 9 with an income a week and upgrades as needed', async () => {
     for (const a of APPROACHES) {
-      const r = await play(await phase1(a), chain2, 12)
-      expect(r.won).toBeGreaterThanOrEqual(6)
-      expect(r.won).toBeLessThanOrEqual(8)
+      const r = await play(await phase1(a), flat, 12)
+      expect(r.won).toBeGreaterThanOrEqual(7)
+      expect(r.won).toBeLessThanOrEqual(9)
     }
   })
 
-  it('win in weeks 5 or 6 by upgrading first, while there’s nothing to pay with', async () => {
-    for (const a of APPROACHES) {
-      const r = await play(await phase1(a), smart, 12)
-      expect(r.won).toBeGreaterThanOrEqual(5)
-      expect(r.won).toBeLessThanOrEqual(6)
-    }
+  it('win by week 10 with a growing chain: novels, then royalties that grow with them', async () => {
+    for (const a of APPROACHES) expect((await play(await phase1(a), chain2, 12)).won).not.toBeNull()
+  })
+
+  it('get nothing for free: rushing to IQ 140 for the richest incomes doesn’t pay in ten weeks', async () => {
+    const rushed = await play(await phase1(2), smart, 12)
+    const steady = await play(await phase1(2), flat, 12)
+    expect(rushed.won ?? 11).toBeGreaterThanOrEqual(steady.won!)
   })
 })
 
@@ -127,9 +122,9 @@ describe('Phase 2 bots', () => {
     for (const a of APPROACHES) {
       const r = await play(await phase2(a), steady({ reinvest: true }), 120)
       weeks.push(used(r))
-      // Owning millions of mills gets noticed, a week at a time.
-      expect(r.weeksLost).toBeGreaterThanOrEqual(3)
-      expect(r.weeksLost).toBeLessThanOrEqual(8)
+      // Owning millions of mills gets noticed, a week more at each power of ten.
+      expect(r.weeksLost).toBeGreaterThanOrEqual(10)
+      expect(r.weeksLost).toBeLessThanOrEqual(25)
     }
     for (const w of weeks) {
       expect(w).toBeGreaterThanOrEqual(50)
@@ -149,14 +144,24 @@ describe('Phase 2 bots', () => {
 
   it('make risk a real choice: it wins sooner but spends the clock, and too much loses', async () => {
     const calm = await play(await phase2(2), steady({ reinvest: true }), 120)
-    const risky = await play(await phase2(2), steady({ reinvest: true, answers: { alarm: score(3) } }), 120)
+    const reckless = { reinvest: true, answers: { alarm: score(3) } }
+    const risky = await play(await phase2(2), steady(reckless), 120)
     expect(used(risky)).toBeLessThan(used(calm) - 10)
-    expect(risky.weeksLost).toBeGreaterThan(20)
-    const panic = { reinvest: true, answers: { alarm: score(4) } }
-    expect((await play(await phase2(2), steady(panic), 120)).lost).not.toBeNull()
-    // Cover buys back enough weeks to save it.
-    const covered = await play(await phase2(2), steady({ ...panic, coverBelow: 25 }), 120)
+    expect(risky.weeksLost).toBeGreaterThan(30)
+    // The same gamble on a brilliant goal, with two minds to design, runs out of time…
+    expect((await play(await phase2(0), steady(reckless), 120)).lost).not.toBeNull()
+    // …unless cover buys the weeks back.
+    const covered = await play(await phase2(0), steady({ ...reckless, coverBelow: 20 }), 120)
     expect(covered.won).not.toBeNull()
     expect(covered.weeksGained).toBeGreaterThan(0)
+    const panic = { reinvest: true, answers: { alarm: score(4) } }
+    expect((await play(await phase2(2), steady(panic), 120)).lost).not.toBeNull()
+  })
+
+  it('make cover cost growth when it isn’t needed', async () => {
+    const calm = await play(await phase2(2), steady({ reinvest: true }), 120)
+    const covered = await play(await phase2(2), steady({ reinvest: true, coverBelow: 30 }), 120)
+    expect(covered.weeksGained).toBeGreaterThan(0)
+    expect(used(covered)).toBeGreaterThan(used(calm))
   })
 })

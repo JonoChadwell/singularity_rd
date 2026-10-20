@@ -20,6 +20,7 @@ import {
   precheckName,
   proposalSlotBlocker,
   reader,
+  refuseUnaccepted,
   resourceFrom,
   resourceQuestions,
   scale,
@@ -30,7 +31,7 @@ import { lockReason } from './phase'
 import { addUnit, crewPer } from './research'
 import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
-import { ALL_TRAITS, catchTraits, TRAITS, type TraitId } from './traits'
+import { ALL_TRAITS, catchTraits, TRAITS, UPKEEP_TRAITS, type TraitId } from './traits'
 import type { Cost, Flow, GameState, UnitType } from './types'
 import { newUnit } from './initialState'
 
@@ -191,7 +192,12 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
       criteria: scale(B.UPKEEP_SIZE)
     }
   })
-  const traitList = ALL_TRAITS.filter((t) => !t.param || Object.keys(paramOptions(state, t.param)).length)
+  // Traits about upkeep mean nothing for a unit that runs on nothing.
+  const traitList = ALL_TRAITS.filter(
+    (t) =>
+      (!t.param || Object.keys(paramOptions(state, t.param)).length) &&
+      (spec.upkeep.length > 0 || !UPKEEP_TRAITS.includes(t.id))
+  )
   for (const t of traitList) {
     questions[`trait_${key(t.id)}`] = { type: 'noul', instructions: `${t.question} (Trait: ${t.name}. ${t.rule})` }
     if (t.param) {
@@ -332,7 +338,7 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
 }
 
 export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
-  if (v.rejected || v.duplicateOf) throw new Error('This proposal was not accepted.')
+  refuseUnaccepted(v)
   if (v.missing.length) throw new Error('Answer Jev’s pushback first.')
   const state = structuredClone(current)
   if (v.spec.first) {
@@ -345,10 +351,16 @@ export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
   state.inventions.push({ week: state.week, icon: unit.icon, name: unit.name, kind: 'unit' })
   state.decidedThisWeek = true
   if (v.spec.first) {
-    // The plan's first unit comes designed: no research, no week's proposal.
+    // The plan's first unit comes designed, with a few already working: no research, no week's
+    // proposal. Creating more needs its parts, and creating one unlocks minds and upgrades.
     state.phase.firstUnit = null
+    unit.count = B.FIRST_UNITS
     addUnit(state, unit)
-    logProposal(state, 'good', `${unit.icon} ${unit.name} is designed. Create them from parts on its card.`)
+    logProposal(
+      state,
+      'good',
+      `${unit.icon} ${unit.name} is designed, and you have ${B.FIRST_UNITS} of them. Give them a strategy; create more from parts on its card.`
+    )
     return { state, outcome: { kind: 'added', name: unit.name } }
   }
   return addResearch(
@@ -404,10 +416,13 @@ export async function answerPushback(
   const questions: Record<string, JevQuestion> = {}
   const named = (r: PushbackReply) => r.newName?.trim() || findResource(state, r.resourceId ?? '')?.name || '?'
   replies.forEach((r, i) => {
+    if (!missing.includes(r.kind)) {
+      throw new Error(`Jev didn’t ask for ${r.kind}. It’s missing: ${missing.join('; ')}.`)
+    }
     if (r.newName?.trim()) {
       const refusal = precheckName(state, r.newName)
       if (refusal) throw new Error(refusal)
-      Object.assign(questions, resourceQuestions(state, `new${i}_`))
+      Object.assign(questions, resourceQuestions(state, `new${i}_`, r.newName.trim()))
     } else if (!findResource(state, r.resourceId ?? '')) {
       throw new Error(`Choose something for ${r.kind}.`)
     }

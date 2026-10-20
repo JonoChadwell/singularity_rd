@@ -106,7 +106,8 @@ can't be closed: the phase hasn't started until it has a plan.
     3–5 resources. Phase 2 needs at least 5 that aren't in the game yet, and at most 8 in
     all. Names already in the game are shown as "already have" and don't count as new.
   - **Goal uses up**: 1–3 of the batch's resources, ticked. This is the goal's cost. The
-    first pick defaults to the batch's last resource.
+    first pick defaults to the batch's last resource. In Phase 2 they must be resources that
+    are new in the plan, so the goal can't be paid in what you already make.
   - Phase 2, **First unit**: a name and a line, like "CNC Mill" (see §D5).
 - **Propose** makes one Jev call. Jev answers:
   - `coherent` (yes/no): could the AI plausibly reach this goal by these means with these
@@ -147,6 +148,12 @@ researched the goal, the lab discovers you: game over. The clock never moves in 
   (below).
 - **Upgrade** the Starting Server's software (research).
 - One research proposal a week, as now. Doing research already proposed has no limit.
+
+**Paying for research** (changed after the first playtests). Research costs are paid in
+stocks you own or something makes; with none of those, in the plan's stocks, which you then
+have to earn. The only free research is the very first passive income, while nothing makes
+anything yet. Jev ranks what would most naturally pay, and the player may choose any of its
+top three instead.
 
 **Passive income that grows.** The income form gains "Grows with: (nothing) / a stock". A
 growing income yields a share of the worth of what you own of that stock, every week:
@@ -208,7 +215,9 @@ The Phase 2 plan names a first unit. When the plan is accepted, the unit dialog 
 pre-filled with its name and description, and parts guessed from the batch. It's an
 ordinary unit proposal (one Jev call, pushback if any), with three differences:
 - it doesn't use the week's research proposal;
-- accepting it adds the unit at once, already designed, with no research;
+- accepting it adds the unit at once, already designed, with no research, and with
+  `FIRST_UNITS` (3) of them already working, so industry runs even when you can't make its
+  parts yet;
 - its strategy for making money or a batch resource is suggested next, by opening the
   strategy form with the unit selected.
 
@@ -244,8 +253,14 @@ costs half and yields double." The player accepts or discards. The weeks are los
 research is done, not when it's proposed, so a risky research can wait for a better moment.
 Cover research (§D7) is never risky.
 
-**Lots of units get noticed.** The first time a unit type reaches 10,000 owned, and each
-further tenfold (100,000, 1M, …), humans notice: −1 week, or −2 for a unit that was risky.
+The question tells Jev that the AI works through companies and contractors, so ordinary
+business goes unnoticed, and to judge the action rather than the fact an AI is behind it.
+Each level is labelled with what it means ("a scandal", "illegal or dangerous"). In the first
+playtests, without this, Jev rated nearly every Phase 2 idea "governments would step in".
+
+**Lots of units get noticed.** The first time a unit type reaches 10,000 owned, humans
+notice: −1 week. Each further tenfold costs a week more than the last: 100,000 costs 2,
+1M costs 3, 10M costs 4. A risky unit costs twice that.
 The create dialog and the preview warn first: "Creating these crosses 100,000 Robots: −1
 week." Bigger units mean smaller counts, so a player can trade unit size for attention.
 
@@ -257,10 +272,12 @@ is, on a four-level scale that sets its minimum IQ and the weeks it adds: 2, 4, 
 
 - **Diminishing returns.** Each cover you've already done shrinks the next by 30%:
   `weeks × 0.7^covers`, rounded, at least 1.
-- **Cost** scales with your economy: half a week of your current weekly output for each week
-  it adds, paid in stocks Jev picks. Early on it's cheap; late, it eats Money that would
-  otherwise pile up.
-- It uses the week's research proposal, like any research.
+- **Cost** scales with your economy: a quarter of a week of your current weekly output for
+  each week it adds, paid in stocks Jev picks.
+- **It's used the moment it's accepted**, so you need its IQ and its cost right then. (In the
+  first playtests cover was research, priced when proposed: players proposed it early, while
+  the economy was small, and researched it late for almost nothing.)
+- It uses the week's research proposal.
 
 ### D8. Phase 3: Ascension and game over
 
@@ -349,16 +366,17 @@ are the designer's.
 | `PLAN_BAR` | 0.25 | Plans are generous |
 | `PLAN_RESOURCES` | Phase 1: 3–5; Phase 2: 5–8 (5+ new) | |
 | `GOAL_APPROACH` | 5 levels: Phase 1 IQ 145 / 135 / 125 / 115 / 105, cost ×0.6 / 0.8 / 1 / 1.2 / 1.4. Phase 2 IQ 600 / 500 / 420 / 350 / 300, cost ×0.3 / 0.55 / 1 / 2 / 4 | Lower IQ, bigger cost |
-| `GOAL_COST` | Phase 1: 8,000 worth. Phase 2: 1e12 worth | Tuned by the bots in §D12 |
-| `INCOME_COST_WEEKS` | 2 (was 4) | Phase 1 has only ten weeks |
+| `GOAL_COST` | Phase 1: 6,000 worth. Phase 2: 1e13 worth | Tuned by the bots and playtests, §D14 |
+| `INCOME_COST_WEEKS` | 1 (was 4) | Phase 1 has only ten weeks; Jev's plausibility of 60–80% raises it to 1.5–2 |
+| `FIRST_UNITS` | 3 | Phase 2's first unit arrives with this many working |
 | `GROWTH_RATE` | By income band: 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1 a week | Share of the stock's worth |
 | `GROWTH_CAP` | 5× the band's flat income | |
 | `SOFTWARE_STEPS` | ⅓, ½, ⅔ of the gap, floored to 5%, at least 5% | Replaces +20% / +50% |
 | `MIND_UPGRADE_SHARE` | 0.2 of the design-cost difference | Hardware ×2.5 |
 | `ALARM` | 0, 0, 2, 4, 8 weeks | |
 | `RISK` | Cost ×0.5; income ×2, strategy ×1.5, parts ×0.5, mind IQ ×1.2 | |
-| `NOTICE_FROM` | 10,000 units; −1 week per tenfold, −2 if risky | |
-| `COVER` | 2 / 4 / 6 / 10 weeks at IQ 100 / 110 / 150 / 250; ×0.7 per earlier cover; cost 0.5 weeks of output per week added | |
+| `NOTICE_FROM` | 10,000 units: −1 week, then a week more for each tenfold (−2, −3, …); twice that if risky | |
+| `COVER` | 2 / 4 / 6 / 10 weeks at IQ 100 / 110 / 150 / 250; ×0.7 per earlier cover; cost 0.25 weeks of output per week added, paid at once | |
 
 **Why exponential growth sets the numbers.** Phase 2's economy grows roughly geometrically,
 since units pay for themselves in a couple of weeks and you can reinvest. A fixed goal cost
@@ -446,7 +464,58 @@ Changes from the starting values:
   Phase 1. The cap (5× the band's flat income) still bounds them later.
 - Phase 1 goal cost multipliers narrowed from ×0.5–2 to **×0.6–1.4**: the flat bot couldn't
   finish a scale-heavy goal in time.
-- Kept: `GOAL_COST` 8,000 and 1e12, the alarm weeks, notices, cover.
+- Kept at this step: `GOAL_COST` 8,000 and 1e12, the alarm weeks, notices, cover.
+
+**Step 5: agent playtests, round 1** (`logs/playtests/pt1-*.md`; brief in
+`harness/PLAYTEST_BRIEF.md`). Three agents played complete games with the real Jev: a sensible
+first-timer, an optimizer and an inventive player. Two of them lost Phase 1 in their first
+game and started a second.
+
+| Player | Phase 1 | Phase 2 | Clock in Phase 2 | Jev calls |
+| --- | --- | --- | --- | --- |
+| Sensible, game 1 | Lost in week 10, 2% short | — | — | 13 |
+| Sensible, game 2 | Won in week 10 | Won 31 weeks in, 54 to spare | Risk −20, notices −4, cover +9 | 38 |
+| Optimizer, game 1 | Lost in week 10 | — | — | 11 |
+| Optimizer, game 2 | Won in week 4 (exploit) | Won 10 weeks in, 44 to spare | Risk −40, notices −5 | 14 |
+| Inventor | Won in week 9 | Won 22 weeks in, 73 to spare | Risk −12, notices −4, cover +12 | 43 |
+
+What they found, and what changed (step 6):
+
+| Finding | Change |
+| --- | --- |
+| A plan's resources all came back with the same worth (all 1,000, or all 10M), and once all as flows: the batch's questions didn't say which resource they were about | Each question names its resource; the stock-or-flow question says most things keep |
+| Research proposed while you own nothing was free: two upgrades and a top-band income in weeks 1–3, and Phase 1 won in week 4 | Only the very first income is free; costs fall back to the plan's stocks |
+| Without the exploit, sensible players lost or scraped through: incomes cost 2–4 weeks of their own yield at Jev's usual 60–80% plausibility | `INCOME_COST_WEEKS` 2 → 1, Phase 1 `GOAL_COST` 8,000 → 6,000 |
+| Jev priced costs in stocks the player couldn't scale (a capped Phase 1 income), and in the root of an income chain | The player can choose any of Jev's top three payers |
+| A Phase 2 goal could be paid in Money from Phase 1: no production chain needed | Phase 2 goals must use resources new in the plan |
+| Unit upgrades could be repeated: ×1.5 output every week, ×0.5 parts twice | Each industry upgrade happens once |
+| Overclockable on a unit with no upkeep was a free ×2 | Upkeep traits are never offered to units with no upkeep |
+| The free first unit needed parts nobody made: 6–7 weeks before the first one existed | It arrives with 3 already working |
+| Jev called most Phase 2 ideas risky ("governments would step in" for milling parts, a software patch, "bake better croissants"), so risk was a tax | The alarm question is calibrated (§D6). `calibrate-alarm` in the harness checks it: mundane work is quiet, nanobots under "stay hidden" and bank hacking are −4 |
+| Cover proposed early was nearly free when researched later | Cover is used when accepted |
+| Phase 2 was won 10–31 weeks in, with 44–73 weeks to spare: the clock never threatened | Phase 2 `GOAL_COST` 1e12 → 1e13; notices escalate; the fixes above slow the fastest loops |
+| 100 × 1.15 counted as less than 115, which cost a player a week | IQ is rounded to hundredths |
+| Smaller: truncated research ids that collided, a notice warning in Phase 3, a one-line game over in the harness, a pushback reply for the wrong kind half-applied, new units defaulting to an empty build task, alerts suggesting the Starting Server could reach IQ 350, WebSocket noise on every command, trait effects never explained | All fixed |
+
+Bots after the changes (fake Jev at 70% plausibility, as the real one mostly was):
+
+| Bot | Result |
+| --- | --- |
+| P1 idle | Loses |
+| P1 flat | Wins in weeks 7–9 |
+| P1 chain2 | Wins in weeks 9–10 |
+| P1 rush to IQ 140 | No better than flat: loses one goal, wins the others in weeks 8–9 |
+| P2 steady | Wins 66–69 weeks in; notices −15 to −21 |
+| P2 clever | Wins in 43–45 weeks |
+| P2 reckless (everything −4) | Wins two goals about 20 weeks sooner, spending 53–57 weeks of clock; loses the brilliant goal |
+| P2 reckless + cover | Saves the brilliant goal (+9 weeks) |
+| P2 steady + cover | Cover it didn't need costs it 6 weeks of growth |
+| P2 panic (everything −8) | Loses |
+| P2 hoarder | Loses |
+
+Not changed, for the designer: there's no strong Phase 1 line that wins in weeks 5–6 any
+more. Phase 1 is now a steady tutorial: income, upgrade, income. Growing incomes are slightly
+weaker than flat ones over ten weeks.
 
 Found along the way:
 - **Upkeep starves a switched fleet.** Moving every unit off the Money strategy leaves nobody
@@ -463,7 +532,7 @@ Found along the way:
 - [x] 2. Implementation (commit 1972ed6)
 - [x] 3. Unit tests (`phases.spec.ts`; the older specs run the mechanics in Phase 3)
 - [x] 4. Balance tests against scripted strategies (§D14)
-- [ ] 5. Agent playtests through the harness
-- [ ] 6. Playtest results and balance changes
+- [x] 5. Agent playtests through the harness (§D14, round 1)
+- [x] 6. Playtest results and balance changes (§D14)
 - [ ] 7. Fun playtests
 - [ ] 8. Report and recommendations (not applied; waiting for the designer)

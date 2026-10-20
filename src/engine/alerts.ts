@@ -1,5 +1,5 @@
 import { researchBlocker } from './actions'
-import { bestIQ, currentIQ, findResource, fmt, fmtCount } from './model'
+import { bestIQ, ceilingIQ, currentIQ, findResource, fmt, fmtCount } from './model'
 import { lockReason, weeksLeft } from './phase'
 import { goalOf } from './projection'
 import type { GameState, WeekReport } from './types'
@@ -116,15 +116,21 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
 
   // Research nothing you own is smart enough for.
   const best = bestIQ(state)
-  const smarter = lockReason(state, 'mind')
-    ? { label: 'Upgrade the Starting Server?', to: { kind: 'upgrade-mind', mindId: bestMindId(state) } as Prompt }
-    : null
+  const mindsLocked = lockReason(state, 'mind')
+  const ceiling = Math.max(0, ...state.minds.map(ceilingIQ))
   for (const r of state.research.filter((x) => x.minIQ > best)) {
+    const upgradable = r.minIQ <= ceiling
+    const prompt: Alert['prompt'] = upgradable
+      ? { label: 'Upgrade your best mind?', to: { kind: 'upgrade-mind', mindId: bestMindId(state) } }
+      : mindsLocked
+        ? undefined
+        : { label: 'Design something smarter?', to: { kind: 'design-mind', iq: r.minIQ } }
+    const beyond = !upgradable && mindsLocked ? ` No mind you have can get there: ${mindsLocked.toLowerCase()}` : ''
     add({
       key: `iq-${r.id}`,
       tone: 'info',
-      text: `${r.name} needs IQ ${r.minIQ}; your smartest mind is IQ ${Math.round(best)}.`,
-      prompt: smarter ?? { label: 'Design something smarter?', to: { kind: 'design-mind', iq: r.minIQ } }
+      text: `${r.name} needs IQ ${r.minIQ}; your smartest mind is IQ ${Math.round(best)}.${beyond}`,
+      prompt
     })
   }
 

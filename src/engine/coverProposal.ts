@@ -1,17 +1,15 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
 import { previewWeek } from './economy'
-import { findResource } from './model'
-import { coverWeeks, lockReason } from './phase'
+import { bestIQ, costShortfall, findResource } from './model'
+import { coverWeeks, lockReason, moveClock } from './phase'
 import {
-  addResearch,
   baseVerdict,
   claimProposal,
   cleanText,
   costFor,
   floorIQ,
   gate,
-  newResearch,
   payQuestion,
   precheckName,
   proposalSlotBlocker,
@@ -89,22 +87,29 @@ export function draftCover(state: GameState, v: CoverVerdict): { weeks: number; 
   return { weeks, now, minIQ: floorIQ(minIQ), cost: costFor(state, v, B.COVER_COST_WEEKS * now * weeklyOutput(state)) }
 }
 
+/** Why a cover can't be used right now, or null. */
+export function coverBlocker(state: GameState, v: CoverVerdict): string | null {
+  if (v.rejected) return 'This proposal was not accepted.'
+  const { minIQ, cost } = draftCover(state, v)
+  if (bestIQ(state) < minIQ) return `Pulling this off needs IQ ${minIQ}; your smartest mind is IQ ${Math.round(bestIQ(state))}.`
+  const short = costShortfall(state, cost)
+  return short ? `You need ${short} to do it now.` : null
+}
+
+/**
+ * Cover is used the moment it's accepted: it needs the IQ and what it costs right then. (Kept
+ * for later, its price would be set while the economy was small.)
+ */
 export function acceptCover(current: GameState, v: CoverVerdict): Accepted {
-  if (v.rejected) throw new Error('This proposal was not accepted.')
   const state = structuredClone(current)
+  const blocker = coverBlocker(state, v)
+  if (blocker) throw new Error(blocker)
   claimProposal(state)
-  const { weeks, minIQ, cost } = draftCover(state, v)
+  const { cost, now } = draftCover(state, v)
+  for (const c of cost) findResource(state, c.resourceId)!.amount -= c.amount
   state.inventions.push({ week: state.week, icon: '🕶️', name: v.spec.name, kind: 'cover' })
   state.decidedThisWeek = true
-  return addResearch(
-    state,
-    newResearch(state, {
-      name: v.spec.name,
-      description: v.spec.description || `Cover: ${v.spec.name}.`,
-      icon: '🕶️',
-      minIQ,
-      cost,
-      effect: { kind: 'cover', weeks }
-    })
-  )
+  state.covers++
+  moveClock(state, now, `Cover: ${v.spec.name}`)
+  return { state, outcome: { kind: 'added', name: v.spec.name } }
 }

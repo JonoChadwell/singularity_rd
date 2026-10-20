@@ -15,10 +15,12 @@ import {
   precheckName,
   proposalSlotBlocker,
   reader,
+  refuseUnaccepted,
   scale,
   type Accepted,
   type VerdictBase
 } from './proposals'
+import { bootstrapping } from './research'
 import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import type { Cost, GameState, Income } from './types'
@@ -150,11 +152,13 @@ export function draftIncome(state: GameState, v: IncomeVerdict): { income: Incom
         resourceId: output.id,
         amount: B.nice((weekly * efficiency * boost) / Math.max(1e-9, output.value))
       }
-  return { income, minIQ: floorIQ(minIQ), cost: costFor(state, v, B.INCOME_COST_WEEKS * weekly) }
+  // The very first income is free: there's nothing yet to pay with.
+  const cost = bootstrapping(state) ? [] : costFor(state, v, B.INCOME_COST_WEEKS * weekly)
+  return { income, minIQ: floorIQ(minIQ), cost }
 }
 
 export function acceptIncome(current: GameState, v: IncomeVerdict): Accepted {
-  if (v.rejected) throw new Error('This proposal was not accepted.')
+  refuseUnaccepted(v)
   const state = structuredClone(current)
   claimProposal(state)
   const { income, minIQ, cost } = draftIncome(state, v)

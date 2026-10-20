@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { createNotice, createUnits, dismissCard, doResearch, dropResearch, shuffleIdeas } from '../actions'
-import { acceptCover, draftCover, judgeCover, precheckCover, weeklyOutput } from '../coverProposal'
+import { acceptCover, coverBlocker, draftCover, judgeCover, precheckCover, weeklyOutput } from '../coverProposal'
 import { runWeek } from '../cycle'
 import { acceptIncome, draftIncome, judgeIncome, precheckIncome, type IncomeSpec } from '../incomeProposal'
 import { createInitialState, newResource, newUnit, SERVER_ID } from '../initialState'
 import { acceptMind, judgeMind } from '../mindProposal'
-import { currentIQ, findResource, findUnit, MONEY_ID } from '../model'
+import { currentIQ, defaultTask, findResource, findUnit, MONEY_ID } from '../model'
 import { cardsFor, lockReason, newPhase, weeksLeft, type Feature } from '../phase'
 import { PHASE1_PLANS, PHASE2_PLANS, planIdeas } from '../planPresets'
 import { acceptPlan, draftPlan, judgePlan, precheckPlan, type PlanSpec } from '../planProposal'
-import { projectGoal } from '../projection'
-import { acceptStrategy, judgeStrategy } from '../proposals'
+import { projectGoal, projectionText } from '../projection'
+import { acceptResource, acceptStrategy, judgeResource, judgeStrategy } from '../proposals'
+import { makeBuildStrategy } from '../research'
 import { describeState } from '../stateText'
 import type { GameState } from '../types'
-import { acceptUnit, judgeUnit, type UnitSpec } from '../unitProposal'
-import { acceptUpgrade, judgeUpgrade } from '../upgrade'
+import { acceptUnit, answerPushback, judgeUnit, type UnitSpec } from '../unitProposal'
+import { acceptUpgrade, judgeUpgrade, upgradeCandidates } from '../upgrade'
 import { choice, FakeJudge, noul, score } from './fakeJudge'
 
 // ---------------------------------------------------------------- worlds
@@ -239,8 +240,8 @@ describe('unlocks', () => {
 
   it('shows explainer cards for what’s unlocked until dismissed', async () => {
     const s = await phase1()
-    expect(cardsFor(s).map((c) => c.id)).toEqual(['phase1'])
-    expect(cardsFor(dismissCard(s, 'phase1'))).toEqual([])
+    expect(cardsFor(s).map((c) => c.id)).toEqual(['phase1', 'growth'])
+    expect(cardsFor(dismissCard(dismissCard(s, 'phase1'), 'growth'))).toEqual([])
     const p2 = phase2()
     expect(cardsFor(p2).map((c) => c.id)).toEqual(['industry', 'risk'])
   })
@@ -295,6 +296,8 @@ describe('risk', () => {
 
   it('pays: a risky income yields double and costs half, and takes weeks when researched', async () => {
     const s = phase2(1e6)
+    // Not the very first income, which would be free.
+    s.incomes.push({ name: 'Coding', resourceId: MONEY_ID, amount: 1 })
     const calm = draftIncome(s, await judgeIncome(s, alarm(1), incomeSpec()))
     const v = await judgeIncome(s, alarm(3), incomeSpec())
     expect(v.risk).toEqual({ level: 3, weeks: 4 })
@@ -370,7 +373,7 @@ describe('risk', () => {
 // ---------------------------------------------------------------- notices
 
 describe('notices', () => {
-  it('takes a week each time a unit type reaches a new power of ten from 10,000', () => {
+  it('takes weeks each time a unit type reaches a new power of ten, a week more each time', () => {
     const s = phase2(1e9)
     addRobots(s, 9000)
     expect(createNotice(s, 'robot', 999)).toBe(0)
@@ -380,10 +383,13 @@ describe('notices', () => {
     // Not again at the same power of ten.
     state = createUnits(state, 'robot', 50_000)
     expect(state.phase.deadline).toBe(99)
-    // Jumping to 10M crosses 100,000, 1M and 10M: three weeks.
-    expect(createNotice(state, 'robot', 10_000_000)).toBe(3)
+    // Jumping to 10M crosses 100,000 (2 weeks), 1M (3) and 10M (4).
+    expect(createNotice(state, 'robot', 10_000_000)).toBe(9)
     state = createUnits(state, 'robot', 10_000_000)
-    expect(state.phase.deadline).toBe(96)
+    expect(state.phase.deadline).toBe(90)
+    // Only Phase 2 has a clock to move.
+    state.phase = newPhase(3, state.week)
+    expect(createNotice(state, 'robot', 1e9)).toBe(0)
   })
 
   it('notices risky units twice as hard, and units built over the week too', () => {
@@ -405,7 +411,7 @@ describe('cover', () => {
     expect(precheckCover(phase2(), { name: 'PR campaign', description: '' })).toBeNull()
   })
 
-  it('adds weeks, a little less each time, and costs some of your output', async () => {
+  it('is used at once: adds weeks, a little less each time, for some of your output', async () => {
     let s = phase2(1e9)
     s.incomes.push({ name: 'Trading', resourceId: MONEY_ID, amount: 10_000 })
     expect(weeklyOutput(s)).toBe(10_000)
@@ -414,15 +420,22 @@ describe('cover', () => {
     const d = draftCover(s, v)
     expect(d).toMatchObject({ weeks: 4, now: 4, minIQ: 110 })
     expect(d.cost).toEqual([{ resourceId: MONEY_ID, amount: B.COVER_COST_WEEKS * 4 * 10_000 }])
+    // It needs the IQ now.
+    expect(coverBlocker(s, v)).toMatch(/IQ 110/)
+    expect(() => acceptCover(s, v)).toThrow(/IQ 110/)
     s.minds[0]!.software.bonus = 0.5
     s = acceptCover(s, v).state
-    s = doResearch(s, s.research[0]!.id)
+    expect(s.research).toEqual([])
     expect(s.phase.deadline).toBe(104)
     expect(s.covers).toBe(1)
+    expect(findResource(s, MONEY_ID)!.amount).toBe(1e9 - d.cost[0]!.amount)
     // The next one adds 30% less.
     s = runWeek(s)
     const again = await judgeCover(s, new FakeJudge({ convincing: score(1) }), { name: 'Shell companies', description: '' })
     expect(draftCover(s, again).now).toBe(3)
+    // And it needs the cost now: there's no locking in a cheap price for later.
+    findResource(s, MONEY_ID)!.amount = 0
+    expect(coverBlocker(s, again)).toMatch(/You need/)
   })
 })
 
@@ -507,5 +520,118 @@ describe('plan ideas', () => {
     expect(planIdeas(structuredClone(s))).toEqual(three)
     const others = planIdeas(shuffleIdeas(s))
     expect(others.some((p) => three.includes(p))).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------- fixes from the first playtests
+
+describe('paying for research', () => {
+  it('makes only the very first income free; everything else is priced in what the plan is about', async () => {
+    let s = await phase1()
+    // An upgrade before any income would be free if owning nothing meant free: it isn't.
+    const offer = await judgeUpgrade(s, new FakeJudge(), { kind: 'mind', id: SERVER_ID })
+    expect(offer.options[0]!.cost.length).toBeGreaterThan(0)
+    const simple = () => new FakeJudge({ difficulty: score(1) })
+    const first = draftIncome(s, await judgeIncome(s, simple(), incomeSpec()))
+    expect(first.cost).toEqual([])
+    s = doResearch(acceptIncome(s, await judgeIncome(s, simple(), incomeSpec())).state, 'freelance-coding')
+    s = runWeek(s)
+    const second = draftIncome(s, await judgeIncome(s, simple(), incomeSpec({ name: 'Bug bounties' })))
+    expect(second.cost.length).toBeGreaterThan(0)
+  })
+
+  it('lets the player choose which of Jev’s favourites pays', async () => {
+    const s = phase2(1e6)
+    s.incomes.push({ name: 'Coding', resourceId: MONEY_ID, amount: 1 })
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', amount: 1e6 }))
+    // Steel is well behind, so by default Money pays alone.
+    const v = await judgeIncome(s, new FakeJudge({ pay: choice(MONEY_ID, { [MONEY_ID]: 0.7, steel: 0.2 }) }), incomeSpec({ name: 'Trading' }))
+    expect(draftIncome(s, v).cost.map((c) => c.resourceId)).toEqual([MONEY_ID])
+    v.picks.pay = 'steel'
+    expect(draftIncome(s, v).cost.map((c) => c.resourceId)).toEqual(['steel'])
+    // Only one of Jev's choices.
+    v.picks.pay = 'nanobots'
+    expect(draftIncome(s, v).cost.map((c) => c.resourceId)).toEqual([MONEY_ID])
+  })
+})
+
+describe('fixes', () => {
+  it('asks about each of a plan’s resources by name, so they can differ', async () => {
+    const s = createInitialState()
+    const judge = new FakeJudge()
+    await judgePlan(s, judge, bribe)
+    const q = judge.calls[0]!.questions
+    expect(q.r1_value!.instructions).toContain('"Story Ideas"')
+    expect(q.r2_kind!.instructions).toContain('"Published Novels"')
+  })
+
+  it('counts IQ 100 with a 15% upgrade as IQ 115', () => {
+    const s = phase2()
+    s.minds[0]!.software.bonus = 0.15
+    expect(currentIQ(s.minds[0]!)).toBe(115)
+  })
+
+  it('makes a Phase 2 goal use up resources that are new in its plan', () => {
+    const s = createInitialState()
+    s.phase = newPhase(2, 5)
+    s.resources.push(newResource({ id: MONEY_ID, name: 'Money' }))
+    const withMoney = { ...nanotech, resources: [...nanotech.resources, { name: 'Money', description: '' }], uses: ['Money'] }
+    expect(precheckPlan(s, withMoney)).toMatch(/new in this plan/)
+  })
+
+  it('gives the plan’s first unit a few working units', async () => {
+    const s = phase2(1e6)
+    s.phase.firstUnit = { name: 'CNC Mill', description: '' }
+    const v = await judgeUnit(s, new FakeJudge(), { name: 'CNC Mill', description: '', parts: [MONEY_ID], upkeep: [], builderId: null, first: true })
+    const mill = findUnit(acceptUnit(s, v).state, 'cnc-mill')!
+    expect(mill.count).toBe(B.FIRST_UNITS)
+    // They're not "created", so minds stay locked until you create one.
+    expect(mill.built).toBe(0)
+  })
+
+  it('makes each industry upgrade once, and never offers upkeep perks to a unit with no upkeep', async () => {
+    let s = phase2(1e9)
+    addRobots(s, 10).built = 10
+    const keys = () => upgradeCandidates(s, { kind: 'unit', id: 'robot' }).map((c) => c.key)
+    expect(keys()).not.toContain('add_overclockable')
+    expect(keys()).toContain('parts_money')
+    const offer = await judgeUpgrade(s, new FakeJudge({ best: choice('c0'), 'd_*': score(1) }), { kind: 'unit', id: 'robot' })
+    const option = offer.options.findIndex((o) => o.key === 'parts_money')
+    s = acceptUpgrade(s, { ...offer, options: [offer.options[option >= 0 ? option : 0]!] }, 0).state
+    s = doResearch(s, s.research[0]!.id)
+    expect(keys()).not.toContain('parts_money')
+  })
+
+  it('refuses a pushback reply for a kind of part Jev didn’t ask for', async () => {
+    const s = phase2(1e6)
+    await expect(
+      answerPushback(s, new FakeJudge(), 'one Mill', [MONEY_ID], ['precision machinery'], [{ kind: 'an advanced component', resourceId: MONEY_ID }])
+    ).rejects.toThrow(/didn’t ask for an advanced component/)
+  })
+
+  it('doesn’t make an empty build task a new unit’s default', () => {
+    const s = phase2()
+    const u = addRobots(s, 1)
+    s.strategies.push(makeBuildStrategy(s, u, u))
+    defaultTask(s, u)
+    expect(u.rest).toBe(s.strategies[0]!.id)
+    s.strategies.push({ id: 'earn', name: 'Earn', description: '', unitId: 'robot', kind: 'make', inputs: [], outputId: MONEY_ID, amount: 1 })
+    defaultTask(s, u)
+    expect(u.rest).toBe('earn')
+  })
+
+  it('says how much of the goal you’d have by the deadline when it’s out of reach', async () => {
+    const s = await phase1()
+    const goal = s.research[0]!.cost[0]!.amount
+    s.incomes.push({ name: 'Coding', resourceId: MONEY_ID, amount: goal / 40 })
+    const p = projectGoal(s)!
+    expect(p.week).toBeNull()
+    expect(projectionText(s, p)).toMatch(/you’d have \d+% of what it uses up by week 10/)
+  })
+
+  it('says why a duplicate can’t be accepted', async () => {
+    const s = phase2()
+    const v = await judgeResource(s, new FakeJudge({ same_as: choice(MONEY_ID) }), { name: 'Cash', description: '' })
+    expect(() => acceptResource(s, v)).toThrow(/same as Money/)
   })
 })

@@ -179,11 +179,12 @@
       </div>
       <div v-else-if="verdict.kind === 'cover' && coverDraft" class="outcome small">
         <div>
-          🕶️ Adds {{ coverDraft.now }} week{{ coverDraft.now === 1 ? '' : 's' }} to the clock, once researched{{
-            coverDraft.now < coverDraft.weeks ? ` (${coverDraft.weeks} before your earlier covers)` : ''
+          🕶️ Adds {{ coverDraft.now }} week{{ coverDraft.now === 1 ? '' : 's' }} to the clock, the moment you use it{{
+            coverDraft.now < coverDraft.weeks ? ` (it would be ${coverDraft.weeks}, but your earlier covers make it less convincing)` : ''
           }}.
         </div>
-        <div class="warn">{{ researchText(coverDraft) }}</div>
+        <div>Needs IQ {{ coverDraft.minIQ }} and uses up {{ coverDraft.cost.length ? describeCost(game.state, coverDraft.cost) : 'nothing' }}, now.</div>
+        <div v-if="coverBlock" class="bad">{{ coverBlock }}</div>
       </div>
       <div v-else-if="verdict.kind === 'mind' && mindDraft" class="outcome small">
         <div>
@@ -199,7 +200,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { IQ_CEILING, MAX_PARTS } from '@/engine/balance'
-import { draftCover, precheckCover } from '@/engine/coverProposal'
+import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
 import { DEFAULT_SOFTWARE, draftMind, guessIQ, precheckMind } from '@/engine/mindProposal'
 import { draftIncome, precheckIncome } from '@/engine/incomeProposal'
 import { bestIQ, describeCost, describeFlows, describeIncome, designRange, findResource, fmt, softwareVersion } from '@/engine/model'
@@ -287,7 +288,7 @@ const COPY: Record<
   },
   cover: {
     title: 'Propose cover',
-    help: 'Cover buys time: once researched, it moves the day humans stop you further away. Jev judges how plausible and how convincing it is. More convincing cover adds more weeks but needs more IQ. Each cover you’ve already done makes the next one add 30% less. It costs some weeks of your current output, paid in resources you have. Cover is never risky. It uses the week’s one research proposal.',
+    help: 'Cover buys time: it moves the day humans stop you further away, the moment you use it, so you need its IQ and its cost when you accept. Jev judges how plausible and how convincing it is. More convincing cover adds more weeks but needs more IQ. Each cover you’ve already used makes the next one add 30% less. It costs some weeks of your current output. Cover is never risky. It uses the week’s one research proposal.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. PR campaign, Shell companies',
     description: 'How does it work? (optional, but helps Jev)',
@@ -463,6 +464,7 @@ const unitDraft = computed(() => (verdict.value?.kind === 'unit' ? draftUnit(gam
 const mindDraft = computed(() => (verdict.value?.kind === 'mind' ? draftMind(game.state, verdict.value) : null))
 const incomeDraft = computed(() => (verdict.value?.kind === 'income' ? draftIncome(game.state, verdict.value) : null))
 const coverDraft = computed(() => (verdict.value?.kind === 'cover' ? draftCover(game.state, verdict.value) : null))
+const coverBlock = computed(() => (verdict.value?.kind === 'cover' ? coverBlocker(game.state, verdict.value) : null))
 const strategyText = computed(() => {
   const d = strategyDraft.value
   if (!d) return ''
@@ -477,7 +479,8 @@ const acceptLabel = computed(() => {
   const v = verdict.value
   if (v?.kind === 'unit' && first) return 'Add to industry'
   if (v?.kind === 'strategy' && strategyDraft.value?.minIQ) return 'Add as research'
-  if (v?.kind === 'unit' || v?.kind === 'income' || v?.kind === 'cover') return 'Add as research'
+  if (v?.kind === 'cover') return 'Use it now'
+  if (v?.kind === 'unit' || v?.kind === 'income') return 'Add as research'
   if (v?.kind === 'mind') return 'Add as research'
   return 'Accept'
 })

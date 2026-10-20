@@ -191,6 +191,9 @@ export const QUIRKS: Record<QuirkId, { name: string; icon: string; rule: string 
 /** Every trait, in list order. */
 export const ALL_TRAITS: Trait[] = TRAIT_IDS.map((id) => TRAITS[id])
 
+/** Traits whose rules are about upkeep: free for a unit that runs on nothing, so never offered to one. */
+export const UPKEEP_TRAITS: TraitId[] = ['overclockable', 'hardy', 'fragile']
+
 /** Drawbacks that can be a unit's catch: ones that need no extra choice. */
 export const catchTraits = (except: readonly TraitId[] = []) =>
   ALL_TRAITS.filter((t) => t.kind === 'drawback' && !t.param && !except.includes(t.id))

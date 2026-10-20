@@ -60,7 +60,8 @@ export function makeId(state: GameState, name: string): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
-      .slice(0, 32) || 'thing'
+      .slice(0, 48)
+      .replace(/-$/, '') || 'thing'
   const taken = new Set<string>([
     ...state.resources.map((r) => r.id),
     ...state.minds.map((m) => m.id),
@@ -126,7 +127,7 @@ export function describeIncome(state: GameState, i: Income): string {
 // ---------------------------------------------------------------- intelligence
 
 /** A mind's IQ is its hardware's, raised by its software. */
-export const currentIQ = (m: Mind) => m.hardware.iq * (1 + m.software.bonus)
+export const currentIQ = (m: Mind) => Math.round(m.hardware.iq * (1 + m.software.bonus) * 100) / 100
 /** The software ceiling: software can't take a mind past this. New hardware can. */
 export const ceilingIQ = (m: Mind) => m.hardware.iq * B.IQ_CEILING
 /** The most a software upgrade can still add, as a share of the hardware's IQ. */
@@ -228,9 +229,13 @@ export function allocation(state: GameState, u: UnitType): { byTask: Record<stri
 
 /** Ensures a single-strategy unit runs it with all its units. */
 export function defaultTask(state: GameState, u: UnitType) {
-  if (u.rest && tasksFor(state, u).includes(u.rest)) return
   const tasks = state.strategies.filter((s) => s.unitId === u.id)
-  if (tasks.length === 1) u.rest = tasks[0]!.id
+  const rest = tasks.find((s) => s.id === u.rest)
+  // A build strategy starts with a target of 0, so it's only the default when there's nothing else.
+  if (rest && rest.kind !== 'build') return
+  const work = tasks.filter((s) => s.kind !== 'build')
+  if (work.length === 1) u.rest = work[0]!.id
+  else if (!rest && tasks.length === 1) u.rest = tasks[0]!.id
 }
 
 /** Whether the world has what a research uses up. Returns what's short, or null. */

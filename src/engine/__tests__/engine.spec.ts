@@ -216,6 +216,7 @@ describe('the weekly proposal', () => {
 
     // Research already proposed can all be done in the same week.
     findResource(s, 'steel')!.amount = 1e6
+    findResource(s, MONEY_ID)!.amount = 1e6
     s.research.push(research({ id: 'r2', name: 'Another', cost: [] }))
     s = doResearch(doResearch(s, s.research[0]!.id), 'r2')
     expect(s.research).toEqual([])
@@ -251,18 +252,23 @@ describe('proposals', () => {
 
   it('makes advanced strategies into research, paid in what you have', async () => {
     const s0 = powerWorld()
-    const v = await judgeStrategy(s0, new FakeJudge({ advancement: score(3) }), {
+    const judge = new FakeJudge({ advancement: score(3) })
+    const v = await judgeStrategy(s0, judge, {
       name: 'Quant trading',
       description: '',
       unitId: 'gpu',
       inputIds: [],
       outputId: MONEY_ID
     })
+    // Jev chooses among stocks you have or make: Steel, and Money, which the servers earn.
+    const pay = judge.calls[0]!.questions.pay
+    expect(pay?.type === 'choice' && Object.keys(pay.criteria)).toEqual([MONEY_ID, 'steel'])
+    v.answers.pay = choice('steel')
     const { state, outcome } = acceptStrategy(s0, v)
     expect(outcome.kind).toBe('research')
     const r = state.research.find((x) => x.name === 'Quant trading')!
     expect(r.minIQ).toBe(170)
-    // Six weeks of ten GPU Servers' work (667 each), in Steel worth 1 each: the only stock you have.
+    // Six weeks of ten GPU Servers' work (667 each), in Steel worth 1 each.
     expect(r.cost).toEqual([{ resourceId: 'steel', amount: 40000 }])
     expect(state.strategies.some((x) => x.name === 'Quant trading')).toBe(false)
   })

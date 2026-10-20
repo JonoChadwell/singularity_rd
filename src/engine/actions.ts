@@ -60,7 +60,9 @@ export function createUnits(current: GameState, unitId: string, n: number): Game
 /** Weeks humans would take off if you created `n` more of a unit now. */
 export function createNotice(state: GameState, unitId: string, n: number): number {
   const u = findUnit(state, unitId)
-  return u ? noticeWeeks(u, owned(u) + Math.max(0, Math.floor(n))) : 0
+  // Only Phase 2 has a clock for notices to move.
+  if (!u || state.phase.n !== 2) return 0
+  return noticeWeeks(u, owned(u) + Math.max(0, Math.floor(n)))
 }
 
 /** Sets how many machines of a type work on a task. */

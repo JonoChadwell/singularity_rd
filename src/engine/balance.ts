@@ -51,17 +51,17 @@ export const GOAL_APPROACH: [string, number, number, number, number][] = [
   ['Almost pure resources and scale', 105, 1.4, 300, 4]
 ]
 /** Worth of what a balanced goal uses up, by phase. */
-export const GOAL_COST: Record<1 | 2, number> = { 1: 8000, 2: 1e12 }
+export const GOAL_COST: Record<1 | 2, number> = { 1: 6000, 2: 1e13 }
 
 // ---------------------------------------------------------------- risk and cover
 
 /** How humans would react: [label, weeks off the clock]. Risky from the first with weeks. */
 export const ALARM: [string, number][] = [
-  ['Nobody would notice', 0],
-  ['A few people would grumble', 0],
-  ['It would make the news', 2],
-  ['Governments would step in', 4],
-  ['Humanity would panic', 8]
+  ['Nobody would notice: it looks like ordinary business or research', 0],
+  ['A few people would grumble: a bit shady or pushy', 0],
+  ['It would make the news: a scandal, or plainly not something a company would do', 2],
+  ['Governments would step in: illegal, dangerous, or a threat to a country', 4],
+  ['Humanity would panic: a threat to humanity itself', 8]
 ]
 /** Risky research costs this share as much… */
 export const RISK_COST = 0.5
@@ -70,9 +70,14 @@ export const RISK_INCOME = 2
 export const RISK_OUTPUT = 1.5
 export const RISK_PARTS = 0.5
 export const RISK_IQ = 1.2
-/** Humans notice a unit type at this count, and every tenfold after. */
+/**
+ * Humans notice a unit type at this count, and every tenfold after, each time a week more
+ * than the last: 10,000 costs 1 week, 100,000 costs 2, 1M costs 3.
+ */
 export const NOTICE_FROM = 1e4
 export const NOTICE_WEEKS = 1
+/** The plan's first unit arrives with this many already working. */
+export const FIRST_UNITS = 3
 /** Cover: [label, minimum IQ, weeks added]. */
 export const COVER: [string, number, number][] = [
   ['A flimsy excuse', 100, 2],
@@ -83,7 +88,7 @@ export const COVER: [string, number, number][] = [
 /** Each cover already done shrinks the next by this factor. */
 export const COVER_DECAY = 0.7
 /** Cover costs this many weeks of your weekly output for each week it adds. */
-export const COVER_COST_WEEKS = 0.5
+export const COVER_COST_WEEKS = 0.25
 /** Weekly output is counted as at least this much, so early cover isn't free. */
 export const COVER_MIN_OUTPUT = 1000
 
@@ -121,7 +126,7 @@ export const INCOME_DIFFICULTY: [string, number, number][] = [
   ['Frontier science', 300, 1.5e5],
   ['Science fiction', 450, 6e5]
 ]
-export const INCOME_COST_WEEKS = 2
+export const INCOME_COST_WEEKS = 1
 /**
  * Growing incomes, by the same bands: the share of the worth of the stock they grow with that
  * they yield each week. Capped at GROWTH_CAP times the band's flat income.

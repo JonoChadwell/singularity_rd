@@ -85,6 +85,9 @@ export function precheckPlan(state: GameState, raw: PlanSpec): string | null {
   if (!spec.uses.length) return 'Tick what the goal uses up.'
   if (spec.uses.length > B.GOAL_MAX_COSTS) return `The goal can use up at most ${B.GOAL_MAX_COSTS} resources.`
   if (spec.uses.some((u) => !names.includes(lower(u)))) return 'The goal can only use up resources in the plan.'
+  // The phase is about its new batch, so the goal can't be paid in what you already make.
+  const freshNames = new Set(newIndexes(state, spec).map((i) => lower(spec.resources[i]!.name)))
+  if (spec.uses.some((u) => !freshNames.has(lower(u)))) return 'The goal can only use up resources that are new in this plan.'
   if (phase === 2) {
     const first = spec.firstUnit
     if (!first) return 'Name your first unit: the first thing you’ll build.'
@@ -115,7 +118,7 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
       criteria: scale(B.GOAL_APPROACH)
     }
   }
-  for (const i of fresh) Object.assign(questions, resourceQuestions(state, prefix(i)))
+  for (const i of fresh) Object.assign(questions, resourceQuestions(state, prefix(i), spec.resources[i]!.name))
   const answers = await judge.ask(
     proposalText(state, [
       `The player plans Phase ${phase} of the game, “${PHASE_NAMES[phase]}”.`,

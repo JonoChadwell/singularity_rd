@@ -75,6 +75,7 @@ import { computed } from 'vue'
 import { researchBlocker } from '@/engine/actions'
 import { bestIQ, currentIQ, describeCost, describeIncome } from '@/engine/model'
 import { coverWeeks, lockReason } from '@/engine/phase'
+import { projectionText as describeProjection } from '@/engine/projection'
 import { alarmLabel } from '@/engine/risk'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
@@ -96,14 +97,7 @@ function smarter(iq: number) {
   if (top) ui.openInvent({ kind: 'upgrade', target: { kind: 'mind', id: top.id } })
 }
 
-const projectionText = computed(() => {
-  const p = game.projection
-  if (!p) return ''
-  const iq = p.iqOk ? '' : ` You also need IQ ${p.goal.minIQ}.`
-  if (p.week === game.state.week) return `You have what it uses up now.${iq}`
-  if (p.week === null) return `At today’s rates you won’t have what it uses up in time.${iq}`
-  return `At today’s rates you’ll have what it uses up in week ${p.week}.${iq}`
-})
+const projectionText = computed(() => (game.projection ? describeProjection(game.state, game.projection) : ''))
 const projectionTone = computed(() => {
   const p = game.projection
   return !p || p.week === null ? 'bad' : p.iqOk ? 'good' : 'warn'

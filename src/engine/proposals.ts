@@ -122,14 +122,25 @@ export function payers(answers: Record<string, JevAnswer>): { resourceId: string
   return answers.pay ? ranked(answers.pay).map(([resourceId, p]) => ({ resourceId, p })) : []
 }
 
-/** A research's cost: `value` worth of the resources Jev picked, more for less plausible ideas. */
+/** How many of Jev's favourite payers the player may choose between. */
+export const PAY_CHOICES = 3
+
+/** The stocks the player may choose to pay with: Jev's favourites. */
+export const payOptions = (v: Pick<VerdictBase, 'answers'>) => payers(v.answers).slice(0, PAY_CHOICES)
+
+/**
+ * A research's cost: `value` worth of the resources Jev picked, more for less plausible ideas.
+ * The player may pick one of Jev's favourites to pay with instead.
+ */
 export function costFor(
   state: GameState,
-  v: Pick<VerdictBase, 'answers' | 'plausibility' | 'bar'> & { risk?: Risk | null },
+  v: Pick<VerdictBase, 'answers' | 'plausibility' | 'bar'> & { risk?: Risk | null; picks?: Record<string, string> },
   value: number
 ): Cost {
   const risky = v.risk ? B.RISK_COST : 1
-  return priceCost(state, value * costMultiplier(v.plausibility, v.bar) * risky, payers(v.answers))
+  const pick = v.picks?.pay
+  const chosen = pick && payOptions(v).some((p) => p.resourceId === pick) ? [{ resourceId: pick, p: 1 }] : payers(v.answers)
+  return priceCost(state, value * costMultiplier(v.plausibility, v.bar) * risky, chosen)
 }
 
 /**
@@ -280,6 +291,12 @@ export function gate(
   }
 }
 
+/** Refuses a verdict Jev didn't pass, saying why. */
+export function refuseUnaccepted(v: Pick<VerdictBase, 'rejected' | 'duplicateOf'>) {
+  if (v.duplicateOf) throw new Error(`Jev thinks this is the same as ${v.duplicateOf}. Make it different, or use ${v.duplicateOf}.`)
+  if (v.rejected) throw new Error(`Not accepted: ${v.rejected}`)
+}
+
 export function logProposal(state: GameState, tone: 'good' | 'ai', text: string) {
   state.log.push({ week: state.week, tone, text })
 }
@@ -324,12 +341,17 @@ export interface ResourceVerdict extends VerdictBase {
   spec: ResourceSpec
 }
 
-export function resourceQuestions(state: GameState, prefix = ''): Record<string, JevQuestion> {
+/**
+ * Questions about a resource. With a prefix, several resources are asked about in one call, so
+ * each question names its own (`name`); otherwise Jev answers them all alike.
+ */
+export function resourceQuestions(state: GameState, prefix = '', name = ''): Record<string, JevQuestion> {
+  const it = name ? `"${name}"` : 'it'
+  const This = name ? `"${name}"` : 'this'
   return {
     [`${prefix}is_thing`]: {
       type: 'noul',
-      instructions:
-        'Is this a recognisable thing, real or fictional, that someone could in principle get or use? It does not need to be easy or useful. Only answer no for gibberish or something that is not a thing at all.'
+      instructions: `Is ${This} a recognisable thing, real or fictional, that someone could in principle get or use? It does not need to be easy or useful. Only answer no for gibberish or something that is not a thing at all.`
     },
     ...(prefix
       ? {}
@@ -343,18 +365,20 @@ export function resourceQuestions(state: GameState, prefix = ''): Record<string,
         }),
     [`${prefix}kind`]: {
       type: 'choice',
-      instructions: 'If some is made this week and not used, is it still there next week?',
+      instructions: `If some of ${it} is made this week and not used, is it still there next week? Most things keep; only things like electricity or attention are lost.`,
       criteria: {
-        stock: 'Yes: it is a stock that keeps, like money, lemons or silicon wafers',
+        stock: 'Yes: it is a stock that keeps, like money, lemons, documents, keys or silicon wafers',
         flow: 'No: it is a flow that is lost if unused, like electricity, compute time or attention'
       }
     },
     [`${prefix}value`]: {
       type: 'score',
-      instructions: 'How much is a single one worth?',
+      instructions: `How much is a single one of ${it} worth?`,
       criteria: scale(B.RESOURCE_VALUE)
     },
-    [`${prefix}icon`]: iconQuestion
+    [`${prefix}icon`]: name
+      ? { ...iconQuestion, instructions: `Which icon best represents ${it}?` }
+      : iconQuestion
   }
 }
 
@@ -417,7 +441,7 @@ export function draftResource(state: GameState, v: ResourceVerdict): Resource {
 }
 
 export function acceptResource(current: GameState, v: ResourceVerdict): Accepted {
-  if (v.rejected || v.duplicateOf) throw new Error('This proposal was not accepted.')
+  refuseUnaccepted(v)
   const state = structuredClone(current)
   const resource = draftResource(state, v)
   state.resources.push(resource)
@@ -560,7 +584,7 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
 }
 
 export function acceptStrategy(current: GameState, v: StrategyVerdict): Accepted {
-  if (v.rejected) throw new Error('This proposal was not accepted.')
+  refuseUnaccepted(v)
   const state = structuredClone(current)
   claimProposal(state)
   const { strategy, minIQ, cost } = draftStrategy(state, v)

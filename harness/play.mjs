@@ -6,7 +6,8 @@ const server = await createServer({
   configFile: false,
   logLevel: 'error',
   appType: 'custom',
-  server: { middlewareMode: true, hmr: false, watch: null },
+  // No HMR and no WebSocket: several harness commands may run at once.
+  server: { middlewareMode: true, hmr: false, ws: false, watch: null },
   resolve: { alias: { '@': new URL('../src', import.meta.url).pathname.replace(/^\/(\w:)/, '$1') } }
 })
 let code = 0

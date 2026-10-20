@@ -298,7 +298,7 @@ export interface GameState {
   /** Passive incomes from research: each adds its amount every week. */
   incomes: Income[]
   /** Names of finished upgrades, for the log and the end of a run. */
-  upgrades: { name: string; targetId: string; week: number }[]
+  upgrades: { name: string; targetId: string; week: number; key?: string }[]
   /** One research proposal a week: accepting a strategy, unit, mind, upgrade or income uses it. */
   proposedThisWeek: boolean
   inventions: Invention[]

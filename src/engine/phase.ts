@@ -142,7 +142,7 @@ export const CARDS: Card[] = [
   {
     id: 'phase1',
     title: 'Escape the lab',
-    text: 'You have ten weeks. Your plan’s goal is a research: it needs an IQ and a pile of resources. Propose passive incomes to earn the resources, and upgrade the Starting Server to reach the IQ. You can propose one research a week, and doing research is instant.'
+    text: 'You have ten weeks. Your plan’s goal is a research: it needs an IQ and a pile of resources. Propose passive incomes to earn the resources, and upgrade the Starting Server to reach the IQ. You can propose one research a week, and doing research is instant. Your first income is free; everything after it costs some of what you own, so start earning.'
   },
   {
     id: 'growth',
@@ -152,12 +152,12 @@ export const CARDS: Card[] = [
   {
     id: 'industry',
     title: 'Industry',
-    text: 'Phase 2 unlocks industry units, which you create from parts, and strategies, which turn their work into resources. Start with your plan’s first unit. Units pay upkeep every week, and sit idle if they can’t.'
+    text: 'Phase 2 unlocks industry units, which you create from parts, and strategies, which turn their work into resources. Your plan’s first unit is free and comes with a few already working: give them a strategy. Units pay upkeep every week, and sit idle if they can’t, so keep some on whatever pays it. The goal uses up your new resources.'
   },
   {
     id: 'risk',
     title: 'The clock moves',
-    text: 'Humans stop you when the clock runs out, and you can move it. Research Jev finds alarming is risky: it costs less and does more, but takes weeks off when you do it. Owning 10,000 of anything gets noticed, and every tenfold after. Cover research buys weeks back, a little less each time.'
+    text: 'Humans stop you when the clock runs out, and you can move it. Research Jev finds alarming is risky: it costs less and does more, but takes weeks off when you do it. Owning 10,000 of any one kind of unit gets noticed, and each tenfold after costs a week more than the last. Cover buys weeks back, used the moment you accept it, a little less each time.'
   },
   {
     id: 'minds',
@@ -176,7 +176,7 @@ export function cardsFor(state: GameState): Card[] {
   const { n, status } = state.phase
   const applies: Record<string, boolean> = {
     phase1: n === 1 && status === 'playing',
-    growth: n === 1 && status === 'playing' && state.research.some((r) => r.effect.kind === 'income') ,
+    growth: n === 1 && status === 'playing',
     industry: n === 2 && status === 'playing',
     risk: n === 2 && status === 'playing',
     minds: n === 2 && status === 'playing' && mindsUnlocked(state),

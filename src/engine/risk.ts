@@ -13,7 +13,9 @@ export const asksAlarm = (state: GameState) => state.phase.n === 2
 export function alarmQuestion(what = 'doing this'): JevQuestion {
   return {
     type: 'score',
-    instructions: `If humans noticed the AI ${what}, how would they react? Bear in mind the AI's plan for humans.`,
+    instructions:
+      `The AI works through companies, accounts and contractors, so most of what it does looks like ordinary business and goes unnoticed. ` +
+      `If humans did notice the AI ${what}, how would they react? Judge the action itself, not the fact that an AI is behind it, and bear in mind the AI's plan for humans.`,
     criteria: B.ALARM.map(([label]) => label)
   }
 }
@@ -31,7 +33,8 @@ export function riskFrom(answers: Record<string, JevAnswer>, key = 'alarm'): Ris
   return weeks > 0 ? { level, weeks } : null
 }
 
-export const alarmLabel = (risk: Risk) => B.ALARM[risk.level]?.[0] ?? ''
+/** How humans would react, without the explanation: "It would make the news". */
+export const alarmLabel = (risk: Risk) => (B.ALARM[risk.level]?.[0] ?? '').split(':')[0]!
 
 /** What the risk pays, by kind of research. */
 export const RISK_BONUS = {
@@ -53,12 +56,15 @@ const FIRST_DECADE = Math.round(Math.log10(B.NOTICE_FROM))
 /** The highest power of ten humans would notice at this count (0 below NOTICE_FROM). */
 const decadeOf = (count: number) => (count >= B.NOTICE_FROM ? Math.floor(Math.log10(count) + 1e-9) : 0)
 
-/** Weeks humans would take off for this unit type reaching `count`. */
+/**
+ * Weeks humans would take off for this unit type reaching `count`: a week for the first power
+ * of ten they notice, two for the next, and so on; twice that for a risky unit.
+ */
 export function noticeWeeks(u: UnitType, count: number): number {
   const top = decadeOf(count)
-  const from = Math.max(u.noticed ?? 0, FIRST_DECADE - 1)
-  if (top <= from) return 0
-  return (top - from) * B.NOTICE_WEEKS * (u.risky ? 2 : 1)
+  let weeks = 0
+  for (let d = Math.max(u.noticed ?? 0, FIRST_DECADE - 1) + 1; d <= top; d++) weeks += (d - FIRST_DECADE + 1) * B.NOTICE_WEEKS
+  return weeks * (u.risky ? 2 : 1)
 }
 
 /** Takes weeks off for every unit type that has crossed a new power of ten. */

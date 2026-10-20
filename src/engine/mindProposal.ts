@@ -17,6 +17,7 @@ import {
   precheckName,
   proposalSlotBlocker,
   reader,
+  refuseUnaccepted,
   scale,
   type Accepted,
   type VerdictBase
@@ -126,7 +127,7 @@ export function draftMind(state: GameState, v: MindVerdict): { mind: Mind; minIQ
 }
 
 export function acceptMind(current: GameState, v: MindVerdict): Accepted {
-  if (v.rejected || v.duplicateOf) throw new Error('This proposal was not accepted.')
+  refuseUnaccepted(v)
   const state = structuredClone(current)
   claimProposal(state)
   const { mind, minIQ, cost } = draftMind(state, v)

@@ -25,7 +25,7 @@ import { lockReason } from './phase'
 import { priceCost } from './research'
 import { alarmQuestion, asksAlarm, riskFrom } from './risk'
 import { proposalText } from './stateText'
-import { ALL_TRAITS, TRAITS } from './traits'
+import { ALL_TRAITS, TRAITS, UPKEEP_TRAITS } from './traits'
 import type { Change, Cost, GameState, Mind, Risk, UnitType, UpgradeTarget } from './types'
 
 // Upgrades. Jev doesn't write, so the game lists every improvement that could apply to the
@@ -106,6 +106,8 @@ function unitCandidates(state: GameState, u: UnitType): Candidate[] {
   }
   for (const t of ALL_TRAITS) {
     if (t.param) continue
+    // Overclockable or Hardy would be free for a unit that runs on nothing.
+    if (!u.upkeep.length && UPKEEP_TRAITS.includes(t.id)) continue
     if (t.kind === 'perk' && !u.traits.includes(t.id)) {
       out.push({ key: `add_${t.id}`, name: t.name, changes: [{ kind: 'trait', trait: t.id, add: true }] })
     }
@@ -130,20 +132,23 @@ function unitCandidates(state: GameState, u: UnitType): Candidate[] {
 }
 
 /** Changes as a comparable key. */
-const changeKey = (changes: Change[]) =>
-  JSON.stringify(changes)
+export const changeKey = (changes: Change[]) => JSON.stringify(changes)
 
-/** Every improvement that could apply, minus any already waiting as research. */
+/**
+ * Every improvement that could apply, minus any already waiting as research. An industry
+ * unit's improvements happen once each: research doesn't repeat.
+ */
 export function upgradeCandidates(state: GameState, target: UpgradeTarget): Candidate[] {
   const thing = targetOf(state, target)
   if (!thing) return []
   const all = target.kind === 'mind' ? mindCandidates(state, thing as Mind) : unitCandidates(state, thing as UnitType)
-  const waiting = new Set(
-    state.research.flatMap((r) =>
+  const taken = new Set([
+    ...state.research.flatMap((r) =>
       r.effect.kind === 'upgrade' && r.effect.target.id === target.id ? [changeKey(r.effect.changes)] : []
-    )
-  )
-  return all.filter((c) => !waiting.has(changeKey(c.changes)))
+    ),
+    ...state.upgrades.flatMap((u) => (u.targetId === target.id && u.key ? [u.key] : []))
+  ])
+  return all.filter((c) => !taken.has(changeKey(c.changes)))
 }
 
 /** One change in words, for Jev and for the card. */

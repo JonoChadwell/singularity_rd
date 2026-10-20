@@ -12,7 +12,7 @@ import {
 } from './model'
 import { coverWeeks, moveClock, winPhase } from './phase'
 import { has, type TraitId } from './traits'
-import type { Change, Cost, Flow, GameState, Mind, Research, Strategy, UnitType } from './types'
+import type { Change, Cost, Flow, GameState, Mind, Research, Resource, Strategy, UnitType } from './types'
 
 // ---------------------------------------------------------------- costs
 
@@ -22,8 +22,33 @@ export function costMultiplier(plausibility: number, bar: number): number {
   return 1 + (B.IMPLAUSIBLE_COST - 1) * t
 }
 
-/** Resources research could use up: stocks you have some of, since flows can't be saved up. */
-export const spendable = (state: GameState) => state.resources.filter((r) => r.kind === 'stock' && r.amount > 0)
+/** Stocks something makes: a passive income or a strategy. */
+function produced(state: GameState): Set<string> {
+  return new Set([
+    ...state.incomes.map((i) => i.resourceId),
+    ...state.strategies.filter((s) => s.kind === 'make').map((s) => s.outputId)
+  ])
+}
+
+/**
+ * Resources research could use up: stocks you have some of or something makes, since flows
+ * can't be saved up. With none of those, the stocks of the phase's plan: you'll have to earn
+ * them first. With no plan either, nothing: research is free.
+ */
+export function spendable(state: GameState): Resource[] {
+  const made = produced(state)
+  const stocks = state.resources.filter((r) => r.kind === 'stock' && (r.amount > 0 || made.has(r.id)))
+  if (stocks.length) return stocks
+  const plan = new Set(state.phase.plan?.resources ?? [])
+  return state.resources.filter((r) => r.kind === 'stock' && plan.has(r.id))
+}
+
+/**
+ * The very first passive income is free: nothing makes anything yet, so there's nothing to pay
+ * with. Everything after it has a cost.
+ */
+export const bootstrapping = (state: GameState) =>
+  !state.incomes.length && !state.units.length && !state.research.some((r) => r.effect.kind === 'income')
 
 /**
  * Prices a research worth `value` in the resources Jev ranked, most fitting first: the first,
@@ -222,7 +247,7 @@ export function completeResearch(state: GameState, r: Research): string {
       return `${r.icon} ${effect.strategy.name} is ready.`
     case 'upgrade': {
       const { target, changes } = effect
-      state.upgrades.push({ name: r.name, targetId: target.id, week: state.week })
+      state.upgrades.push({ name: r.name, targetId: target.id, week: state.week, key: JSON.stringify(changes) })
       if (target.kind === 'mind') {
         const mind = findMind(state, target.id)
         if (mind) applyMindChanges(mind, changes)
