@@ -3,17 +3,11 @@ import { computed, ref, toRaw, watch } from 'vue'
 import { CachedJudge, checkJevHealth, JevJudge, type Judge } from '@/ai/jev'
 import * as actions from '@/engine/actions'
 import { alertsFor } from '@/engine/alerts'
-import {
-  acceptBreakthrough,
-  judgeBreakthrough,
-  recipeOf,
-  targetName,
-  type BreakthroughSpec,
-  type BreakthroughVerdict
-} from '@/engine/breakthroughProposal'
 import { runWeek } from '@/engine/cycle'
 import { previewWeek } from '@/engine/economy'
+import { acceptIncome, judgeIncome, type IncomeSpec, type IncomeVerdict } from '@/engine/incomeProposal'
 import { createInitialState } from '@/engine/initialState'
+import { acceptMind, judgeMind, type MindSpec, type MindVerdict } from '@/engine/mindProposal'
 import {
   acceptResource,
   acceptStrategy,
@@ -25,7 +19,7 @@ import {
   type StrategySpec,
   type StrategyVerdict
 } from '@/engine/proposals'
-import type { GameState } from '@/engine/types'
+import type { GameState, UpgradeTarget } from '@/engine/types'
 import {
   acceptUnit,
   answerPushback,
@@ -34,16 +28,16 @@ import {
   type UnitSpec,
   type UnitVerdict
 } from '@/engine/unitProposal'
+import { acceptUpgrade, judgeUpgrade, type UpgradeOffer } from '@/engine/upgrade'
 import { logEvent, snapshot } from '@/telemetry'
 
-const SAVE_KEY = 'singularity-rd/save/v6'
-const BEST_KEY = 'singularity-rd/best'
+const SAVE_KEY = 'singularity-rd/save/v9'
 
 function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    return parsed?.version === 6 ? parsed : null
+    return parsed?.version === 9 ? parsed : null
   } catch {
     return null
   }
@@ -57,15 +51,6 @@ function save(state: GameState) {
   }
 }
 
-function loadBest(): number | null {
-  try {
-    const n = Number(localStorage.getItem(BEST_KEY))
-    return n > 0 ? n : null
-  } catch {
-    return null
-  }
-}
-
 export type JevStatus =
   | { kind: 'checking' }
   | { kind: 'ready'; model: string }
@@ -76,9 +61,10 @@ export type ProposalInput =
   | { kind: 'resource'; spec: ResourceSpec }
   | { kind: 'strategy'; spec: StrategySpec }
   | { kind: 'unit'; spec: UnitSpec }
-  | { kind: 'breakthrough'; spec: BreakthroughSpec }
+  | { kind: 'mind'; spec: MindSpec }
+  | { kind: 'income'; spec: IncomeSpec }
 
-export type Verdict = ResourceVerdict | StrategyVerdict | UnitVerdict | BreakthroughVerdict
+export type Verdict = ResourceVerdict | StrategyVerdict | UnitVerdict | MindVerdict | IncomeVerdict
 
 export const useGameStore = defineStore('game', () => {
   const loaded = load()
@@ -92,15 +78,13 @@ export const useGameStore = defineStore('game', () => {
   const busy = ref(false)
   const jev = ref<JevStatus>({ kind: 'checking' })
   const lastError = ref('')
-  const best = ref<number | null>(loadBest())
 
   watch(state, save, { deep: true })
   const log = (event: string, data: Record<string, unknown> = {}) =>
     logEvent(state.value.runId, event, { week: state.value.week, ...data })
   if (!loaded) log('game_start', { state: snapshot(state.value) })
 
-  const playing = computed(() => state.value.status === 'playing')
-  const canPropose = computed(() => jev.value.kind === 'ready' && !busy.value && playing.value)
+  const canPropose = computed(() => jev.value.kind === 'ready' && !busy.value)
   /** Next week, exactly, if nothing changes. The JSON round-trip reads every field, so Vue
    *  recomputes on any change, and yields a plain copy. */
   const preview = computed(() => previewWeek(JSON.parse(JSON.stringify(state.value)) as GameState))
@@ -136,7 +120,6 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function nextWeek() {
-    if (!playing.value) return
     lastError.value = ''
     const week = state.value.week
     adopt(runWeek(raw()))
@@ -148,22 +131,10 @@ export const useGameStore = defineStore('game', () => {
       alertsIgnored: alerts.value.length,
       state: snapshot(s)
     })
-    if (s.status === 'won') {
-      if (!best.value || s.week < best.value) {
-        best.value = s.week
-        try {
-          localStorage.setItem(BEST_KEY, String(s.week))
-        } catch {
-          // Best score is a convenience.
-        }
-      }
-      log('game_end', { status: s.status, weeks: s.week, stats: s.stats })
-    }
   }
 
-  const buyUnits = (unitId: string, n: number) => act('buy', { unitId, n }, (s) => actions.buyUnits(s, unitId, n))
-  const buyResource = (resourceId: string, n: number) =>
-    act('buy_resource', { resourceId, n }, (s) => actions.buyResource(s, resourceId, n))
+  const createUnits = (unitId: string, n: number) =>
+    act('create', { unitId, n }, (s) => actions.createUnits(s, unitId, n))
   const assign = (unitId: string, taskId: string, n: number) =>
     act('assign', { unitId, taskId, n }, (s) => actions.assign(s, unitId, taskId, n))
   const assignRest = (unitId: string, taskId: string | null) =>
@@ -174,8 +145,10 @@ export const useGameStore = defineStore('game', () => {
     act('build_target', { strategyId, target }, (s) => actions.setBuildTarget(s, strategyId, target))
   const setOverclock = (unitId: string, on: boolean) =>
     act('overclock', { unitId, on }, (s) => actions.setOverclock(s, unitId, on))
-  const teach = (strategyId: string, unitId: string) =>
-    act('teach', { strategyId, unitId }, (s) => actions.teachStrategy(s, strategyId, unitId))
+  const research = (researchId: string) =>
+    act('research', { researchId }, (s) => actions.doResearch(s, researchId))
+  const dropResearch = (researchId: string) =>
+    act('drop_research', { researchId }, (s) => actions.dropResearch(s, researchId))
 
   /** Asks Jev about a proposal. Returns its verdict for the player to review. */
   async function propose(reactiveInput: ProposalInput): Promise<Verdict | undefined> {
@@ -189,7 +162,8 @@ export const useGameStore = defineStore('game', () => {
       if (input.kind === 'resource') verdict = await judgeResource(s, judge, input.spec)
       else if (input.kind === 'strategy') verdict = await judgeStrategy(s, judge, input.spec)
       else if (input.kind === 'unit') verdict = await judgeUnit(s, judge, input.spec)
-      else verdict = await judgeBreakthrough(s, judge, input.spec)
+      else if (input.kind === 'mind') verdict = await judgeMind(s, judge, input.spec)
+      else verdict = await judgeIncome(s, judge, input.spec)
       state.value.stats.proposals[input.kind]++
       if (verdict.rejected || verdict.duplicateOf) state.value.stats.rejections++
       log('proposal', {
@@ -223,7 +197,9 @@ export const useGameStore = defineStore('game', () => {
             ? acceptStrategy(s, verdict)
             : verdict.kind === 'unit'
               ? acceptUnit(s, verdict)
-              : acceptBreakthrough(s, verdict)
+              : verdict.kind === 'mind'
+                ? acceptMind(s, verdict)
+                : acceptIncome(s, verdict)
       adopt(result.state)
       log('accept', { kind: verdict.kind, picks: verdict.picks, outcome: result.outcome })
       return result.outcome
@@ -232,32 +208,57 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  /** Asks Jev for three ways to improve a unit or mind. */
+  async function requestUpgrade(target: UpgradeTarget): Promise<UpgradeOffer | undefined> {
+    if (!canPropose.value) return
+    busy.value = true
+    lastError.value = ''
+    try {
+      const offer = await judgeUpgrade(raw(), judge, target)
+      state.value.stats.proposals.upgrade++
+      log('upgrade_offer', { target, options: offer.options.map((o) => ({ key: o.key, p: o.p, minIQ: o.minIQ, cost: o.cost })) })
+      return offer
+    } catch (err) {
+      lastError.value = (err as Error).message
+      log('error', { action: 'upgrade', target, message: lastError.value })
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** Takes one of Jev's upgrade options as research. */
+  function chooseUpgrade(reactiveOffer: UpgradeOffer, index: number): Outcome | undefined {
+    lastError.value = ''
+    try {
+      const offer = JSON.parse(JSON.stringify(reactiveOffer)) as UpgradeOffer
+      const result = acceptUpgrade(raw(), offer, index)
+      adopt(result.state)
+      log('accept', { kind: 'upgrade', option: offer.options[index]?.key, outcome: result.outcome })
+      return result.outcome
+    } catch (err) {
+      lastError.value = (err as Error).message
+    }
+  }
+
   /** One pushback round. Returns the updated verdict and any replies Jev didn't accept. */
-  async function pushback<V extends UnitVerdict | BreakthroughVerdict>(
-    verdict: V,
+  async function pushback(
+    verdict: UnitVerdict,
     replies: PushbackReply[]
-  ): Promise<{ verdict: V; failures: string[] } | undefined> {
+  ): Promise<{ verdict: UnitVerdict; failures: string[] } | undefined> {
     if (!canPropose.value) return
     busy.value = true
     lastError.value = ''
     try {
       const s = raw()
-      const parts = verdict.kind === 'unit' ? verdict.spec.parts : (recipeOf(verdict.spec)?.parts ?? [])
-      const subject =
-        verdict.kind === 'unit' ? `one ${verdict.spec.name}` : `one ${targetName(s, verdict.spec.target)}`
-      const result = await answerPushback(s, judge, subject, parts, verdict.missing, replies)
+      const result = await answerPushback(s, judge, `one ${verdict.spec.name}`, verdict.spec.parts, verdict.missing, replies)
       adopt(result.state)
       state.value.stats.pushbacks++
-      const next = JSON.parse(JSON.stringify(verdict)) as V
+      const next = JSON.parse(JSON.stringify(verdict)) as UnitVerdict
       next.missing = result.missing
       next.pushbackRounds++
-      if (next.kind === 'unit') next.spec.parts = result.parts
-      else {
-        const recipe = recipeOf(next.spec)
-        if (recipe) recipe.parts = result.parts
-      }
+      next.spec.parts = result.parts
       log('pushback', { replies, missing: result.missing, failures: result.failures })
-      return { verdict: next as V, failures: result.failures }
+      return { verdict: next, failures: result.failures }
     } catch (err) {
       lastError.value = (err as Error).message
     } finally {
@@ -271,7 +272,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function newGame() {
-    if (state.value.status === 'playing') log('game_abandoned', { stats: state.value.stats })
+    log('game_abandoned', { stats: state.value.stats })
     state.value = createInitialState()
     lastError.value = ''
     log('game_start', { state: snapshot(state.value) })
@@ -282,23 +283,23 @@ export const useGameStore = defineStore('game', () => {
     busy,
     jev,
     lastError,
-    best,
-    playing,
     canPropose,
     preview,
     alerts,
     checkJev,
     nextWeek,
-    buyUnits,
-    buyResource,
+    createUnits,
     assign,
     assignRest,
     assignAll,
     setBuildTarget,
     setOverclock,
-    teach,
+    research,
+    dropResearch,
     propose,
     accept,
+    requestUpgrade,
+    chooseUpgrade,
     pushback,
     setJudge,
     newGame

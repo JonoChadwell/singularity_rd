@@ -1,19 +1,23 @@
 import { answerFor, ranked, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
-import { currentIQ, findResource, findUnit, makeId, minds } from './model'
+import { findResource, findUnit, makeId, traitPriceFactor } from './model'
 import {
+  addResearch,
   baseVerdict,
   catchesOf,
+  claimProposal,
   cleanText,
+  costFor,
+  floorIQ,
   type Complication,
   type TornSpec,
-  fieldQuestion,
   gate,
   iconQuestion,
-  logProposal,
-  newProject,
+  newResearch,
   options,
+  payQuestion,
   precheckName,
+  proposalSlotBlocker,
   reader,
   resourceFrom,
   resourceQuestions,
@@ -21,40 +25,23 @@ import {
   type Accepted,
   type VerdictBase
 } from './proposals'
-import { addUnit, costMultiplier, crewPer, designableIQ, projectSize } from './research'
+import { crewPer } from './research'
 import { proposalText } from './stateText'
-import { catchTraits, traitsFor, TRAITS, type TraitId } from './traits'
-import { FIELDS, type Field, type Flow, type GameState, type UnitType } from './types'
+import { ALL_TRAITS, catchTraits, TRAITS, type TraitId } from './traits'
+import type { Cost, Flow, GameState, UnitType } from './types'
 import { newUnit } from './initialState'
 
 export interface UnitSpec {
   name: string
   description: string
-  mind: boolean
   /** What it's made of: resource ids. */
   parts: string[]
   /** What it runs on: resource ids. */
   upkeep: string[]
-  /** Who builds it in your own industry. null = only humanity's market. */
+  /** A unit that can also build it, with a build strategy. null = only created from parts. */
   builderId: string | null
-  /** Minds only: the IQ of its hardware, running its first software. */
-  targetIQ: number
-  /** Minds only: the hardware platform's name. Blank means named after the unit. */
-  hardware?: string
-  /** Minds only: the software's name. Blank means "Base Model". */
-  software?: string
 }
 
-export const DEFAULT_SOFTWARE = 'Base Model'
-const hardwareName = (spec: UnitSpec) => spec.hardware?.trim() || spec.name.trim()
-const softwareName = (spec: UnitSpec) => spec.software?.trim() || DEFAULT_SOFTWARE
-
-export const AVAILABILITY = {
-  on_sale: 'It exists today: humanity sells these off the shelf',
-  made_to_order: 'Humanity’s industry could make these, once someone designs them',
-  only_you: 'Nobody could make these but the AI’s own industry'
-} as const
-export type Availability = keyof typeof AVAILABILITY
 
 export interface TraitOdds {
   trait: TraitId
@@ -65,7 +52,6 @@ export interface TraitOdds {
 export interface UnitVerdict extends VerdictBase {
   kind: 'unit'
   spec: UnitSpec
-  availability: Availability
   traitOdds: TraitOdds[]
   /** The player's call on traits near the line. */
   traitPicks: Partial<Record<TraitId, boolean>>
@@ -75,28 +61,26 @@ export interface UnitVerdict extends VerdictBase {
 }
 
 export const MAX_UPKEEP = 2
-const AVAILABILITY_KEYS = Object.keys(AVAILABILITY) as Availability[]
 /** Question keys use underscores. */
 const key = (id: string) => id.replace(/-/g, '_')
 
 /** A starting guess for the form, built from what you already have. */
-export function guessUnitSpec(state: GameState, mind: boolean): UnitSpec {
-  const stocks = state.resources.filter((r) => r.kind === 'stock' && !r.name.endsWith(' Waste'))
+export function guessUnitSpec(state: GameState): UnitSpec {
+  const stocks = state.resources.filter((r) => r.kind === 'stock')
   const part = [...stocks].sort((a, b) => b.value - a.value).find((r) => r.id !== 'money') ?? stocks[0]
   const power = state.resources.find((r) => r.kind === 'flow' && /power|electric|energy/i.test(r.name))
-  const best = designableIQ(state)
   return {
     name: '',
     description: '',
-    mind,
     parts: part ? [part.id] : [],
     upkeep: power ? [power.id] : state.resources.some((r) => r.id === 'money') ? ['money'] : [],
-    builderId: null,
-    targetIQ: mind ? Math.max(B.OFF_THE_SHELF_MAX_IQ, Math.floor(best / 10) * 10) : 0
+    builderId: null
   }
 }
 
 export function precheckUnit(state: GameState, spec: UnitSpec): string | null {
+  const slot = proposalSlotBlocker(state)
+  if (slot) return slot
   const nameError = precheckName(state, spec.name)
   if (nameError) return nameError
   if (!spec.parts.length) return 'Say what it’s made of.'
@@ -106,7 +90,6 @@ export function precheckUnit(state: GameState, spec: UnitSpec): string | null {
   if (new Set(spec.upkeep).size !== spec.upkeep.length) return 'Upkeep must be different.'
   if ([...spec.parts, ...spec.upkeep].some((id) => !findResource(state, id))) return 'Unknown resource.'
   if (spec.builderId && !findUnit(state, spec.builderId)) return 'Unknown builder.'
-  if (spec.mind && !(spec.targetIQ >= 10 && spec.targetIQ <= 10000)) return 'Set a target IQ.'
   return null
 }
 
@@ -160,8 +143,6 @@ function paramOptions(state: GameState, param: NonNullable<(typeof TRAITS)[Trait
       return options(state.resources)
     case 'flow':
       return options(state.resources.filter((r) => r.kind === 'flow'))
-    case 'field':
-      return Object.fromEntries(FIELDS.map((f) => [f, B.FIELD_LABELS[f]!]))
   }
 }
 
@@ -172,10 +153,6 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
   const builder = spec.builderId ? findUnit(state, spec.builderId)! : null
   const parts = partList(state, spec.parts)
   const upkeep = partList(state, spec.upkeep)
-  const what = spec.mind
-    ? `an intelligence system: ${hardwareName(spec)} hardware with IQ ${spec.targetIQ}, running ${softwareName(spec)}`
-    : 'an industry unit'
-  const subject = `one ${spec.name} (${what})`
 
   const questions: Record<string, JevQuestion> = {
     feasible: {
@@ -187,37 +164,15 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
       instructions: 'Is it exactly the same as a unit that already exists, just renamed?',
       criteria: { none: 'It is a different unit', ...options(state.units) }
     },
-    availability: {
-      type: 'choice',
-      instructions: spec.mind
-        ? `Who could make these? Off-the-shelf AI that exists today is no smarter than an IQ of ${B.OFF_THE_SHELF_MAX_IQ}.`
-        : 'Who could make these?',
-      criteria: { ...AVAILABILITY }
-    },
-    supply: {
+    ...recipeQuestions(`one ${spec.name}`, parts),
+    icon: iconQuestion,
+    value: { type: 'score', instructions: 'How much is a single one worth?', criteria: scale(B.UNIT_VALUE) },
+    difficulty: {
       type: 'score',
-      instructions: 'How many of these could the world’s industry supply, in total, if someone paid for them?',
-      criteria: scale(B.UNIT_SUPPLY)
-    },
-    ...recipeQuestions(subject, parts),
-    field: fieldQuestion,
-    icon: iconQuestion
-  }
-  const best = Math.max(0, ...state.units.filter((u) => u.mind).map((u) => Math.round(currentIQ(u))))
-  if (spec.mind && spec.targetIQ > B.OFF_THE_SHELF_MAX_IQ) {
-    questions.leap = {
-      type: 'score',
-      instructions: `The smartest mind the AI has is IQ ${best}; this design's hardware targets IQ ${spec.targetIQ}. Judging by its description, hardware and parts, how radical a design is it?`,
-      criteria: scale(B.LEAP)
-    }
-  }
-  if (!spec.mind) {
-    questions.value = { type: 'score', instructions: 'How much is a single one worth?', criteria: scale(B.UNIT_VALUE) }
-    questions.difficulty = {
-      type: 'score',
-      instructions: 'If it had to be designed from scratch, how hard would the research be?',
+      instructions: 'How hard would the research be to design it, or to work out how to make it if it exists today?',
       criteria: scale(B.DIFFICULTY)
-    }
+    },
+    ...payQuestion(state, `the design of ${spec.name}`)
   }
   spec.upkeep.forEach((id, i) => {
     questions[`upkeep_${i}`] = {
@@ -226,22 +181,20 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
       criteria: scale(B.UPKEEP_SIZE)
     }
   })
-  const traitList = traitsFor(spec.mind).filter((t) => !t.param || Object.keys(paramOptions(state, t.param)).length)
+  const traitList = ALL_TRAITS.filter((t) => !t.param || Object.keys(paramOptions(state, t.param)).length)
   for (const t of traitList) {
     questions[`trait_${key(t.id)}`] = { type: 'noul', instructions: `${t.question} (Trait: ${t.name}. ${t.rule})` }
     if (t.param) {
       questions[`param_${key(t.id)}`] = {
         type: 'choice',
         instructions:
-          t.param === 'field'
-            ? 'If it is a specialist, which field?'
-            : t.param === 'unit'
-              ? t.id === 'needs-crew'
-                ? 'If it needs operators, which unit would operate it?'
-                : 'If it makes another unit work better, which one?'
-              : t.param === 'flow'
-                ? 'If it stores something, which flow?'
-                : 'If it makes a by-product, which resource?',
+          t.param === 'unit'
+            ? t.id === 'needs-crew'
+              ? 'If it needs operators, which unit would operate it?'
+              : 'If it makes another unit work better, which one?'
+            : t.param === 'flow'
+              ? 'If it stores something, which flow?'
+              : 'If it makes a by-product, which resource?',
         criteria: paramOptions(state, t.param)
       }
     }
@@ -249,12 +202,11 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
 
   const answers = await judge.ask(
     proposalText(state, [
-      'The player proposes a new unit: something the AI can own many of.',
+      'The player proposes a new industry unit: something the AI can own many of.',
       `Name: "${spec.name}"`,
       `Description: "${spec.description || '(none given)'}"`,
-      `Kind: ${spec.mind ? `intelligence system (a mind that can do research). Hardware: "${hardwareName(spec)}", IQ ${spec.targetIQ}. Software: "${softwareName(spec)}"` : 'industry'}.`,
       `Made of: ${parts}. Runs on: ${upkeep}.`,
-      `Built by: ${builder ? `the AI's own ${builder.name}` : "humanity's market"}.`
+      `Made by: ${builder ? `the AI's own ${builder.name}, or straight from its parts` : 'the AI, straight from its parts'}.`
     ]),
     questions,
     'unit'
@@ -272,17 +224,12 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
 
   // A better answer's catch is the drawback Jev finds most fitting, among those not already kept.
   const kept = chosenTraits({ traitOdds, traitPicks: {} }).map((t) => t.trait)
-  const drawbacks: Complication[] = catchTraits(spec.mind, kept)
+  const drawbacks: Complication[] = catchTraits(kept)
     .map((t) => ({ trait: t.id, p: read.has(`trait_${key(t.id)}`) ? read.noul(`trait_${key(t.id)}`) : 0 }))
     .sort((a, b) => b.p - a.p)
     .map((t) => ({ kind: 'trait', trait: t.trait }))
-  const designed = spec.mind && spec.targetIQ > B.OFF_THE_SHELF_MAX_IQ
   const torn: TornSpec[] = [
-    // Above IQ 100 a mind must be designed whoever could make it, so that's no choice.
-    ...(designed ? [] : [{ key: 'availability', topic: 'who could make it', better: AVAILABILITY_KEYS }]),
-    { key: 'supply', topic: 'how many humanity could supply', better: 'higher' },
     { key: 'difficulty', topic: 'how hard it is to design', better: 'lower' },
-    { key: 'leap', topic: 'how radical a design it is', better: 'lower' },
     ...spec.upkeep.map((id, i) => ({
       key: `upkeep_${i}`,
       topic: `how much ${findResource(state, id)!.name} it runs on`,
@@ -294,57 +241,29 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     ...base,
     kind: 'unit',
     spec,
-    availability: 'on_sale',
     traitOdds,
     traitPicks: {},
     missing: [],
     pushbackRounds: 0
   }
-  v.availability = availabilityOf(v)
   gate(v, 'Jev doesn’t think the AI could come to own these', {
     key: 'same_as',
     names: Object.fromEntries(state.units.map((u) => [u.id, u.name]))
   })
-  if (partsMatter(v)) v.missing = missingKinds(v)
+  v.missing = missingKinds(v)
   return v
 }
 
-/** Off-the-shelf minds are copies of you: anything smarter must be designed. */
-export function availabilityOf(v: Pick<UnitVerdict, 'answers' | 'picks' | 'spec'>): Availability {
-  const a = reader(v).choice('availability', AVAILABILITY_KEYS)
-  return a === 'on_sale' && v.spec.mind && v.spec.targetIQ > B.OFF_THE_SHELF_MAX_IQ ? 'made_to_order' : a
-}
-
-/** Parts only matter if your own industry will build it. */
-export const partsMatter = (v: Pick<UnitVerdict, 'availability' | 'spec'>) =>
-  v.availability === 'only_you' || v.spec.builderId !== null
-
-/** Humanity can't make it and nobody's named to build it. */
-export const needsBuilder = (v: Pick<UnitVerdict, 'availability' | 'spec'>) =>
-  v.availability === 'only_you' && !v.spec.builderId
-
-const CONFLICTS: [TraitId, TraitId][] = [
-  ['compact', 'bulky'],
-  ['deep-thinker', 'lone-thinker']
-]
-
 /** The traits the unit ends up with: sure ones, plus near-line ones the player kept. */
 export function chosenTraits(v: Pick<UnitVerdict, 'traitOdds' | 'traitPicks'>): TraitOdds[] {
-  const kept = v.traitOdds.filter((t) =>
-    t.p >= B.TRAIT_SURE ? true : (v.traitPicks[t.trait] ?? t.p >= B.TRAIT_KEEP)
-  )
-  const result: TraitOdds[] = []
-  for (const t of kept) {
-    const clash = CONFLICTS.find((pair) => pair.includes(t.trait))
-    if (clash && result.some((r) => clash.includes(r.trait))) continue
-    result.push(t)
-  }
-  return result.slice(0, B.MAX_TRAITS)
+  return v.traitOdds
+    .filter((t) => (t.p >= B.TRAIT_SURE ? true : (v.traitPicks[t.trait] ?? t.p >= B.TRAIT_KEEP)))
+    .slice(0, B.MAX_TRAITS)
 }
 
 export const nearLine = (t: TraitOdds) => t.p < B.TRAIT_SURE
 
-/** Splits a value across parts so that building one uses parts worth about that value. */
+/** Splits a value across parts so that making one uses parts worth about that value. */
 export function priceParts(state: GameState, ids: string[], value: number): Flow[] {
   return ids.map((id) => ({
     resourceId: id,
@@ -354,27 +273,21 @@ export function priceParts(state: GameState, ids: string[], value: number): Flow
 
 export interface UnitDraft {
   unit: UnitType
-  /** Added straight to humanity's market, with no research. */
-  immediate: boolean
-  bar: number
-  size: number
-  field: Field
+  minIQ: number
+  cost: Cost
 }
 
 export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   const read = reader(v)
   const spec = v.spec
-  const availability = availabilityOf(v)
   const traits = chosenTraits(v)
   const ids = traits.map((t) => t.trait)
   // Catches the player took on come on top of the usual traits.
   for (const c of catchesOf(v)) if (c.kind === 'trait' && !ids.includes(c.trait)) ids.push(c.trait)
   const param = (id: TraitId) => traits.find((t) => t.trait === id)?.param ?? null
 
-  const iq = spec.mind ? spec.targetIQ : 0
-  let value = spec.mind ? B.mindValue(iq) : B.pick(B.UNIT_VALUE, read.level('value', B.UNIT_VALUE.length))[1]
-  if (ids.includes('megastructure')) value *= B.MEGA_SCALE
-  const work = spec.mind ? B.mindLabour(iq) : value / B.PAYBACK_WEEKS
+  const value = B.pick(B.UNIT_VALUE, read.level('value', B.UNIT_VALUE.length))[1]
+  const work = value / B.PAYBACK_WEEKS
   const upkeep: Flow[] = spec.upkeep.map((id, i) => ({
     resourceId: id,
     amount: B.nice(
@@ -382,77 +295,50 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
         Math.max(1e-9, findResource(state, id)!.value)
     )
   }))
-  const supply = read.amount('supply', B.UNIT_SUPPLY)
-  const market = availability === 'only_you' ? 0 : supply
-  const own = availability === 'only_you' || spec.builderId ? supply * B.OWN_LAYER : 0
 
   const unit = newUnit({
     id: makeId(state, spec.name),
     name: spec.name,
     description: spec.description || spec.name,
     icon: B.icon(read.choice('icon', Object.keys(B.ICONS))),
-    mind: spec.mind,
-    hardware: spec.mind ? { name: hardwareName(spec), iq } : { name: '', iq: 0 },
-    software: spec.mind ? { name: softwareName(spec), bonus: 0 } : { name: '', bonus: 0 },
     value,
     plausibility: v.plausibility,
-    parts: priceParts(state, spec.parts, value),
+    // Perks make it dearer to make, drawbacks cheaper.
+    parts: priceParts(state, spec.parts, value * traitPriceFactor(ids)),
     upkeep,
-    layers: { market, own, earth: 0 },
     builderId: spec.builderId,
     traits: ids,
     boosts: param('boosts'),
     byproduct: param('by-product'),
-    stores: param('stores'),
-    field: ids.includes('specialist') ? ((param('specialist') as Field | null) ?? 'computing') : null
+    stores: param('stores')
   })
   const crewUnit = param('needs-crew') ? findUnit(state, param('needs-crew')!) : undefined
   if (crewUnit) unit.crew = { unitId: crewUnit.id, per: crewPer(unit, crewUnit) }
   else unit.traits = unit.traits.filter((t) => t !== 'needs-crew')
 
-  const immediate = availability === 'on_sale'
-  const multiplier = costMultiplier(v.plausibility, v.bar)
-  let bar = 0
-  let size = 0
-  if (!immediate && spec.mind) {
-    const share = read.has('leap') ? B.pick(B.LEAP, read.level('leap', B.LEAP.length))[1] : B.DESIGN_BAR
-    bar = Math.ceil(iq * share)
-    size = projectSize(bar, B.TIER_DESIGN_WEEKS, multiplier)
-  } else if (!immediate) {
-    const [, b, weeks] = B.pick(B.DIFFICULTY, read.level('difficulty', B.DIFFICULTY.length))
-    bar = b
-    size = projectSize(bar, weeks, multiplier)
-  }
-  return { unit, immediate, bar, size, field: read.choice('field', FIELDS) }
+  const [, minIQ, worth] = B.pick(B.DIFFICULTY, read.level('difficulty', B.DIFFICULTY.length))
+  return { unit, minIQ: floorIQ(minIQ), cost: costFor(state, v, worth * value) }
 }
 
 export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
   if (v.rejected || v.duplicateOf) throw new Error('This proposal was not accepted.')
   if (v.missing.length) throw new Error('Answer Jev’s pushback first.')
-  if (needsBuilder(v)) throw new Error('Humanity can’t make these. Choose who builds them.')
   const state = structuredClone(current)
-  const { unit, immediate, bar, size, field } = draftUnit(state, v)
+  claimProposal(state)
+  const { unit, minIQ, cost } = draftUnit(state, v)
   state.inventions.push({ week: state.week, icon: unit.icon, name: unit.name, kind: 'unit' })
   state.decidedThisWeek = true
-  if (immediate) {
-    addUnit(state, unit)
-    logProposal(state, 'good', `${unit.icon} ${unit.name} exists today: it’s on humanity’s market.`)
-    return { state, outcome: { kind: 'added', name: unit.name } }
-  }
-  const project = newProject(state, {
-    name: `Design ${unit.name}`,
-    description: unit.mind
-      ? `Design ${unit.hardware.name} hardware with IQ ${unit.hardware.iq}, running ${unit.software.name}.`
-      : `Design ${unit.name}.`,
-    icon: unit.icon,
-    field,
-    bar,
-    size,
-    effect: { kind: 'unit', unit, strategies: [] }
-  })
-  state.projects.push(project)
-  logProposal(state, 'good', `${unit.icon} ${project.name}: bar IQ ${bar}, size ${size}.`)
-  return { state, outcome: { kind: 'project', project } }
+  return addResearch(
+    state,
+    newResearch(state, {
+      name: `Design ${unit.name}`,
+      description: `Design ${unit.name}.`,
+      icon: unit.icon,
+      minIQ,
+      cost,
+      effect: { kind: 'unit', unit }
+    })
+  )
 }
 
 // ---------------------------------------------------------------- pushback
@@ -542,6 +428,3 @@ export async function answerPushback(
   })
   return { state, parts: nextParts, missing: missing.filter((k) => !filled.has(k)), failures }
 }
-
-/** Mind types, best first, for forms that ask which mind does something. */
-export const mindsByIQ = (state: GameState) => [...minds(state)].sort((a, b) => b.hardware.iq - a.hardware.iq)

@@ -61,14 +61,6 @@
         </div>
       </div>
 
-      <label v-if="verdict.kind === 'unit' && needsBuilder(verdict)" class="field builder">
-        <span class="warn">Who builds it?</span>
-        <select :value="verdict.spec.builderId ?? ''" @change="emit('builder', ($event.target as HTMLSelectElement).value)">
-          <option value="" disabled>Humanity can’t make these: choose a builder</option>
-          <option v-for="u in game.state.units" :key="u.id" :value="u.id">{{ u.icon }} {{ u.name }}</option>
-        </select>
-      </label>
-
       <div v-if="missing.length" class="pushback">
         <p class="warn small">
           Jev pushes back: building one needs more. For each missing kind of part, add something you have, or name
@@ -100,7 +92,7 @@
       <button
         type="button"
         class="primary"
-        :disabled="!!verdict.rejected || !!verdict.duplicateOf || missing.length > 0 || builderMissing || game.busy"
+        :disabled="!!verdict.rejected || !!verdict.duplicateOf || missing.length > 0 || game.busy"
         @click="emit('accept')"
       >
         {{ acceptLabel }}
@@ -115,14 +107,13 @@ import { MAX_TRAITS, type PartKind } from '@/engine/balance'
 import { complicationName, NAME_MAX } from '@/engine/proposals'
 import TraitChips from './TraitChips.vue'
 import { TRAITS } from '@/engine/traits'
-import { chosenTraits, nearLine, needsBuilder, type PushbackReply } from '@/engine/unitProposal'
+import { chosenTraits, nearLine, type PushbackReply } from '@/engine/unitProposal'
 import { useGameStore, type Verdict } from '@/stores/game'
 
 const props = defineProps<{ verdict: Verdict; acceptLabel: string }>()
 const emit = defineEmits<{
   pick: [key: string, value: string]
   trait: [trait: keyof typeof TRAITS, on: boolean]
-  builder: [unitId: string]
   replace: [verdict: Verdict]
   accept: []
   edit: []
@@ -150,7 +141,6 @@ const kept = computed(() => new Set<string>(keptList.value))
 /** Traits near the line that the player decides. A few at most, so the list stays readable. */
 const optional = computed(() => (props.verdict.kind === 'unit' ? props.verdict.traitOdds.filter(nearLine).slice(0, 4) : []))
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$/, '')
-const builderMissing = computed(() => props.verdict.kind === 'unit' && needsBuilder(props.verdict))
 
 const replies = ref<PushbackReply[]>([])
 const failures = ref<string[]>([])
@@ -170,7 +160,7 @@ const canAnswer = computed(
 
 async function answer() {
   const v = props.verdict
-  if (v.kind !== 'unit' && v.kind !== 'breakthrough') return
+  if (v.kind !== 'unit') return
   const cleaned = replies.value.map((r) => (r.resourceId ? { kind: r.kind, resourceId: r.resourceId } : { kind: r.kind, newName: r.newName }))
   const result = await game.pushback(v, cleaned)
   if (!result) {

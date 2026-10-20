@@ -8,22 +8,23 @@ import type { GameState } from './types'
  */
 export function describeState(state: GameState): string {
   const unitLine = (u: GameState['units'][number]) => {
-    const bits = [
-      u.mind
-        ? `intelligence system, IQ ${Math.round(currentIQ(u))}: ${u.hardware.name} hardware running ${softwareLabel(u)}`
-        : 'industry'
-    ]
+    const bits: string[] = []
     if (u.upkeep.length) bits.push(`runs on ${describeFlows(state, u.upkeep)} a week`)
     if (u.traits.length) bits.push(u.traits.map((t) => TRAITS[t].name).join(', '))
-    return `- ${u.name} (${bits.join('; ')}): ${u.description}`
+    return `- ${u.name}${bits.length ? ` (${bits.join('; ')})` : ''}: ${u.description}`
   }
   return [
-    'A game. An AI that began as one unattended research server is inventing its way to the singularity. The player proposes resources, units, strategies and breakthroughs, and you judge them. Be generous and playful: odd paths work if they hang together.',
+    'A game. An AI that began as one unattended research server is inventing its way to the singularity. The player proposes resources, units, strategies and upgrades, and you judge them. Be generous and playful: odd paths work if they hang together.',
     '',
     'Resources:',
     ...state.resources.map((r) => `- ${r.name} (${r.kind}): ${r.description}`),
     '',
-    'Units:',
+    'Intelligence systems (single machines that think and do research):',
+    ...state.minds.map(
+      (m) => `- ${m.name} (IQ ${Math.round(currentIQ(m))}: ${m.hardware.name} hardware running ${softwareLabel(m)}): ${m.description}`
+    ),
+    '',
+    'Industry units:',
     ...state.units.map(unitLine),
     '',
     'Strategies:',

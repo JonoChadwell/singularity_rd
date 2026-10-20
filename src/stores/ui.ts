@@ -1,20 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Prompt } from '@/engine/alerts'
-import type { Change } from '@/engine/types'
+import type { UpgradeTarget } from '@/engine/types'
 
-export type InventKind = 'resource' | 'strategy' | 'unit' | 'breakthrough'
+export type InventKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'income'
 
 /** Which proposal dialog is open, and anything to pre-fill from where it was opened. */
 export interface InventRequest {
   kind: InventKind
   unitId?: string
   outputId?: string
-  mind?: boolean
-  targetIQ?: number
-  /** Breakthroughs: what to change, and a change to start from. */
-  target?: { kind: 'unit' | 'strategy'; id: string }
-  change?: Change['kind']
+  /** Minds: an IQ to start from. */
+  iq?: number
+  /** Upgrades: what to improve. */
+  target?: UpgradeTarget
   /** A preset to fill the form from, by name. */
   preset?: string
   /** Resources: a name and description to start from. */
@@ -24,7 +23,7 @@ export interface InventRequest {
   then?: InventRequest
 }
 
-export type Tab = 'minds' | 'industry' | 'projects' | 'market'
+export type Tab = 'minds' | 'industry' | 'research'
 
 export const useUiStore = defineStore('ui', () => {
   const invent = ref<InventRequest | null>(null)
@@ -42,22 +41,27 @@ export const useUiStore = defineStore('ui', () => {
     invent.value = null
   }
 
-  function show(unitId: string, mind: boolean) {
-    tab.value = mind ? 'minds' : 'industry'
+  function show(unitId: string) {
+    tab.value = 'industry'
     focus.value = unitId
   }
 
   /** Follows a wall's prompt into the right proposal. */
-  function follow(prompt: Prompt, mind: (unitId: string) => boolean) {
+  function follow(prompt: Prompt) {
     switch (prompt.kind) {
       case 'make-resource':
         return openInvent({ kind: 'strategy', outputId: prompt.resourceId })
-      case 'own-layer':
-        return openInvent({ kind: 'breakthrough', target: { kind: 'unit', id: prompt.unitId }, change: 'layer' })
+      case 'upgrade':
+        return openInvent({ kind: 'upgrade', target: { kind: 'unit', id: prompt.unitId } })
       case 'design-mind':
-        return openInvent({ kind: 'unit', mind: true, targetIQ: prompt.iq })
+        return openInvent({ kind: 'mind', iq: prompt.iq })
+      case 'income':
+        return openInvent({ kind: 'income' })
+      case 'research':
+        tab.value = 'research'
+        return
       case 'assign':
-        return show(prompt.unitId, mind(prompt.unitId))
+        return show(prompt.unitId)
     }
   }
 

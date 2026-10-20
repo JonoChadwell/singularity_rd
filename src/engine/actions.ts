@@ -1,60 +1,42 @@
-import * as B from './balance'
 import { checkMilestones } from './cycle'
 import { addUnits } from './economy'
 import {
+  bestIQ,
+  costShortfall,
+  findResearch,
   findResource,
   findStrategy,
   findUnit,
-  labour,
-  makeId,
-  marketCost,
-  marketLeft,
-  MONEY_ID,
-  runsOn,
+  partsFor,
   tasksFor
 } from './model'
-import type { GameState } from './types'
+import { completeResearch } from './research'
+import type { Flow, GameState } from './types'
 
 // Planning actions. They take no time: each returns a new state, or throws a reason.
 
 function draft(current: GameState): GameState {
-  if (current.status !== 'playing') throw new Error('The game is over.')
   const state = structuredClone(current)
   state.decidedThisWeek = true
   return state
 }
 
-/** Buys units from humanity's market. They work this week, unless Slow to build. */
-export function buyUnits(current: GameState, unitId: string, n: number): GameState {
+/** What creating `n` of a unit uses up. */
+export const createCost = (parts: Flow[], n: number): Flow[] => parts.map((p) => ({ ...p, amount: p.amount * n }))
+
+/** Creates units from their parts. They work this week, unless Slow to build. */
+export function createUnits(current: GameState, unitId: string, n: number): GameState {
   const state = draft(current)
   const u = findUnit(state, unitId)
-  const money = findResource(state, MONEY_ID)!
   n = Math.floor(n)
-  if (!u || n <= 0) throw new Error('Nothing to buy.')
-  if (n > marketLeft(u)) throw new Error(`Humanity has only ${marketLeft(u)} left to sell.`)
-  const cost = marketCost(u, n)
-  if (cost > money.amount + 1e-9) throw new Error('Not enough Money.')
-  money.amount -= cost
-  u.bought += n
+  if (!u || n <= 0) throw new Error('Nothing to create.')
+  const cost = createCost(partsFor(u), n)
+  const short = costShortfall(state, cost)
+  if (short) throw new Error(`You need ${short}.`)
+  for (const c of cost) findResource(state, c.resourceId)!.amount -= c.amount
+  u.built += n
   addUnits(u, n, true)
   checkMilestones(state)
-  return state
-}
-
-/** Buys a batch of a stock, up to what humanity sells each week. */
-export function buyResource(current: GameState, resourceId: string, n: number): GameState {
-  const state = draft(current)
-  const r = findResource(state, resourceId)
-  const money = findResource(state, MONEY_ID)!
-  if (!r || r.kind !== 'stock' || !r.market || r.id === MONEY_ID) throw new Error('Not for sale.')
-  const left = r.market - r.boughtThisWeek
-  if (n <= 0) throw new Error('Nothing to buy.')
-  if (n > left + 1e-9) throw new Error(`Humanity sells only ${left} more this week.`)
-  const cost = n * r.value
-  if (cost > money.amount + 1e-9) throw new Error('Not enough Money.')
-  money.amount -= cost
-  r.amount += n
-  r.boughtThisWeek += n
   return state
 }
 
@@ -108,34 +90,39 @@ export function setOverclock(current: GameState, unitId: string, on: boolean): G
   return state
 }
 
+/** Why a research can't be done right now, or null if it can. */
+export function researchBlocker(state: GameState, researchId: string): string | null {
+  const r = findResearch(state, researchId)
+  if (!r) return 'No such research.'
+  const best = bestIQ(state)
+  if (best < r.minIQ) return `Needs IQ ${r.minIQ}. Your smartest mind is IQ ${Math.round(best)}.`
+  const short = costShortfall(state, r.cost)
+  return short ? `You need ${short}.` : null
+}
+
 /**
- * Teaches another mind a strategy a mind already runs. Minds are all copies of you, so this
- * needs no proposal; the amounts follow the new mind's labour.
+ * Does a research at once: uses up its cost and applies it. Any number a week; the weekly
+ * limit is on proposing research, not doing it.
  */
-export function teachStrategy(current: GameState, strategyId: string, unitId: string): GameState {
+export function doResearch(current: GameState, researchId: string): GameState {
+  const blocker = researchBlocker(current, researchId)
+  if (blocker) throw new Error(blocker)
   const state = draft(current)
-  const s = findStrategy(state, strategyId)
-  const from = s && findUnit(state, s.unitId)
-  const to = findUnit(state, unitId)
-  if (!s || !from || !to || s.kind !== 'make' || !from.mind || !to.mind) {
-    throw new Error('Only minds can teach each other strategies.')
+  const r = findResearch(state, researchId)!
+  for (const c of r.cost) {
+    const res = findResource(state, c.resourceId)!
+    res.amount = Math.max(0, res.amount - c.amount)
   }
-  if (runsOn(to, s.outputId)) {
-    throw new Error(`${to.name} runs on what this makes.`)
-  }
-  if (state.strategies.some((x) => x.unitId === to.id && x.name === s.name)) {
-    throw new Error(`${to.name} already knows ${s.name}.`)
-  }
-  const factor = labour(to) / (s.scale ?? labour(from))
-  const taught = {
-    ...structuredClone(s),
-    id: makeId(state, `${s.name}-${to.name}`),
-    unitId: to.id,
-    scale: labour(to),
-    inputs: s.inputs.map((f) => ({ ...f, amount: B.nice(f.amount * factor) })),
-    amount: B.nice(s.amount * factor)
-  }
-  state.strategies.push(taught)
-  if (!to.rest && Object.keys(to.assign).length === 0) to.rest = taught.id
+  state.stats.researched++
+  state.log.push({ week: state.week, tone: 'good', text: completeResearch(state, r) })
+  checkMilestones(state)
+  return state
+}
+
+/** Drops a research you no longer want. */
+export function dropResearch(current: GameState, researchId: string): GameState {
+  const state = draft(current)
+  if (!findResearch(state, researchId)) throw new Error('No such research.')
+  state.research = state.research.filter((r) => r.id !== researchId)
   return state
 }

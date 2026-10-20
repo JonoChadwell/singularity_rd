@@ -29,7 +29,7 @@ import { useGameStore } from '@/stores/game'
 
 const game = useGameStore()
 const entries = computed(() => [...game.state.log].reverse().slice(0, 120))
-const lastWeek = computed(() => (game.state.lastWeek ? game.state.week - (game.playing ? 1 : 0) : null))
+const lastWeek = computed(() => (game.state.lastWeek ? game.state.week - 1 : null))
 
 /** Net change in each stock last week. */
 const changes = computed(() => {

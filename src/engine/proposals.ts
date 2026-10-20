@@ -4,7 +4,6 @@ import {
   readChoice,
   readLevel,
   readNoul,
-  readScore,
   tornPair,
   type JevAnswer,
   type JevQuestion,
@@ -12,16 +11,16 @@ import {
 } from '@/ai/jev'
 import * as B from './balance'
 import { findResource, findUnit, labour, makeId, namesInUse, runsOn } from './model'
-import { addStrategy, costMultiplier, projectSize } from './research'
+import { addStrategy, costMultiplier, priceCost, spendable } from './research'
 import { proposalText } from './stateText'
 import { QUIRK_IDS, QUIRKS, TRAITS, type QuirkId, type TraitId } from './traits'
-import { FIELDS, type Field, type GameState, type Project, type Resource, type Strategy } from './types'
+import type { Cost, GameState, Research, Resource, Strategy } from './types'
 
 export const NAME_MAX = 40
 export const DESCRIPTION_MAX = 240
 export const MAX_INPUTS = 2
 
-export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'breakthrough'
+export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'income'
 
 /** What the better of two answers costs: a drawback for a unit, a quirk for a strategy. */
 export type Complication = { kind: 'trait'; trait: TraitId } | { kind: 'quirk'; quirk: QuirkId }
@@ -66,7 +65,7 @@ export interface VerdictBase {
 
 export type Outcome =
   | { kind: 'added'; name: string }
-  | { kind: 'project'; project: Project }
+  | { kind: 'research'; research: Research }
 
 export interface Accepted {
   state: GameState
@@ -82,7 +81,6 @@ export function cleanText(name: string, description: string) {
 /** Checks a name before spending a Jev call. Returns a reason to refuse, or null. */
 export function precheckName(state: GameState, name: string): string | null {
   const trimmed = name.trim()
-  if (state.status !== 'playing') return 'The game is over.'
   if (trimmed.length < 2) return 'Give it a name.'
   if (trimmed.length > NAME_MAX) return `Keep the name under ${NAME_MAX} characters.`
   return namesInUse(state).has(trimmed.toLowerCase()) ? `${trimmed} already exists.` : null
@@ -99,10 +97,30 @@ export const iconQuestion: JevQuestion = {
   criteria: Object.fromEntries(Object.keys(B.ICONS).map((k) => [k, null]))
 }
 
-export const fieldQuestion: JevQuestion = {
-  type: 'choice',
-  instructions: 'Which field of research would this work mostly fall under?',
-  criteria: Object.fromEntries(FIELDS.map((f) => [f, B.FIELD_LABELS[f]!]))
+/**
+ * Which resources a research would use up. Jev ranks the stocks; the cost goes to the most
+ * fitting, and a close second shares it. With only Money, there's nothing to ask.
+ */
+export function payQuestion(state: GameState, what: string): Record<string, JevQuestion> {
+  const stocks = spendable(state)
+  if (stocks.length < 2) return {}
+  return {
+    pay: {
+      type: 'choice',
+      instructions: `Researching ${what} would use up some of the AI's resources: materials for experiments and prototypes, data, or money to fund it. Which would it most naturally use up?`,
+      criteria: options(stocks)
+    }
+  }
+}
+
+/** Jev's ranking of what pays, most fitting first. Empty when there was nothing to ask. */
+export function payers(answers: Record<string, JevAnswer>): { resourceId: string; p: number }[] {
+  return answers.pay ? ranked(answers.pay).map(([resourceId, p]) => ({ resourceId, p })) : []
+}
+
+/** A research's cost: `value` worth of the resources Jev picked, more for less plausible ideas. */
+export function costFor(state: GameState, v: Pick<VerdictBase, 'answers' | 'plausibility' | 'bar'>, value: number): Cost {
+  return priceCost(state, value * costMultiplier(v.plausibility, v.bar), payers(v.answers))
 }
 
 /**
@@ -204,25 +222,6 @@ export function reader(v: Pick<VerdictBase, 'answers' | 'picks'>) {
       if (pick !== undefined && Number.isFinite(Number(pick))) return Number(pick)
       return readLevel(answerFor(v.answers, key), levels)
     },
-    /**
-     * An amount from a table of log-spaced bands, following Jev's answer smoothly rather than
-     * snapping to a band, so supplies read 640k rather than a round 1.0M. A band of 0 ("none")
-     * stays 0.
-     */
-    amount(key: string, table: readonly [string, number][]): number {
-      const levels = table.length
-      const pick = v.picks[key]
-      if (pick !== undefined) return B.pick(table, Number(pick))[1]
-      const answer = answerFor(v.answers, key)
-      const level = readLevel(answer, levels)
-      if (B.pick(table, level)[1] === 0) return 0
-      const score = Math.max(table.findIndex(([, n]) => n > 0), readScore(answer, levels))
-      const lo = Math.floor(score)
-      const hi = Math.min(levels - 1, lo + 1)
-      const a = Math.log10(B.pick(table, lo)[1])
-      const b = Math.log10(B.pick(table, hi)[1])
-      return B.nice(10 ** (a + (b - a) * (score - lo)))
-    },
     has: (key: string) => key in v.answers
   }
 }
@@ -275,11 +274,32 @@ export function logProposal(state: GameState, tone: 'good' | 'ai', text: string)
   state.log.push({ week: state.week, tone, text })
 }
 
-export function newProject(
-  state: GameState,
-  fields: Omit<Project, 'id' | 'progress' | 'proposedWeek'>
-): Project {
-  return { ...fields, id: makeId(state, fields.name), progress: 0, proposedWeek: state.week }
+/**
+ * One research proposal a week: accepting a strategy, unit, mind, upgrade or passive income uses
+ * it. Resources don't. Doing research already proposed has no weekly limit.
+ */
+export const proposalSlotBlocker = (state: GameState): string | null =>
+  state.proposedThisWeek ? 'You’ve already proposed research this week. Next week you can propose another.' : null
+
+/** Uses the week's proposal, or refuses if it's gone. */
+export function claimProposal(state: GameState) {
+  const blocker = proposalSlotBlocker(state)
+  if (blocker) throw new Error(blocker)
+  state.proposedThisWeek = true
+}
+
+/** No research ever needs less than MIN_IQ. */
+export const floorIQ = (iq: number) => Math.max(B.MIN_IQ, Math.ceil(iq))
+
+export function newResearch(state: GameState, fields: Omit<Research, 'id' | 'proposedWeek'>): Research {
+  return { ...fields, minIQ: floorIQ(fields.minIQ), id: makeId(state, fields.name), proposedWeek: state.week }
+}
+
+/** Adds a research to the list, with a line for the log. */
+export function addResearch(state: GameState, research: Research): Accepted {
+  state.research.push(research)
+  logProposal(state, 'good', `${research.icon} ${research.name}: research needing IQ ${research.minIQ}.`)
+  return { state, outcome: { kind: 'research', research } }
 }
 
 // ---------------------------------------------------------------- resources
@@ -324,12 +344,6 @@ export function resourceQuestions(state: GameState, prefix = ''): Record<string,
       instructions: 'How much is a single one worth?',
       criteria: scale(B.RESOURCE_VALUE)
     },
-    [`${prefix}supply`]: {
-      type: 'score',
-      instructions:
-        'Today, how much of it could humanity sell you each week, as one-off batches you pay for? Things nobody sells, or that only come from owning equipment, get "None".',
-      criteria: scale(B.RESOURCE_SUPPLY)
-    },
     [`${prefix}icon`]: iconQuestion
   }
 }
@@ -344,7 +358,6 @@ export function resourceFrom(
   const read = reader(v)
   const band = read.level(`${prefix}value`, B.RESOURCE_VALUE.length)
   const kind = read.choice(`${prefix}kind`, ['stock', 'flow'] as const)
-  const supply = read.amount(`${prefix}supply`, B.RESOURCE_SUPPLY)
   return {
     id: makeId(state, spec.name),
     name: spec.name,
@@ -354,9 +367,7 @@ export function resourceFrom(
     band,
     value: B.pick(B.RESOURCE_VALUE, band)[1],
     amount: 0,
-    stored: 0,
-    market: kind === 'stock' ? supply : 0,
-    boughtThisWeek: 0
+    stored: 0
   }
 }
 
@@ -376,8 +387,8 @@ export async function judgeResource(state: GameState, judge: Judge, raw: Resourc
     'resource'
   )
   const v: ResourceVerdict = {
-    // Only stock-or-flow is worth asking about: it changes how the thing plays. Value and
-    // supply just take Jev's answer.
+    // Only stock-or-flow is worth asking about: it changes how the thing plays. Value just
+    // takes Jev's answer.
     ...baseVerdict('resource', questions, answers, 'is_thing', [
       { key: 'kind', topic: 'whether it keeps from week to week' }
     ]),
@@ -422,10 +433,12 @@ export interface StrategyVerdict extends VerdictBase {
 }
 
 export function precheckStrategy(state: GameState, spec: StrategySpec): string | null {
+  const slot = proposalSlotBlocker(state)
+  if (slot) return slot
   const nameError = precheckName(state, spec.name)
   if (nameError) return nameError
   const unit = findUnit(state, spec.unitId)
-  if (!unit) return 'Choose which unit runs it.'
+  if (!unit) return state.units.length ? 'Choose which unit runs it.' : 'Propose an industry unit first: strategies are what units do.'
   const output = findResource(state, spec.outputId)
   if (!output) return 'Choose what it makes.'
   if (spec.inputIds.length > MAX_INPUTS) return `At most ${MAX_INPUTS} inputs.`
@@ -462,7 +475,7 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
       instructions: 'How much research would it take to work out how to do this?',
       criteria: scale(B.ADVANCEMENT)
     },
-    field: fieldQuestion
+    ...payQuestion(state, `how ${unit.name} could do this`)
   }
   const quirks = QUIRK_IDS.filter((q) => q !== 'picky' || inputs.length > 0 || unit.upkeep.length > 0)
   questions.catch = quirkQuestion(quirks)
@@ -501,8 +514,8 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
   return v
 }
 
-/** The strategy as it would be, and the research it needs (bar 0 = none). */
-export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy: Strategy; bar: number; size: number; field: Field } {
+/** The strategy as it would be, and the research it needs (minimum IQ 0 = none). */
+export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy: Strategy; minIQ: number; cost: Cost } {
   const read = reader(v)
   const unit = findUnit(state, v.spec.unitId)!
   const output = findResource(state, v.spec.outputId)!
@@ -515,7 +528,7 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
     return { resourceId: id, amount: B.nice(value / r.value) }
   })
   const efficiency = B.pick(B.EFFICIENCY, read.level('efficiency', B.EFFICIENCY.length))[1]
-  const [, bar, weeks] = B.pick(B.ADVANCEMENT, read.level('advancement', B.ADVANCEMENT.length))
+  const [, minIQ, weeks] = B.pick(B.ADVANCEMENT, read.level('advancement', B.ADVANCEMENT.length))
   const strategy: Strategy = {
     id: makeId(state, v.spec.name),
     name: v.spec.name,
@@ -524,39 +537,37 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
     kind: 'make',
     inputs,
     outputId: output.id,
-    amount: B.nice(((work + inputValue) * efficiency) / output.value),
-    scale: work
+    amount: B.nice(((work + inputValue) * efficiency) / output.value)
   }
   const quirk = catchesOf(v).find((c) => c.kind === 'quirk')
   if (quirk?.kind === 'quirk') strategy.quirk = quirk.quirk
-  const size = bar ? projectSize(bar, weeks, costMultiplier(v.plausibility, v.bar)) : 0
-  return { strategy, bar, size, field: read.choice('field', FIELDS) }
+  // Working it out costs some weeks of what the runners would make.
+  const cost = minIQ ? costFor(state, v, weeks * work * Math.max(unit.count, B.MIN_FLEET)) : []
+  return { strategy, minIQ: minIQ ? floorIQ(minIQ) : 0, cost }
 }
 
 export function acceptStrategy(current: GameState, v: StrategyVerdict): Accepted {
   if (v.rejected) throw new Error('This proposal was not accepted.')
   const state = structuredClone(current)
-  const { strategy, bar, size, field } = draftStrategy(state, v)
+  claimProposal(state)
+  const { strategy, minIQ, cost } = draftStrategy(state, v)
   const unit = findUnit(state, strategy.unitId)!
   state.inventions.push({ week: state.week, icon: unit.icon, name: strategy.name, kind: 'strategy' })
   state.decidedThisWeek = true
-  if (!bar) {
+  if (!minIQ) {
     addStrategy(state, strategy)
-    // A mind with nothing to do picks up its first strategy.
-    if (unit.mind && !unit.rest && Object.keys(unit.assign).length === 0) unit.rest = strategy.id
     logProposal(state, 'good', `${unit.icon} ${strategy.name} is ready.`)
     return { state, outcome: { kind: 'added', name: strategy.name } }
   }
-  const project = newProject(state, {
-    name: strategy.name,
-    description: `Work out how ${unit.name} can ${strategy.name.toLowerCase()}.`,
-    icon: '🧭',
-    field,
-    bar,
-    size,
-    effect: { kind: 'strategy', strategy }
-  })
-  state.projects.push(project)
-  logProposal(state, 'good', `🧭 ${strategy.name} needs research: bar IQ ${bar}, size ${size}.`)
-  return { state, outcome: { kind: 'project', project } }
+  return addResearch(
+    state,
+    newResearch(state, {
+      name: strategy.name,
+      description: `Work out how ${unit.name} can ${strategy.name.toLowerCase()}.`,
+      icon: '🧭',
+      minIQ,
+      cost,
+      effect: { kind: 'strategy', strategy }
+    })
+  )
 }

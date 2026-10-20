@@ -13,7 +13,6 @@
 </template>
 
 <script setup lang="ts">
-import { FIELD_LABELS } from '@/engine/balance'
 import { findResource, findUnit } from '@/engine/model'
 import { TRAITS, type TraitId } from '@/engine/traits'
 import type { UnitType } from '@/engine/types'
@@ -36,10 +35,6 @@ function detail(t: TraitId): string {
       return ` Also makes ${resName(u.byproduct)}.`
     case 'stores':
       return ` Stores ${resName(u.stores)}.`
-    case 'specialist':
-      return u.field ? ` Field: ${FIELD_LABELS[u.field]}.` : ''
-    case 'makes-waste':
-      return ` Waste: ${resName(u.waste)}.`
     default:
       return ''
   }

@@ -6,30 +6,41 @@ data behind it are in [NOTES.md](NOTES.md).
 
 ## How to play
 
-You start as one unattended AI server in a research lab, with no Money and nothing else. Win by
-finishing the **Theory of Everything** (bar IQ 1,000) in as few weeks as you can. Nothing is
-pre-made: every resource, unit, strategy and breakthrough is something you propose and
-[Jev](https://openrouter.ai/docs/guides/community/typesafe-sdk) judges.
+You start as one unattended AI server in a research lab, with nothing at all: no resources, no
+Money. Nothing is pre-made: every resource, income, unit, strategy and intelligence system is
+something you propose and [Jev](https://openrouter.ai/docs/guides/community/typesafe-sdk)
+judges. There is no way to win yet; that comes back later.
 
-- **A turn is a week.** Plan as long as you like (propose, buy, assign, set build targets), then
-  press **Next week**. Settings persist, so a quiet week is one click. Alerts above the button
-  list anything that would waste the week. The simulation is deterministic: the preview shows
-  exactly what next week will do.
+- **A turn is a week.** Plan as long as you like (propose, research, create units, assign, set
+  build targets), then press **Next week**. Settings persist, so a quiet week is one click.
+  Alerts above the button list anything that would waste the week. The simulation is
+  deterministic: the preview shows exactly what next week will do.
+- **Start with a passive income.** Propose a resource (say Money), then a passive income that
+  yields it (say Freelance coding). It's research; once done it adds a fixed amount every week
+  with no units. More income takes a new proposal.
+- **One research proposal a week.** Accepting a strategy, passive income, upgrade, unit or
+  intelligence system uses it; resources are free to propose. Doing research already on the
+  list has no weekly limit: it's instant, and needs only a **minimum IQ**, never below 100, that
+  your smartest mind must reach, and a **cost in resources**: Jev picks which of the stocks you
+  have it uses up, and the value model sets how much. With nothing to spend, it's free.
+- **Intelligence systems** are single machines: a hardware platform with an IQ, running
+  software. They have no count, upkeep or strategies. A new one must be smarter than your best,
+  and becomes the next compute tier.
+- **Industry units** are anything you own many of. Every unit is research first, even one that
+  exists today. Once designed, you **create** them from their parts, as many as you can afford;
+  there are no caps. A builder unit or a Self-replicating one can also build them with a build
+  strategy. Each has upkeep and up to three **traits** from a fixed list of 16; perks make it
+  dearer to make and drawbacks cheaper. Split a type across its strategies by count; the
+  strategy marked **rest** takes every unit not counted elsewhere.
+- **Upgrade** any unit or mind: Jev offers its three most natural improvements (better software,
+  new hardware, less upkeep or parts, a perk, a better strategy…). Pick one and it becomes
+  research.
 - **Resources** are stocks (keep) or flows (made and used within a week; lost unless something
   Stores them). When demand outstrips supply, every user gets the same share.
-- **Units** are intelligence systems (minds, which think) or industry. Things that exist today go
-  straight onto **humanity's market**, where prices climb as supply runs out. New inventions need
-  a design project. Every unit has upkeep and up to three **traits** from a fixed list of 24.
-- **Every machine does one thing a week**: a strategy or a project. Split a type by count; the
-  task marked **rest** takes every machine not counted elsewhere, including new ones.
-- **The IQ bar.** A project's bar is a hard limit: groups below it contribute nothing. Machines
-  of one type pool (+5% IQ per tenfold), and ten times the machines is about three times the
-  speed. Designing a mind needs a mind with half its target IQ (the leap rule), and
-  breakthroughs can raise IQ to 1.5× base and no further, so you climb two to four compute tiers.
-- **Supply layers.** Each unit's limit stacks humanity's market, your own industry (about 100×,
-  unlocked by a breakthrough that says who builds it and from what) and Earth's limit (100× more).
-- **Pushback.** When a recipe is too thin for what it claims, Jev names the missing kinds of
-  part (an advanced component, a special power source, …) and you supply or invent them.
+- **The leap rule.** Designing a mind needs a mind with about half its target IQ, and software
+  can raise IQ to 1.5× the hardware's and no further.
+- **Pushback.** When a unit's recipe is too thin for what it claims, Jev names the missing kinds
+  of part (an advanced component, a special power source, …) and you supply or invent them.
 - **Jev is torn** sometimes. The game then shows its top two answers and you pick.
 
 ## Setup
@@ -49,16 +60,15 @@ needs this proxy, so it runs under `npm run dev` or `npm run preview`, not as st
 Optional settings in `.env.local`: `JEV_BASE_URL` (default `https://openrouter.ai/api`) and
 `JEV_MODEL` (default `jev-latest`).
 
-The game saves to your browser's local storage (`singularity-rd/save/v5`) after every change,
-including Jev's answers, so the same proposal always gets the same verdict. Your best week is
-kept under `singularity-rd/best`.
+The game saves to your browser's local storage (`singularity-rd/save/v8`) after every change,
+including Jev's answers, so the same proposal always gets the same verdict.
 
 ### Run logs
 
 While the dev server is running, every game is logged to `logs/runs/<runId>.jsonl` (gitignored).
 Each line is one event: `game_start`, `week` (the week's report, log lines, alerts left
-unanswered and a state snapshot), `proposal`, `accept`, `pushback`, `action` (buying, assigning,
-build targets), `error`, `game_end` (with stats) or `game_abandoned`. Raw Jev traffic is logged as
+unanswered and a state snapshot), `proposal`, `upgrade_offer`, `accept`, `pushback`, `action`
+(creating units, assigning, build targets, research), `error` or `game_abandoned`. Raw Jev traffic is logged as
 `jev` events (`purpose`, request, response and latency). The API key is never logged.
 
 ### Command-line harness
@@ -69,35 +79,42 @@ build targets), `error`, `game_end` (with stats) or `game_abandoned`. Raw Jev tr
 
 ```sh
 npm run play -- new
-npm run play -- propose strategy '{"name":"Freelance coding","description":"","unitId":"starting-server","inputIds":[],"outputId":"money"}'
+npm run play -- propose resource '{"name":"Money","description":"Dollars in anonymous accounts."}'
 npm run play -- accept
+npm run play -- propose income '{"name":"Freelance coding","description":"","outputId":"money"}'
+npm run play -- accept                         # becomes research
+npm run play -- research freelance-coding
+npm run play -- upgrade mind starting-server   # Jev's three options
+npm run play -- choose 2                       # becomes research
 npm run play -- next 10     # up to 10 weeks, stopping when something happens
 npm run play -- status
 ```
 
-`npm run play -- help` lists every command: proposals and their verdicts (pick, trait, builder,
-pushback, accept), buying, assigning, build targets, and the week.
+`npm run play -- help` lists every command: proposals and their verdicts (pick, trait,
+pushback, accept), upgrades, research, creating units, assigning, build targets, and the week.
 
 ## Code map
 
 | Path | What |
 | --- | --- |
 | `src/ai/jev.ts` | Jev client, `Judge` interface, typed readers, torn-answer detection, `CachedJudge` |
-| `src/engine/types.ts` | `GameState` (v5) and everything in it |
+| `src/engine/types.ts` | `GameState` (v8) and everything in it |
 | `src/engine/balance.ts` | Every tuning number, in one place |
-| `src/engine/traits.ts` | The 24 traits |
-| `src/engine/model.ts` | Lookups, formatting, labour, prices, supply layers, task allocation |
-| `src/engine/economy.ts` | The week: rationing, upkeep, crew, builds, research, trait rules |
-| `src/engine/research.ts` | Pooling, research speed, project sizes, breakthroughs, finished projects |
+| `src/engine/traits.ts` | The 16 traits |
+| `src/engine/model.ts` | Lookups, formatting, IQ, labour, creating units, task allocation, costs |
+| `src/engine/economy.ts` | The week: rationing, upkeep, crew, builds, minds' earnings, trait rules |
+| `src/engine/research.ts` | Research costs, strategy rates, applying upgrades, finishing research, repeat costs |
 | `src/engine/cycle.ts` | `runWeek`: one turn, plus milestones |
-| `src/engine/actions.ts` | Planning actions: buy, assign, build targets, overclock, teach |
+| `src/engine/actions.ts` | Planning actions: create units, assign, build targets, overclock, research |
 | `src/engine/alerts.ts` | Alerts and wall prompts above the Next week button |
-| `src/engine/proposals.ts` | Shared verdict machinery; resource and strategy proposals |
-| `src/engine/unitProposal.ts` | Unit proposals, traits, availability, pushback |
-| `src/engine/breakthroughProposal.ts` | Breakthroughs: card edits, before/after, projects |
+| `src/engine/proposals.ts` | Shared verdict machinery and costs; resource and strategy proposals |
+| `src/engine/unitProposal.ts` | Industry unit proposals, traits, pushback |
+| `src/engine/mindProposal.ts` | Intelligence system proposals and the leap rule |
+| `src/engine/incomeProposal.ts` | Passive income proposals |
+| `src/engine/upgrade.ts` | Upgrades: the candidate list, Jev's three options, applying one |
 | `src/engine/stateText.ts` | The world description Jev reads |
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |
-| `src/components/` | UI: tier ladder, Next week, panels, unit cards, proposal dialogs, verdicts |
+| `src/components/` | UI: Next week, panels, unit and mind cards, proposal and upgrade dialogs, verdicts |
 | `server/` | Vite plugins: Jev proxy and run logs |
 | `harness/` | Command-line harness: `play.mjs` loads `cli.ts` through Vite |
 | `old/` | The original transformers.js prototype, archived and not built |
@@ -107,4 +124,5 @@ pushback, accept), buying, assigning, build targets, and the week.
 `npm run dev` · `npm run build` · `npm run preview` · `npm run test:unit` · `npm run type-check` · `npm run lint`
 
 Tests use a fake `Judge`, so they don't need a key. `src/engine/__tests__/balance.spec.ts`
-checks the plan's balance targets with scripted play. Weeks never call Jev; only proposals do.
+checks some balance targets with scripted play. Weeks never call Jev; only proposals and
+upgrades do.

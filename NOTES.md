@@ -1,6 +1,6 @@
 # Singularity R&D: project notes
 
-State of the project as of 2026-10-18: setup, the designer's goals, what is built, and the
+State of the project as of 2026-10-18 (§8–§10 added 2026-10-19 and 10-20): setup, the designer's goals, what is built, and the
 issues found in playtesting. These are observations only, not proposed solutions. Quoted
 notes are the designer's own words.
 
@@ -575,3 +575,37 @@ browser, so a harness game can be analysed like a browser game.
 - `next n` skips weeks without the player pressing Next week. The score counts weeks, not
   clicks, so it doesn't change the result.
 - Each command starts Vite afresh, which takes under a second.
+
+---
+
+## 10. Simplification (2026-10-19 to 10-20)
+
+The designer asked to simplify before adding features. The game now works like this
+(MASTER_PLAN.md is superseded where it differs):
+
+- **Start:** the Starting Server and nothing else, with no resources. Money is an ordinary
+  resource the player proposes. There is no win condition yet; the Theory of Everything, the end
+  screen and the best score were removed, "to come back later".
+- **Research** has no timer: a minimum IQ (never below 100) that your best mind must reach, and a
+  cost in stock resources you have. Jev picks which stocks; with none, research is free.
+- **One research proposal a week.** Accepting a strategy, passive income, upgrade, unit or
+  mind uses it; resources don't. Doing research already proposed has no limit.
+- **Passive income:** a research kind that yields a fixed amount of a stock every week. It's
+  one-off: more income takes a new proposal.
+- **Intelligence systems** are separate from industry: single machines (hardware IQ plus
+  software), with no count, upkeep or strategies. A new one must beat your best IQ and becomes the
+  next tier. Pooling, assignments and the minds' earnings are gone.
+- **Upgrade** replaces breakthroughs. Clicking it makes one Jev call, which ranks a list of
+  improvements the game generates and offers the top three. The chosen one becomes research.
+- **Industry:** every unit is research first. Units are created from their parts, with no caps.
+  Removed: humanity's market, supply layers, waste, and eight traits (16 remain).
+- **UI:** a Research tab replaced Projects and the market tab. Minds have their own cards. The
+  tier ladder is gone. "How will you get this?" offers both a passive income and a strategy.
+- Saves are at `version: 9`.
+
+**Observed:**
+- Jev values one Money at 10, not 1. All worths are measured in Money, so Money-priced amounts
+  come out at a tenth of what the tables intend. This is undecided.
+- On Windows, the running dev server missed command-line (`sed -i`) edits and served a stale
+  module, which crashed the proposal dialog. Re-saving the files and reloading fixed it. If the UI
+  seems dead after code changes, reload and check the console.

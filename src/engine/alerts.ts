@@ -1,22 +1,15 @@
-import { choked } from './economy'
-import {
-  findResource,
-  findUnit,
-  fmt,
-  fmtCount,
-  layerSize,
-  MONEY_ID,
-  unitLimit
-} from './model'
-import { bestEffectiveIQ } from './research'
+import { researchBlocker } from './actions'
+import { bestIQ, findResource, fmt, fmtCount } from './model'
 import type { GameState, WeekReport } from './types'
 
 /** Where a wall's prompt leads: straight into the right proposal. */
 export type Prompt =
   | { kind: 'make-resource'; resourceId: string }
-  | { kind: 'own-layer'; unitId: string }
+  | { kind: 'upgrade'; unitId: string }
   | { kind: 'design-mind'; iq: number }
   | { kind: 'assign'; unitId: string }
+  | { kind: 'income' }
+  | { kind: 'research' }
 
 export interface Alert {
   key: string
@@ -34,28 +27,16 @@ const HOW = 'How will you get this?'
  * preview, so it describes the week about to happen.
  */
 export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
-  if (state.status !== 'playing') return []
   const alerts: Alert[] = []
   const add = (a: Alert) => alerts.push(a)
 
-  // Idle machines.
+  // Idle units.
   for (const u of state.units) {
     const w = preview.units[u.id]
     if (!w) continue
     const known = state.strategies.filter((s) => s.unitId === u.id).slice(0, 3)
     const tasks = known.map((s) => ({ label: s.name, unitId: u.id, taskId: s.id }))
-    if (w.unassigned > 0 && u.mind) {
-      add({
-        key: `idle-${u.id}`,
-        tone: 'bad',
-        text: `${fmtCount(w.unassigned)} ${u.name} ${w.unassigned === 1 ? 'has' : 'have'} nothing to do.${tasks.length ? ' Put them on:' : ''}`,
-        tasks,
-        // The very first prompt: what could the Starting Server do to earn money?
-        prompt: state.strategies.length
-          ? { label: tasks.length ? 'Something else…' : 'Assign', to: { kind: 'assign', unitId: u.id } }
-          : { label: 'What could it do to earn money?', to: { kind: 'make-resource', resourceId: MONEY_ID } }
-      })
-    } else if (w.unassigned > 0) {
+    if (w.unassigned > 0) {
       add({
         key: `idle-${u.id}`,
         tone: 'warn',
@@ -73,14 +54,6 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
         prompt: { label: 'Where will its upkeep come from?', to: { kind: 'make-resource', resourceId: w.unpaidFor } }
       })
     }
-    if (w.choked || choked(state, u)) {
-      add({
-        key: `choked-${u.id}`,
-        tone: 'bad',
-        text: `${u.name} have stopped: their waste has piled up.`,
-        prompt: u.waste ? { label: 'Use up the waste', to: { kind: 'make-resource', resourceId: u.waste } } : undefined
-      })
-    }
     if (w.done > 0) {
       add({
         key: `done-${u.id}`,
@@ -88,40 +61,38 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
         text: `${fmtCount(w.done)} ${u.name} are idle: their build target is reached.`
       })
     }
-    const market = layerSize(u, 'market')
-    if (market && u.bought >= market && !u.layers.own && !u.starting) {
-      add({
-        key: `soldout-${u.id}`,
-        tone: 'warn',
-        text: `Humanity has no more ${u.name} to sell. How will you make your own?`,
-        prompt: { label: 'Make your own', to: { kind: 'own-layer', unitId: u.id } }
-      })
-    } else if (u.count > 0 && u.count >= unitLimit(u) && !u.starting && !u.layers.earth) {
-      add({
-        key: `full-${u.id}`,
-        tone: 'info',
-        text: `${u.name} are at the top of their supply. A breakthrough could open the next layer.`,
-        prompt: { label: 'Break through', to: { kind: 'own-layer', unitId: u.id } }
-      })
-    }
   }
 
-  // Research that can't progress.
-  const best = bestEffectiveIQ(state)
-  for (const p of state.projects) {
-    const groups = preview.groups[p.id] ?? []
-    for (const g of groups.filter((g) => !g.clears)) {
-      const u = findUnit(state, g.unitId)
-      add({
-        key: `bar-${p.id}-${g.unitId}`,
-        tone: 'bad',
-        text: `${fmtCount(g.machines)} ${u?.name ?? '?'} can’t help with ${p.name}: effective IQ ${Math.floor(g.effectiveIQ)}, bar ${p.bar}.`,
-        prompt:
-          best < p.bar
-            ? { label: 'Nothing you own is smart enough. Design something that is?', to: { kind: 'design-mind', iq: p.bar } }
-            : undefined
-      })
-    }
+  // The very start, or any time nothing brings anything in.
+  if (!state.incomes.length && !state.units.length) {
+    add({
+      key: 'start',
+      tone: 'warn',
+      text: 'Nothing brings anything in yet.',
+      prompt: { label: 'What could the Starting Server work out how to earn?', to: { kind: 'income' } }
+    })
+  }
+
+  // Research that's ready to do now.
+  const ready = state.research.filter((r) => !researchBlocker(state, r.id))
+  if (ready.length) {
+    add({
+      key: 'research-ready',
+      tone: 'info',
+      text: `Ready to research: ${ready.map((r) => r.name).slice(0, 3).join(', ')}${ready.length > 3 ? '…' : ''}`,
+      prompt: { label: 'Research', to: { kind: 'research' } }
+    })
+  }
+
+  // Research nothing you own is smart enough for.
+  const best = bestIQ(state)
+  for (const r of state.research.filter((x) => x.minIQ > best)) {
+    add({
+      key: `iq-${r.id}`,
+      tone: 'info',
+      text: `${r.name} needs IQ ${r.minIQ}; your smartest mind is IQ ${Math.round(best)}.`,
+      prompt: { label: 'Design something smarter?', to: { kind: 'design-mind', iq: r.minIQ } }
+    })
   }
 
   // Shortfalls, and resources something needs but nothing makes.
@@ -134,17 +105,19 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
       key: `short-${id}`,
       tone: 'warn',
       text: `${r.icon} ${r.name} is short: everyone who needs it runs at ${Math.round(share * 100)}%.`,
-      prompt: made && id !== MONEY_ID ? undefined : { label: HOW, to: { kind: 'make-resource', resourceId: id } }
+      prompt: made ? undefined : { label: HOW, to: { kind: 'make-resource', resourceId: id } }
     })
   }
 
   // Stockpiles nothing uses.
   for (const r of state.resources) {
-    if (r.kind !== 'stock' || r.id === MONEY_ID || r.amount <= 0) continue
+    if (r.kind !== 'stock' || r.amount <= 0) continue
     const flows = preview.flows[r.id] ?? []
     const used = flows.some((f) => f.amount < 0)
-    const neededForParts = state.units.some((u) => u.parts.some((p) => p.resourceId === r.id))
-    if (!used && !neededForParts && flows.some((f) => f.amount > 0)) {
+    const needed =
+      state.units.some((u) => u.parts.some((p) => p.resourceId === r.id)) ||
+      state.research.some((x) => x.cost.some((c) => c.resourceId === r.id))
+    if (!used && !needed && flows.some((f) => f.amount > 0)) {
       add({ key: `pile-${r.id}`, tone: 'info', text: `${fmt(r.amount)} ${r.name} piling up: nothing uses it.` })
     }
   }

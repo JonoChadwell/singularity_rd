@@ -5,8 +5,15 @@
         <div class="muted small">Week</div>
         <div class="week num">{{ game.state.week }}</div>
       </div>
-      <button class="primary next" :disabled="!game.playing" @click="game.nextWeek()">Next week</button>
+      <button class="primary next" @click="game.nextWeek()">Next week</button>
     </div>
+    <p class="small slot" :class="game.state.proposedThisWeek ? 'good' : 'muted'">
+      {{
+        game.state.proposedThisWeek
+          ? '🔬 You’ve proposed this week’s research. Next week you can propose another.'
+          : '🧠 You can propose one research this week: a strategy, income, unit, mind or upgrade.'
+      }}
+    </p>
     <ul v-if="game.alerts.length" class="plain-list alerts" aria-label="Before you press">
       <li v-for="a in shown" :key="a.key" :class="a.tone">
         <span>{{ a.text }}</span>
@@ -33,7 +40,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Alert } from '@/engine/alerts'
-import { findUnit } from '@/engine/model'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 
@@ -43,7 +49,7 @@ const all = ref(false)
 const shown = computed(() => (all.value ? game.alerts : game.alerts.slice(0, 6)))
 
 function follow(a: Alert) {
-  if (a.prompt) ui.follow(a.prompt.to, (id) => findUnit(game.state, id)?.mind ?? false)
+  if (a.prompt) ui.follow(a.prompt.to)
 }
 </script>
 
@@ -69,6 +75,10 @@ function follow(a: Alert) {
 .next {
   padding: 10px 22px;
   font-size: 15px;
+}
+
+.slot {
+  margin: 10px 0 0;
 }
 
 .alerts {

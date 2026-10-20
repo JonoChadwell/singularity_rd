@@ -2,6 +2,8 @@
 
 Gameplay design, written 2026-10-19 from a design discussion with the designer. It replaces the v4 design described in NOTES.md, which still holds the history, the playtest data and the setup. This plan covers how the game plays, not how it is built.
 
+> **Partly superseded.** The simplification in NOTES.md §10 changed research, intelligence systems, breakthroughs (now upgrades), the start, humanity's market, supply layers and the final project. Where this plan talks about project sizes, pooling, research speed, assigning minds, minds running strategies, buying, humanity's market, supply layers, the tier ladder, Money at the start, breakthroughs, waste or the Theory of Everything, NOTES.md §10 describes what the game does now.
+
 ## 1. The pitch
 
 You start as one unattended AI server in a research lab, and you invent your way to the singularity in as few weeks as you can. Nothing is pre-made. Every resource, unit, strategy and research project is something you name and Jev judges. Each compute tier you build designs the next one, and no pile of dim machines can do a genius's work. Every wall you hit is a question, and your answers become your path, so no two games look alike.

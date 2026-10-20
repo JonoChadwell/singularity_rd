@@ -3,13 +3,11 @@
     <header class="top">
       <div class="title">
         <h1>Singularity R&amp;D</h1>
-        <span v-if="game.best" class="muted small">Best: week <span class="num">{{ game.best }}</span></span>
       </div>
       <button class="small" @click="confirmNewGame">New game</button>
     </header>
 
     <JevBanner />
-    <TierLadder />
     <p v-if="game.lastError && !ui.invent" class="error" role="alert">{{ game.lastError }}</p>
     <p v-if="ui.notice" class="notice" :class="ui.notice.tone" role="status">
       {{ ui.notice.text }}
@@ -38,39 +36,33 @@
         <template v-if="ui.tab === 'minds'">
           <div class="tab-head">
             <p class="muted small">
-              Every machine does one thing a week: a project or a strategy. Only you move them.
+              Your smartest mind sets how hard a research you can do. Each one is a single machine.
             </p>
-            <button class="add" @click="ui.openInvent({ kind: 'unit', mind: true })">+ Intelligence system</button>
+            <button class="add" @click="ui.openInvent({ kind: 'mind' })">+ Intelligence system</button>
           </div>
-          <UnitCard v-for="u in minds" :key="u.id" :unit="u" />
+          <MindCard v-for="m in minds" :key="m.id" :mind="m" />
         </template>
 
         <template v-else-if="ui.tab === 'industry'">
           <div class="tab-head">
             <p class="muted small">Units that make things. Each runs its strategies every week.</p>
-            <button class="add" @click="ui.openInvent({ kind: 'unit', mind: false })">+ Unit</button>
+            <button class="add" @click="ui.openInvent({ kind: 'unit' })">+ Unit</button>
           </div>
-          <p v-if="!industry.length" class="empty">
+          <p v-if="!game.state.units.length" class="empty">
             No industry yet. Propose a unit: a power plant, a robot, a hired human, a lemon grove.
           </p>
-          <UnitCard v-for="u in industry" :key="u.id" :unit="u" />
+          <UnitCard v-for="u in game.state.units" :key="u.id" :unit="u" />
         </template>
 
-        <ProjectPanel v-else-if="ui.tab === 'projects'" />
-        <MarketPanel v-else />
+        <ResearchPanel v-else />
       </section>
       <div class="col">
         <WeekReport />
       </div>
     </main>
 
-    <BreakthroughDialog
-      v-if="ui.invent?.kind === 'breakthrough'"
-      :key="JSON.stringify(ui.invent)"
-      :request="ui.invent"
-    />
+    <UpgradeDialog v-if="ui.invent?.kind === 'upgrade'" :key="JSON.stringify(ui.invent)" :request="ui.invent" />
     <ProposalDialog v-else-if="ui.invent" :key="JSON.stringify(ui.invent)" :request="ui.invent" />
-    <EndScreen v-if="!game.playing" />
   </div>
 </template>
 
@@ -78,44 +70,31 @@
 import { computed, onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
-import BreakthroughDialog from '@/components/BreakthroughDialog.vue'
-import EndScreen from '@/components/EndScreen.vue'
 import JevBanner from '@/components/JevBanner.vue'
-import MarketPanel from '@/components/MarketPanel.vue'
+import MindCard from '@/components/MindCard.vue'
 import NextWeek from '@/components/NextWeek.vue'
-import ProjectPanel from '@/components/ProjectPanel.vue'
 import ProposalDialog from '@/components/ProposalDialog.vue'
+import ResearchPanel from '@/components/ResearchPanel.vue'
 import ResourcePanel from '@/components/ResourcePanel.vue'
-import TierLadder from '@/components/TierLadder.vue'
 import UnitCard from '@/components/UnitCard.vue'
+import UpgradeDialog from '@/components/UpgradeDialog.vue'
 import WeekReport from '@/components/WeekReport.vue'
-import { marketLeft } from '@/engine/model'
+import { currentIQ } from '@/engine/model'
 
 const game = useGameStore()
 const ui = useUiStore()
 onMounted(() => game.checkJev())
 
-const minds = computed(() =>
-  game.state.units.filter((u) => u.mind).sort((a, b) => b.hardware.iq - a.hardware.iq)
-)
-const industry = computed(() => game.state.units.filter((u) => !u.mind))
-const forSale = computed(
-  () =>
-    game.state.units.filter((u) => marketLeft(u) > 0).length +
-    game.state.resources.filter((r) => r.market > 0).length
-)
+const minds = computed(() => [...game.state.minds].sort((a, b) => currentIQ(b) - currentIQ(a)))
 
 const TABS = [
   { id: 'minds', label: 'Intelligence', count: () => minds.value.length },
-  { id: 'industry', label: 'Industry', count: () => industry.value.length },
-  { id: 'projects', label: 'Projects', count: () => game.state.projects.length },
-  { id: 'market', label: 'Humanity’s market', count: () => forSale.value }
+  { id: 'industry', label: 'Industry', count: () => game.state.units.length },
+  { id: 'research', label: 'Research', count: () => game.state.research.length }
 ] as const
 
 function confirmNewGame() {
-  if (game.state.week <= 1 || game.state.status !== 'playing' || confirm('Abandon this AI and start over?')) {
-    game.newGame()
-  }
+  if (game.state.week <= 1 || confirm('Abandon this AI and start over?')) game.newGame()
 }
 </script>
 

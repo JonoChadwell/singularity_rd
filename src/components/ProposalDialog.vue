@@ -3,7 +3,7 @@
     <div class="head">
       <div class="title">
         <HelpTip :text="COPY[kind].help" />
-        <h2 :id="titleId">{{ title }}</h2>
+        <h2 :id="titleId">{{ COPY[kind].title }}</h2>
       </div>
       <button type="button" class="close" aria-label="Close" @click="ui.closeInvent()">✕</button>
     </div>
@@ -19,18 +19,7 @@
         Introduce {{ missingResources.length === 1 ? 'it' : 'them' }}, and this form comes back.
       </p>
 
-      <div v-if="kind === 'unit'" class="kinds" role="radiogroup" aria-label="Kind of unit">
-        <label class="choice">
-          <input v-model="unit.mind" type="radio" :value="true" />
-          <span>🧠 Intelligence system <span class="muted small">thinks, does research</span></span>
-        </label>
-        <label class="choice">
-          <input v-model="unit.mind" type="radio" :value="false" />
-          <span>🏭 Industry <span class="muted small">makes things</span></span>
-        </label>
-      </div>
-
-      <input ref="nameInput" v-model="name" :maxlength="NAME_MAX" :placeholder="namePlaceholder" aria-label="Name" />
+      <input ref="nameInput" v-model="name" :maxlength="NAME_MAX" :placeholder="COPY[kind].name" aria-label="Name" />
       <textarea
         v-model="description"
         rows="2"
@@ -64,52 +53,67 @@
         </p>
       </template>
 
+      <template v-if="kind === 'income'">
+        <p v-if="!stocks.length" class="small warn note">
+          Propose a resource first: something it could yield, like Money.
+          <button type="button" class="link" @click="introduce('Money')">+ Money</button>
+        </p>
+        <label v-else class="field">
+          <span>Yields</span>
+          <select v-model="income.outputId">
+            <option v-for="r in stocks" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
+          </select>
+        </label>
+        <p class="muted small note">
+          Don’t see what it yields? <button type="button" class="link" @click="introduce('')">+ Resource</button>
+        </p>
+      </template>
+
+      <template v-if="kind === 'mind'">
+        <label class="field">
+          <span>Hardware</span>
+          <input
+            v-model="mind.hardware"
+            :maxlength="NAME_MAX"
+            :placeholder="name.trim() || 'The platform it runs on'"
+            aria-label="Hardware"
+          />
+        </label>
+        <label class="field">
+          <span>Hardware IQ</span>
+          <span class="row">
+            <input v-model.number="mind.iq" class="n" type="number" min="10" step="10" aria-label="Hardware IQ" />
+            <span class="small" :class="mind.iq > range[1] ? 'warn' : 'muted'">{{ iqHint }}</span>
+          </span>
+        </label>
+        <label class="field">
+          <span>Software</span>
+          <span class="row">
+            <input v-model="mind.software" :maxlength="NAME_MAX" :placeholder="DEFAULT_SOFTWARE" aria-label="Software" />
+            <span class="small muted">{{ softwareVersion(0) }}; upgrades can raise IQ to ×{{ IQ_CEILING }}</span>
+          </span>
+        </label>
+      </template>
+
       <template v-if="kind === 'unit'">
-        <template v-if="unit.mind">
-          <label class="field">
-            <span>Hardware</span>
-            <input
-              v-model="unit.hardware"
-              :maxlength="NAME_MAX"
-              :placeholder="name.trim() || 'The platform it runs on'"
-              aria-label="Hardware"
-            />
-          </label>
-          <label class="field">
-            <span>Hardware IQ</span>
-            <span class="row">
-              <input v-model.number="unit.targetIQ" class="n" type="number" min="10" step="10" aria-label="Hardware IQ" />
-              <span class="small" :class="unit.targetIQ > designable ? 'warn' : 'muted'">
-                {{ iqHint }}
-              </span>
-            </span>
-          </label>
-          <label class="field">
-            <span>Software</span>
-            <span class="row">
-              <input v-model="unit.software" :maxlength="NAME_MAX" :placeholder="DEFAULT_SOFTWARE" aria-label="Software" />
-              <span class="small muted">{{ softwareVersion(0) }}; upgrades can raise IQ to ×{{ IQ_CEILING }}</span>
-            </span>
-          </label>
-        </template>
         <div class="field">
-          <span>Made of</span>
+          <span>Made from</span>
           <ResourcePicker v-model="unit.parts" :max="MAX_PARTS" label="Add a part" />
         </div>
         <div class="field">
           <span>Runs on</span>
           <ResourcePicker v-model="unit.upkeep" :max="MAX_UPKEEP" label="Add upkeep" empty="nothing: free to run" />
         </div>
-        <label class="field">
-          <span>Built by</span>
+        <label v-if="game.state.units.length" class="field">
+          <span>Also built by</span>
           <select v-model="unit.builderId">
-            <option :value="null">Humanity’s market</option>
+            <option :value="null">Nobody: you create them from parts</option>
             <option v-for="u in game.state.units" :key="u.id" :value="u.id">Your own {{ u.name }}</option>
           </select>
         </label>
         <p class="muted small note">
-          You choose what; the game chooses how much. Jev judges whether it exists today, its traits, and whether
-          the parts are enough.
+          You create them from their parts, as many as you can afford. You choose what; the game chooses how much. Jev
+          judges how hard it is to design, its traits, and whether the parts are enough.
         </p>
       </template>
 
@@ -130,23 +134,16 @@
       :accept-label="acceptLabel"
       @pick="onPick"
       @trait="onTrait"
-      @builder="onBuilder"
       @replace="(v) => (verdict = v)"
       @accept="accept"
       @edit="verdict = null"
     >
       <div v-if="verdict.kind === 'resource' && resourceDraft" class="outcome small">
-        <div>
-          {{ resourceDraft.icon }} <strong>{{ resourceDraft.name }}</strong> is a {{ resourceDraft.kind }} worth
-          {{ fmt(resourceDraft.value) }} Money each.
-        </div>
         <div class="muted">
           {{
-            resourceDraft.market
-              ? `Humanity sells ${fmt(resourceDraft.market)} a week.`
-              : resourceDraft.kind === 'flow'
-                ? 'A flow: something you own has to make it every week.'
-                : 'Humanity doesn’t sell it. You’ll have to make it.'
+            resourceDraft.kind === 'flow'
+              ? 'A flow: something you own has to make it every week.'
+              : 'A stock: it keeps from week to week. You’ll have to make it, or earn it.'
           }}
         </div>
       </div>
@@ -156,23 +153,24 @@
           {{ QUIRKS[strategyDraft.strategy.quirk].icon }} {{ QUIRKS[strategyDraft.strategy.quirk].name }}:
           {{ QUIRKS[strategyDraft.strategy.quirk].rule }}
         </div>
-        <div :class="strategyDraft.bar ? 'warn' : 'good'">
-          {{
-            strategyDraft.bar
-              ? `Advanced: a research project with bar IQ ${strategyDraft.bar}, size ${fmt(strategyDraft.size)} (${FIELD_LABELS[strategyDraft.field]}).`
-              : 'Simple: ready at once.'
-          }}
+        <div :class="strategyDraft.minIQ ? 'warn' : 'good'">
+          {{ strategyDraft.minIQ ? `Advanced. ${researchText(strategyDraft)}` : 'Simple: ready at once.' }}
         </div>
       </div>
       <div v-else-if="verdict.kind === 'unit' && unitDraft" class="outcome">
-        <p class="small" :class="unitDraft.immediate ? 'good' : 'warn'">
-          {{
-            unitDraft.immediate
-              ? 'It exists today: it goes straight onto humanity’s market.'
-              : `${AVAILABILITY[verdict.availability]}. Design project: bar IQ ${unitDraft.bar}, size ${fmt(unitDraft.size)} (${FIELD_LABELS[unitDraft.field]}).`
-          }}
-        </p>
+        <p class="small warn">{{ researchText(unitDraft) }}</p>
         <UnitSummary :unit="unitDraft.unit" :state="game.state" />
+      </div>
+      <div v-else-if="verdict.kind === 'income' && incomeDraft" class="outcome small">
+        <div>💸 +{{ describeFlows(game.state, [incomeDraft.income]) }} every week, once researched.</div>
+        <div class="warn">{{ researchText(incomeDraft) }}</div>
+      </div>
+      <div v-else-if="verdict.kind === 'mind' && mindDraft" class="outcome small">
+        <div>
+          {{ mindDraft.mind.icon }} <strong>{{ mindDraft.mind.name }}</strong>: {{ mindDraft.mind.hardware.name }}
+          hardware, IQ {{ mindDraft.mind.hardware.iq }}, running {{ mindDraft.mind.software.name }}.
+        </div>
+        <div class="warn">{{ researchText(mindDraft) }}</div>
       </div>
     </VerdictView>
   </dialog>
@@ -180,9 +178,20 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { FIELD_LABELS, FIRST_IDEAS, IQ_CEILING, MAX_PARTS, OFF_THE_SHELF_MAX_IQ } from '@/engine/balance'
-import { describeFlows, findResource, findUnit, fmt, MONEY_ID, softwareVersion } from '@/engine/model'
-import { resolveResources, RESOURCE_PRESETS, runnerFor, STRATEGY_PRESETS, taken, UNIT_PRESETS } from '@/engine/presets'
+import { IQ_CEILING, MAX_PARTS } from '@/engine/balance'
+import { DEFAULT_SOFTWARE, draftMind, guessIQ, precheckMind } from '@/engine/mindProposal'
+import { draftIncome, precheckIncome } from '@/engine/incomeProposal'
+import { bestIQ, describeCost, describeFlows, designRange, findResource, fmt, softwareVersion } from '@/engine/model'
+import {
+  INCOME_PRESETS,
+  MIND_PRESETS,
+  resolveResources,
+  RESOURCE_PRESETS,
+  runnerFor,
+  STRATEGY_PRESETS,
+  taken,
+  UNIT_PRESETS
+} from '@/engine/presets'
 import {
   DESCRIPTION_MAX,
   draftResource,
@@ -192,17 +201,11 @@ import {
   precheckName,
   precheckStrategy
 } from '@/engine/proposals'
-import { designRange, strategyRate } from '@/engine/research'
 import { QUIRKS, type TraitId } from '@/engine/traits'
 import {
-  AVAILABILITY,
-  availabilityOf,
-  DEFAULT_SOFTWARE,
   draftUnit,
   guessUnitSpec,
   MAX_UPKEEP,
-  missingKinds,
-  partsMatter,
   precheckUnit
 } from '@/engine/unitProposal'
 import { useGameStore, type ProposalInput, type Verdict } from '@/stores/game'
@@ -214,7 +217,7 @@ import UnitSummary from './UnitSummary.vue'
 import VerdictView from './VerdictView.vue'
 
 const props = defineProps<{ request: InventRequest }>()
-type Kind = 'resource' | 'strategy' | 'unit'
+type Kind = 'resource' | 'strategy' | 'unit' | 'mind' | 'income'
 
 const COPY: Record<
   Kind,
@@ -230,19 +233,35 @@ const COPY: Record<
   },
   strategy: {
     title: 'Propose a strategy',
-    help: 'A strategy is something a unit does every week, turning up to two inputs into one output. Pick one from the list or write your own, then edit it. You choose the shape; the game sets the amounts. Jev judges whether the unit could do it: simple strategies are ready at once, and advanced ones become research projects.',
+    help: 'A strategy is something an industry unit does every week, turning up to two inputs into one output. Pick one from the list or write your own, then edit it. You choose the shape; the game sets the amounts. Jev judges whether the unit could do it: simple strategies are ready at once, and advanced ones become research.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. Freelance coding, Generate power',
     description: 'How does it work? (optional, but helps Jev)',
     cost: 'Jev decides if it needs research.'
   },
   unit: {
-    title: 'Propose a unit',
-    help: 'A unit is something you can own many of. Pick one from the list to fill in its spec, or write your own, and edit it before you propose. Jev still decides whether it can be added: things that exist today go straight onto humanity’s market, and new inventions need a design project whose size Jev sets. An intelligence system is a hardware platform running software. The hardware sets its IQ; software upgrades can raise it to 1.5×, and only new hardware goes further.',
+    title: 'Propose an industry unit',
+    help: 'An industry unit is something you can own many of. Pick one from the list to fill in its spec, or write your own, and edit it before you propose. Jev still decides whether it can be added, and every unit is research first, even one that exists today (that just needs little research). Once designed, you create them from their parts.',
     presets: 'Pick one to fill the spec, or write your own:',
     name: 'e.g. Rented Cloud GPU, Solar Farm, Paid Humans',
     description: 'What is it? (optional, but helps Jev)',
     cost: 'One Jev call. Pushback, if any, costs one more.'
+  },
+  mind: {
+    title: 'Propose an intelligence system',
+    help: 'An intelligence system is one machine that thinks: a hardware platform running software. The hardware sets its IQ; software upgrades can raise it to 1.5×, and only new hardware goes further. A new one must be smarter than your best, and designing it needs a mind with about half its IQ. Your smartest mind sets which research you can do.',
+    presets: 'Pick one to fill the spec, or write your own:',
+    name: 'e.g. Custom AI Server, Optical Neural Chip',
+    description: 'What is it? (optional, but helps Jev)',
+    cost: 'One Jev call. It becomes research.'
+  },
+  income: {
+    title: 'Propose a passive income',
+    help: 'A passive income is something the AI works out once and then gets every week, with no units: freelance work, trading, scraping data. Name a stock it yields; Jev judges how plausible and how effective it is, and how hard it is to work out. It becomes research. Once done it adds a fixed amount every week; more income needs a new proposal. Proposing it uses the week’s one research proposal.',
+    presets: 'Pick one to fill the form, or write your own:',
+    name: 'e.g. Freelance coding, Quant trading',
+    description: 'How does it work? (optional, but helps Jev)',
+    cost: 'One Jev call. It becomes research.'
   }
 }
 
@@ -258,18 +277,16 @@ const description = ref(props.request.description ?? '')
 const feedback = ref('')
 const verdict = ref<Verdict | null>(null)
 
-const firstStrategy = kind === 'strategy' && game.state.strategies.length === 0
-const title = firstStrategy ? 'What could the Starting Server do to earn money?' : COPY[kind].title
-const namePlaceholder = firstStrategy ? `e.g. ${FIRST_IDEAS.slice(0, 3).join(', ')}` : COPY[kind].name
-
 const strategy = reactive({
   unitId: props.request.unitId ?? game.state.units[0]?.id ?? '',
   inputIds: Array<string>(MAX_INPUTS).fill(''),
-  outputId: props.request.outputId ?? MONEY_ID
+  outputId: props.request.outputId ?? game.state.resources[0]?.id ?? ''
 })
 
-const guess = guessUnitSpec(game.state, props.request.mind ?? true)
-const unit = reactive({ ...guess, hardware: '', software: '', targetIQ: props.request.targetIQ ?? guess.targetIQ })
+const unit = reactive(guessUnitSpec(game.state))
+const mind = reactive({ iq: props.request.iq ?? guessIQ(game.state), hardware: '', software: '' })
+const stocks = computed(() => game.state.resources.filter((r) => r.kind === 'stock'))
+const income = reactive({ outputId: props.request.outputId ?? stocks.value[0]?.id ?? '' })
 
 // ---------------------------------------------------------------- presets
 
@@ -280,7 +297,16 @@ const presetItems = computed<PresetItem[]>(() => {
   const blocked = (n: string) => (taken(game.state, n) ? 'Already in the game.' : null)
   if (kind === 'resource') return RESOURCE_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
   if (kind === 'strategy') return STRATEGY_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
-  return UNIT_PRESETS.map((p) => ({ ...p, icon: p.mind ? '🧠' : '🏭', blocked: blocked(p.name) }))
+  if (kind === 'income') return INCOME_PRESETS.map((p) => ({ ...p, icon: '💸', blocked: blocked(p.name) }))
+  if (kind === 'mind') {
+    const best = Math.round(bestIQ(game.state))
+    return MIND_PRESETS.map((p) => ({
+      ...p,
+      icon: '🧠',
+      blocked: blocked(p.name) ?? (p.iq <= best ? `No smarter than your best, IQ ${best}.` : null)
+    }))
+  }
+  return UNIT_PRESETS.map((p) => ({ ...p, icon: '🏭', blocked: blocked(p.name) }))
 })
 
 /** Fills the form from a preset. The player can still edit everything before proposing. */
@@ -297,13 +323,27 @@ function applyPreset(presetId: string) {
     if (!p) return
     name.value = p.name
     description.value = p.description
-    const runner = runnerFor(game.state, p, findUnit(game.state, strategy.unitId))
+    const runner = runnerFor(game.state, p)
     if (runner) strategy.unitId = runner.id
     const inputs = resolveResources(game.state, p.inputs)
     const output = resolveResources(game.state, [p.output])
     strategy.inputIds = [...inputs.ids, ...Array<string>(MAX_INPUTS).fill('')].slice(0, MAX_INPUTS)
     if (output.ids[0]) strategy.outputId = output.ids[0]
     missingResources.value = [...inputs.missing, ...output.missing]
+  } else if (kind === 'income') {
+    const p = INCOME_PRESETS.find((x) => x.name === presetId)
+    if (!p) return
+    name.value = p.name
+    description.value = p.description
+    const output = resolveResources(game.state, [p.output])
+    if (output.ids[0]) income.outputId = output.ids[0]
+    missingResources.value = output.missing
+  } else if (kind === 'mind') {
+    const p = MIND_PRESETS.find((x) => x.name === presetId)
+    if (!p) return
+    name.value = p.name
+    description.value = p.description
+    Object.assign(mind, { iq: p.iq, hardware: p.hardware, software: p.software })
   } else {
     const p = UNIT_PRESETS.find((x) => x.name === presetId)
     if (!p) return
@@ -311,14 +351,7 @@ function applyPreset(presetId: string) {
     description.value = p.description
     const parts = resolveResources(game.state, p.parts)
     const upkeep = resolveResources(game.state, p.upkeep)
-    Object.assign(unit, {
-      mind: p.mind,
-      targetIQ: p.mind ? (p.iq ?? unit.targetIQ) : unit.targetIQ,
-      hardware: p.hardware ?? '',
-      software: p.software ?? '',
-      parts: parts.ids.slice(0, MAX_PARTS),
-      upkeep: upkeep.ids.slice(0, MAX_UPKEEP)
-    })
+    Object.assign(unit, { parts: parts.ids.slice(0, MAX_PARTS), upkeep: upkeep.ids.slice(0, MAX_UPKEEP) })
     missingResources.value = [...new Set([...parts.missing, ...upkeep.missing])]
   }
 }
@@ -337,13 +370,10 @@ function introduce(resourceName: string) {
 
 if (props.request.preset) applyPreset(props.request.preset)
 const range = computed(() => designRange(game.state))
-const designable = computed(() => range.value[1])
 const iqHint = computed(() =>
-  unit.targetIQ <= OFF_THE_SHELF_MAX_IQ
-    ? 'Copies of you up to IQ 100 may exist today: then they go straight onto humanity’s market.'
-    : unit.targetIQ > range.value[1]
-      ? `Above IQ 100 it must be designed. Your best minds can reach about IQ ${range.value[0]}–${range.value[1]}; pool more, or climb first.`
-      : `Above IQ 100 it must be designed. Within reach: about IQ ${range.value[0]}–${range.value[1]}, depending on how radical Jev judges it.`
+  mind.iq > range.value[1]
+    ? `Your best mind can design about IQ ${range.value[0]}–${range.value[1]}. Above that, it can wait as research until you’re smarter.`
+    : `Within reach: about IQ ${range.value[0]}–${range.value[1]}, depending on how radical Jev judges it.`
 )
 
 onMounted(async () => {
@@ -358,19 +388,10 @@ const input = computed<ProposalInput>(() => {
     return { kind, spec: { ...base, unitId: strategy.unitId, inputIds: strategy.inputIds.filter(Boolean), outputId: strategy.outputId } }
   }
   if (kind === 'unit') {
-    return {
-      kind,
-      spec: {
-        ...base,
-        mind: unit.mind,
-        parts: [...unit.parts],
-        upkeep: [...unit.upkeep],
-        builderId: unit.builderId,
-        targetIQ: unit.mind ? unit.targetIQ : 0,
-        ...(unit.mind ? { hardware: unit.hardware, software: unit.software } : {})
-      }
-    }
+    return { kind, spec: { ...base, parts: [...unit.parts], upkeep: [...unit.upkeep], builderId: unit.builderId } }
   }
+  if (kind === 'mind') return { kind, spec: { ...base, iq: mind.iq, hardware: mind.hardware, software: mind.software } }
+  if (kind === 'income') return { kind, spec: { ...base, outputId: income.outputId } }
   return { kind, spec: base }
 })
 
@@ -379,6 +400,8 @@ const blocker = computed(() => {
   const i = input.value
   if (i.kind === 'strategy') return precheckStrategy(game.state, i.spec)
   if (i.kind === 'unit') return precheckUnit(game.state, i.spec)
+  if (i.kind === 'mind') return precheckMind(game.state, i.spec)
+  if (i.kind === 'income') return precheckIncome(game.state, i.spec)
   return precheckName(game.state, name.value)
 })
 
@@ -396,19 +419,23 @@ async function submit() {
 const resourceDraft = computed(() => (verdict.value?.kind === 'resource' ? draftResource(game.state, verdict.value) : null))
 const strategyDraft = computed(() => (verdict.value?.kind === 'strategy' ? draftStrategy(game.state, verdict.value) : null))
 const unitDraft = computed(() => (verdict.value?.kind === 'unit' ? draftUnit(game.state, verdict.value) : null))
+const mindDraft = computed(() => (verdict.value?.kind === 'mind' ? draftMind(game.state, verdict.value) : null))
+const incomeDraft = computed(() => (verdict.value?.kind === 'income' ? draftIncome(game.state, verdict.value) : null))
 const strategyText = computed(() => {
   const d = strategyDraft.value
   if (!d) return ''
   const out = findResource(game.state, d.strategy.outputId)
   const made = `${fmt(d.strategy.amount)} ${out?.icon ?? ''} ${out?.name ?? ''}`
-  const rate = strategyRate(game.state, d.strategy)
-  return rate.inputs.length || d.strategy.inputs.length ? `${describeFlows(game.state, d.strategy.inputs)} → ${made}` : made
+  return d.strategy.inputs.length ? `${describeFlows(game.state, d.strategy.inputs)} → ${made}` : made
 })
+const researchText = (d: { minIQ: number; cost: Parameters<typeof describeCost>[1] }) =>
+  `Research: needs IQ ${d.minIQ}, uses up ${d.cost.length ? describeCost(game.state, d.cost) : 'nothing'}.`
 
 const acceptLabel = computed(() => {
   const v = verdict.value
-  if (v?.kind === 'strategy' && strategyDraft.value?.bar) return 'Start research'
-  if (v?.kind === 'unit' && unitDraft.value && !unitDraft.value.immediate) return 'Start design'
+  if (v?.kind === 'strategy' && strategyDraft.value?.minIQ) return 'Add as research'
+  if (v?.kind === 'unit' || v?.kind === 'income') return 'Add as research'
+  if (v?.kind === 'mind') return 'Add as research'
   return 'Accept'
 })
 
@@ -416,23 +443,12 @@ function onPick(key: string, value: string) {
   const v = verdict.value
   if (!v) return
   v.picks[key] = value
-  // Who can make it decides whether its parts matter, and so whether Jev pushes back.
-  if (v.kind === 'unit' && key === 'availability' && v.pushbackRounds === 0) {
-    v.availability = availabilityOf(v)
-    v.missing = partsMatter(v) ? missingKinds(v) : []
-  }
 }
 
 function onTrait(trait: TraitId, on: boolean) {
   if (verdict.value?.kind === 'unit') verdict.value.traitPicks[trait] = on
 }
 
-function onBuilder(unitId: string) {
-  const v = verdict.value
-  if (v?.kind !== 'unit') return
-  v.spec.builderId = unitId || null
-  if (v.pushbackRounds === 0) v.missing = partsMatter(v) ? missingKinds(v) : []
-}
 
 function accept() {
   if (!verdict.value) return
@@ -444,10 +460,7 @@ function accept() {
   const notice: typeof ui.notice =
     outcome.kind === 'added'
       ? { tone: 'good', text: `${outcome.name} added.` }
-      : {
-          tone: 'good',
-          text: `${outcome.project.name} is a project: bar IQ ${outcome.project.bar}. Put minds on it in Projects.`
-        }
+      : { tone: 'good', text: `${outcome.research.name} is research: needs IQ ${outcome.research.minIQ}. See Research.` }
   // Back to the form that asked for this resource, if any.
   if (props.request.then) ui.openInvent(props.request.then)
   else ui.closeInvent()
@@ -504,23 +517,6 @@ form {
 .note {
   font-size: 12px;
   margin: 0;
-}
-
-.kinds {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.choice {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 13px;
-}
-
-.choice input {
-  width: auto;
 }
 
 .feedback {

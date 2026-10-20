@@ -2,7 +2,7 @@
   <div v-if="game.jev.kind !== 'ready'" class="banner" :class="game.jev.kind">
     <template v-if="game.jev.kind === 'checking'">Connecting to Jev…</template>
     <template v-else-if="game.jev.kind === 'unconfigured'">
-      <strong>Jev isn’t configured.</strong> Weeks still run, but proposing resources, units, strategies and breakthroughs needs Jev. Create
+      <strong>Jev isn’t configured.</strong> Weeks still run, but proposing resources, units, strategies and upgrades needs Jev. Create
       <code>.env.local</code> in the project root with
       <code>JEV_API_KEY=&lt;your OpenRouter key&gt;</code>, restart <code>npm run dev</code>, then
       <button @click="game.checkJev()">retry</button>

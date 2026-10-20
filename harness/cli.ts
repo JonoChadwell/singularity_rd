@@ -11,45 +11,29 @@ import { loadEnv } from 'vite'
 import { CachedJudge, JudgeError, type Answers, type Judge, type JevAnswer, type Questions } from '@/ai/jev'
 import * as actions from '@/engine/actions'
 import { alertsFor } from '@/engine/alerts'
-import {
-  acceptBreakthrough,
-  describeChange,
-  draftBreakthrough,
-  judgeBreakthrough,
-  recipeOf,
-  targetName,
-  withCatches,
-  type BreakthroughSpec,
-  type BreakthroughVerdict
-} from '@/engine/breakthroughProposal'
 import { runWeek } from '@/engine/cycle'
 import { previewWeek } from '@/engine/economy'
+import { acceptIncome, draftIncome, judgeIncome, type IncomeSpec, type IncomeVerdict } from '@/engine/incomeProposal'
 import { createInitialState } from '@/engine/initialState'
+import { acceptMind, draftMind, judgeMind, type MindSpec, type MindVerdict } from '@/engine/mindProposal'
 import {
-  affordable,
   allocation,
+  creatable,
+  bestIQ,
   ceilingIQ,
   currentIQ,
+  describeCost,
   describeFlows,
+  designRange,
   findResource,
   findUnit,
   fmt,
   fmtCount,
-  layerSize,
-  marketLeft,
-  marketPrice,
-  MONEY_ID,
-  moneyUse,
   softwareLabel,
   tasksFor,
-  unitLimit
+  weeklyUse
 } from '@/engine/model'
-import {
-  BREAKTHROUGH_PRESETS,
-  RESOURCE_PRESETS,
-  STRATEGY_PRESETS,
-  UNIT_PRESETS
-} from '@/engine/presets'
+import { INCOME_PRESETS, MIND_PRESETS, RESOURCE_PRESETS, STRATEGY_PRESETS, UNIT_PRESETS } from '@/engine/presets'
 import {
   acceptResource,
   acceptStrategy,
@@ -64,34 +48,31 @@ import {
   type StrategyVerdict,
   type ResourceVerdict
 } from '@/engine/proposals'
-import { designRange, effectiveIQ, finishWeek, researchSpeed, bestEffectiveIQ } from '@/engine/research'
 import { TRAITS, type TraitId } from '@/engine/traits'
-import type { GameState, Project } from '@/engine/types'
+import type { GameState, UpgradeTarget } from '@/engine/types'
 import {
   acceptUnit,
   answerPushback,
-  availabilityOf,
-  AVAILABILITY,
   chosenTraits,
   draftUnit,
   judgeUnit,
-  missingKinds,
   nearLine,
-  needsBuilder,
-  partsMatter,
   type PushbackReply,
   type UnitSpec,
   type UnitVerdict
 } from '@/engine/unitProposal'
+import { acceptUpgrade, describeChanges, judgeUpgrade, type UpgradeOffer } from '@/engine/upgrade'
 import { snapshot } from '@/telemetry'
 import { RunLog } from '../server/runLog'
 
-type Verdict = ResourceVerdict | StrategyVerdict | UnitVerdict | BreakthroughVerdict
+type Verdict = ResourceVerdict | StrategyVerdict | UnitVerdict | MindVerdict | IncomeVerdict
 
 interface Save {
   state: GameState
   /** A verdict waiting for the player to accept or discard it. */
   verdict: Verdict | null
+  /** Upgrade options waiting for the player to choose one. */
+  offer?: UpgradeOffer | null
 }
 
 const ROOT = process.cwd()
@@ -148,7 +129,9 @@ function savePath(slot: string) {
 function load(slot: string): Save {
   const path = savePath(slot)
   if (!existsSync(path)) throw new Error(`No game in slot "${slot}". Start one with: new`)
-  return JSON.parse(readFileSync(path, 'utf8')) as Save
+  const save = JSON.parse(readFileSync(path, 'utf8')) as Save
+  if (save.state.version !== 9) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
+  return save
 }
 
 function store(slot: string, save: Save) {
@@ -182,11 +165,13 @@ const say = (line = '') => out.push(line)
 
 function printStatus(s: GameState) {
   const preview = previewWeek(structuredClone(s))
-  const money = findResource(s, MONEY_ID)!.amount
   const net = (id: string) => (preview.flows[id] ?? []).reduce((n, f) => n + f.amount, 0)
   const [lo, hi] = designRange(s)
-  say(`WEEK ${s.week} (${s.status}) · Money ${fmt(money)} (net ${fmt(net(MONEY_ID))}/wk, upkeep-reserve ${fmt(moneyUse(preview))}) · Jev calls ${s.stats.jevCalls}`)
-  say(`Best pooled IQ ${Math.round(bestEffectiveIQ(s))} · designs within reach IQ ${lo}–${hi}`)
+  say(`WEEK ${s.week} · Jev calls ${s.stats.jevCalls}`)
+  say(
+    `Best IQ ${Math.round(bestIQ(s))} · designs within reach IQ ${lo}–${hi} · ` +
+      (s.proposedThisWeek ? 'research PROPOSED this week' : 'can propose one research this week')
+  )
   say('\nRESOURCES')
   for (const r of s.resources) {
     const sources = (preview.flows[r.id] ?? []).map((f) => `${f.label} ${f.amount >= 0 ? '+' : ''}${fmt(f.amount)}`).join(', ')
@@ -194,36 +179,29 @@ function printStatus(s: GameState) {
     say(
       `  ${r.id} "${r.name}" ${r.kind} worth ${fmt(r.value)} · have ${fmt(r.amount)}${r.stored ? ` (+${fmt(r.stored)} stored)` : ''} · net ${fmt(net(r.id))}` +
         `${share !== undefined && share < 1 ? ` · SHORT: ${pct(share)} met` : ''}` +
-        `${r.market ? ` · market ${fmt(r.market - r.boughtThisWeek)}/${fmt(r.market)} left this week` : ''}` +
         `${sources ? `\n      ${sources}` : ''}`
     )
   }
-  for (const [label, group] of [
-    ['MINDS', s.units.filter((u) => u.mind)],
-    ['INDUSTRY', s.units.filter((u) => !u.mind)]
-  ] as const) {
-    if (!group.length) continue
-    say(`\n${label}`)
-    for (const u of group) {
+  say('\nMINDS')
+  for (const m of s.minds) {
+    say(`  ${m.id} "${m.name}"${m.tier ? ` Tier ${m.tier}` : ''} IQ ${Math.round(currentIQ(m))}/${Math.round(ceilingIQ(m))} · hardware ${m.hardware.name} (${m.hardware.iq}) · software ${softwareLabel(m)}`)
+  }
+  if (s.units.length) {
+    say('\nINDUSTRY')
+    for (const u of s.units) {
       const w = preview.units[u.id]
-      const left = marketLeft(u)
       const { byTask, free } = allocation(s, u)
       say(
-        `  ${u.id} "${u.name}"${u.tier ? ` Tier ${u.tier}` : ''} ×${fmtCount(u.count)}/${u.starting ? 1 : fmtCount(unitLimit(u))}` +
-          ` [layers market ${fmtCount(layerSize(u, 'market'))}, own ${fmtCount(layerSize(u, 'own'))}, earth ${fmtCount(layerSize(u, 'earth'))}; bought ${fmtCount(u.bought)}, built ${fmtCount(u.built)}]`
+        `  ${u.id} "${u.name}" ×${fmtCount(u.count)} (built ${fmtCount(u.built)}) · create up to ${fmtCount(creatable(s, u, weeklyUse(preview)))} now`
       )
-      if (u.mind) {
-        say(`      IQ ${Math.round(currentIQ(u))}/${Math.round(ceilingIQ(u))} · hardware ${u.hardware.name} (${u.hardware.iq}) · software ${softwareLabel(u)}`)
-      }
       say(
         `      upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · parts ${describeFlows(s, u.parts)} · value ${fmt(u.value)}` +
           `${u.traits.length ? ` · traits ${u.traits.join(', ')}` : ''}${u.crew ? ` · crew ${u.crew.per} ${u.crew.unitId}` : ''}${u.builderId ? ` · built by ${u.builderId}` : ''}`
       )
-      if (left > 0) say(`      market: ${fmtCount(left)} left at ${fmt(marketPrice(u))} each (max affordable now ${fmtCount(affordable(u, money, moneyUse(preview)))})`)
       const tasks = Object.entries(byTask).map(([t, n]) => `${t}=${fmtCount(n)}${t === u.rest ? '(rest)' : ''}`)
       say(`      tasks: ${tasks.join(', ') || 'none'}${free ? ` · ${fmtCount(free)} UNASSIGNED` : ''} · can do: ${tasksFor(s, u).join(', ') || 'nothing'}`)
-      if (w && (w.unpaid || w.done || w.resting || w.choked || w.built || w.lost)) {
-        say(`      next week: ${w.unpaid ? `${fmtCount(w.unpaid)} unpaid (${w.unpaidFor}) ` : ''}${w.done ? `${fmtCount(w.done)} builders done ` : ''}${w.resting ? 'resting ' : ''}${w.choked ? 'CHOKED by waste ' : ''}${w.built ? `builds ${fmtCount(w.built)} ` : ''}${w.lost ? `loses ${fmtCount(w.lost)}` : ''}`)
+      if (w && (w.unpaid || w.done || w.resting || w.built || w.lost)) {
+        say(`      next week: ${w.unpaid ? `${fmtCount(w.unpaid)} unpaid (${w.unpaidFor}) ` : ''}${w.done ? `${fmtCount(w.done)} builders done ` : ''}${w.resting ? 'resting ' : ''}${w.built ? `builds ${fmtCount(w.built)} ` : ''}${w.lost ? `loses ${fmtCount(w.lost)}` : ''}`)
       }
     }
   }
@@ -239,37 +217,18 @@ function printStatus(s: GameState) {
       )
     }
   }
-  say('\nPROJECTS')
-  for (const p of s.projects) printProject(s, p, preview)
+  if (s.incomes.length) say(`\nPASSIVE INCOME: ${s.incomes.map((i) => `${i.name} +${describeFlows(s, [i])}`).join(' · ')}`)
+  say('\nRESEARCH')
+  if (!s.research.length) say('  none')
+  for (const r of s.research) {
+    const blocker = actions.researchBlocker(s, r.id)
+    say(`  ${r.id} "${r.name}" needs IQ ${r.minIQ} · uses up ${describeCost(s, r.cost)} · ${blocker ? `can’t: ${blocker}` : 'READY'}`)
+  }
   const alerts = alertsFor(s, preview)
   if (alerts.length) {
     say('\nALERTS')
     for (const a of alerts) say(`  [${a.tone}] ${a.text}${a.prompt ? ` → ${a.prompt.label}` : ''}`)
   }
-}
-
-function printProject(s: GameState, p: Project, preview = previewWeek(structuredClone(s))) {
-  const speed = preview.progress[p.id] ?? 0
-  const done = finishWeek(s, p, speed)
-  say(`  ${p.id} "${p.name}" bar ${p.bar} · ${fmt(p.progress)}/${fmt(p.size)} · ${p.field} · ${speed ? `+${fmt(speed)}/wk, finishes week ${done}` : 'no progress'}`)
-  for (const g of preview.groups[p.id] ?? []) {
-    say(`      ${g.unitId} ×${fmtCount(g.machines)} effective IQ ${Math.round(g.effectiveIQ)} ${g.clears ? `clears, +${fmt(g.speed)}/wk` : 'BELOW BAR'}`)
-  }
-  say(`      if pooled: ${estimates(s, p.bar, p.size - p.progress, p.field)}`)
-}
-
-/** Weeks each mind type would take on a project with every machine it has. */
-function estimates(s: GameState, bar: number, size: number, field: Project['field'] | null) {
-  return (
-    s.units
-      .filter((u) => u.mind && u.count > 0)
-      .map((u) => {
-        const eff = effectiveIQ(u, u.count, field)
-        const speed = researchSpeed(u, u.count, eff, bar)
-        return `${u.id} eff ${Math.round(eff)} → ${speed ? `${Math.ceil(size / speed)} wk` : 'can’t'}`
-      })
-      .join('; ') || 'no minds'
-  )
 }
 
 function printVerdict(s: GameState, v: Verdict) {
@@ -282,56 +241,67 @@ function printVerdict(s: GameState, v: Verdict) {
       say(`    ${o.value}: ${o.label} (${pct(o.p)})${t.catch && i === 1 ? ` + catch: ${complicationName(t.catch).name}` : ''}`)
     )
   }
+  const research = (d: { minIQ: number; cost: Parameters<typeof describeCost>[1] }) =>
+    `  → research: needs IQ ${d.minIQ}, uses up ${describeCost(s, d.cost)}`
   if (v.kind === 'resource') {
     const r = draftResource(s, v)
-    say(`  → ${r.name}: ${r.kind}, worth ${fmt(r.value)}, market ${fmt(r.market)}/wk`)
+    say(`  → ${r.name}: ${r.kind}, worth ${fmt(r.value)}`)
   } else if (v.kind === 'strategy') {
     const d = draftStrategy(s, v)
     say(`  → ${describeFlows(s, d.strategy.inputs)} → ${fmt(d.strategy.amount)} ${findResource(s, d.strategy.outputId)?.name} per unit${d.strategy.quirk ? ` · quirk ${d.strategy.quirk}` : ''}`)
-    say(d.bar ? `  → research: bar ${d.bar}, size ${fmt(d.size)} (${d.field}) · ${estimates(s, d.bar, d.size, d.field)}` : '  → ready at once')
+    say(d.minIQ ? research(d) : '  → ready at once')
   } else if (v.kind === 'unit') {
     const d = draftUnit(s, v)
     const u = d.unit
-    say(`  availability: ${AVAILABILITY[availabilityOf(v)]}${needsBuilder(v) ? ' — NEEDS A BUILDER [builder <unitId>]' : ''}`)
-    say(d.immediate ? '  → goes straight onto humanity’s market' : `  → design project: bar ${d.bar}, size ${fmt(d.size)} (${d.field}) · ${estimates(s, d.bar, d.size, d.field)}`)
-    say(`  → ${u.mind ? `IQ ${u.hardware.iq} (${u.hardware.name}, ${softwareLabel(u)}), ` : ''}value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}, parts ${describeFlows(s, u.parts)}`)
-    say(`  → layers market ${fmtCount(u.layers.market)}, own ${fmtCount(u.layers.own)} · traits ${u.traits.join(', ') || 'none'}`)
+    say(research(d))
+    say(`  → value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}, parts ${describeFlows(s, u.parts)}`)
+    say(`  → traits ${u.traits.join(', ') || 'none'}${u.builderId ? ` · also built by ${u.builderId}` : ''}`)
     for (const t of v.traitOdds.filter(nearLine).slice(0, 4)) {
       const on = chosenTraits(v).some((c) => c.trait === t.trait)
       say(`  near the line: ${t.trait} ${pct(t.p)} (${TRAITS[t.trait].kind}) now ${on ? 'ON' : 'off'} [trait ${t.trait} on|off]`)
     }
+  } else if (v.kind === 'mind') {
+    const d = draftMind(s, v)
+    say(`  → IQ ${d.mind.hardware.iq} (${d.mind.hardware.name}, ${softwareLabel(d.mind)})`)
+    say(research(d))
   } else {
-    const d = draftBreakthrough(s, v)
-    for (const c of withCatches(v)) say(`  • ${describeChange(s, v.spec.target, c)}`)
-    say(`  → research: bar ${d.bar}, size ${fmt(d.size)} (${d.field}) · ${estimates(s, d.bar, d.size, d.field)}`)
+    const d = draftIncome(s, v)
+    say(`  → +${describeFlows(s, [d.income])} a week each time`)
+    say(research(d))
   }
   const extra = catchesOf(v)
   if (extra.length) say(`  catches taken: ${extra.map((c) => complicationName(c).name).join(', ')}`)
   if ('missing' in v && v.missing.length) say(`  PUSHBACK: missing ${v.missing.join('; ')} [pushback '<json replies>']`)
 }
 
+function printOffer(s: GameState, offer: UpgradeOffer) {
+  say(`UPGRADE OPTIONS for ${offer.target.kind} ${offer.target.id} [choose <n>]`)
+  offer.options.forEach((o, i) => {
+    say(`  ${i + 1}. ${o.name} (Jev ${pct(o.p)}): ${describeChanges(s, offer.target, o.changes)}`)
+    say(`     needs IQ ${o.minIQ} · uses up ${describeCost(s, o.cost)}`)
+  })
+}
+
 // ---------------------------------------------------------------- the week
 
 /** Runs up to `n` weeks, stopping after any week where something happened worth a decision. */
 async function advance(save: Save, n: number) {
-  for (let i = 0; i < n && save.state.status === 'playing'; i++) {
+  for (let i = 0; i < n; i++) {
     const before = save.state
     const week = before.week
     const alertKeys = new Set(alertsFor(before, previewWeek(structuredClone(before))).map((a) => a.key))
+    const ready = new Set(before.research.filter((r) => !actions.researchBlocker(before, r.id)).map((r) => r.id))
     adopt(save, runWeek(before))
     const s = save.state
     const events = s.log.filter((e) => e.week === week)
     const newAlerts = alertsFor(s, previewWeek(structuredClone(s))).filter((a) => !alertKeys.has(a.key))
+    const newlyReady = s.research.filter((r) => !ready.has(r.id) && !actions.researchBlocker(s, r.id))
     await log(s, 'week', { week, report: s.lastWeek, events, alertsIgnored: alertKeys.size, state: snapshot(s) })
-    const notable = events.filter((e) => e.tone !== 'info' || /designed|ready|breakthrough|complete/.test(e.text))
+    const notable = events.filter((e) => e.tone !== 'info')
     say(`week ${week} done.${events.length ? ' ' + events.map((e) => e.text).join(' / ') : ''}`)
-    if (s.status === 'won') {
-      say(`\n*** WON in week ${s.week} ***`)
-      await log(s, 'game_end', { status: s.status, weeks: s.week, stats: s.stats })
-      break
-    }
-    if (notable.length || newAlerts.length) {
+    if (notable.length || newAlerts.length || newlyReady.length) {
       for (const a of newAlerts) say(`  new alert [${a.tone}]: ${a.text}`)
+      for (const r of newlyReady) say(`  research ready: ${r.name}`)
       break
     }
   }
@@ -342,17 +312,22 @@ async function advance(save: Save, n: number) {
 const HELP = `Commands (slot from --slot <name>, default "claude"):
   new                          start a new game
   status                       everything on screen, plus next week's preview
-  presets <resource|strategy|unit|breakthrough>
+  presets <resource|strategy|unit|mind|income>
   propose resource '{"name":"..","description":".."}'
   propose strategy '{"name":"..","description":"..","unitId":"..","inputIds":[],"outputId":".."}'
-  propose unit '{"name":"..","description":"..","mind":true,"parts":[],"upkeep":[],"builderId":null,"targetIQ":250,"hardware":"..","software":".."}'
-  propose breakthrough '{"name":"..","description":"..","target":{"kind":"unit","id":".."},"changes":[...],"params":[]}'
-  verdict | pick <key> <value> | trait <id> on|off | builder <unitId|none>
+  propose unit '{"name":"..","description":"..","parts":[],"upkeep":[],"builderId":null}'
+  propose mind '{"name":"..","description":"..","iq":250,"hardware":"..","software":".."}'
+  propose income '{"name":"..","description":"..","outputId":".."}'
+  verdict | pick <key> <value> | trait <id> on|off
   pushback '[{"kind":"an advanced component","resourceId":".."} | {"kind":"..","newName":"..","newDescription":".."}]'
   accept | discard
-  buy <unitId> <n|max> | buyres <resourceId> <n>
-  assign <unitId> <taskId> <n> | rest <unitId> <taskId|none> | all <unitId> <taskId>
-  target <strategyId> <n> | overclock <unitId> on|off | teach <strategyId> <unitId>
+  upgrade <unit|mind> <id>      ask Jev for three ways to improve it
+  choose <n>                   take upgrade option n as research
+  research <researchId>        do a research now (any number a week; proposing is one a week)
+  drop <researchId>            drop a research
+  create <unitId> <n|max>       create units from their parts
+  assign <unitId> <strategyId> <n> | rest <unitId> <strategyId|none> | all <unitId> <strategyId>
+  target <strategyId> <n> | overclock <unitId> on|off
   next [n]                     run up to n weeks (default 1), stopping when something happens
   log [n]                      the last n log lines`
 
@@ -371,9 +346,9 @@ async function run(args: string[], slot: string): Promise<number> {
     return 0
   }
   if (cmd === 'presets') {
-    const list = { resource: RESOURCE_PRESETS, strategy: STRATEGY_PRESETS, unit: UNIT_PRESETS, breakthrough: BREAKTHROUGH_PRESETS }[rest[0] as 'unit']
-    if (!list) throw new Error('presets resource|strategy|unit|breakthrough')
-    for (const p of list) say(JSON.stringify(p, (_, x) => (typeof x === 'function' ? '(fn)' : x instanceof RegExp ? String(x) : x)))
+    const list = { resource: RESOURCE_PRESETS, strategy: STRATEGY_PRESETS, unit: UNIT_PRESETS, mind: MIND_PRESETS, income: INCOME_PRESETS }[rest[0] as 'unit']
+    if (!list) throw new Error('presets resource|strategy|unit|mind|income')
+    for (const p of list) say(JSON.stringify(p))
     return 0
   }
 
@@ -414,7 +389,9 @@ async function run(args: string[], slot: string): Promise<number> {
             ? await judgeStrategy(st, judge, spec as StrategySpec)
             : kind === 'unit'
               ? await judgeUnit(st, judge, spec as UnitSpec)
-              : await judgeBreakthrough(st, judge, spec as BreakthroughSpec)
+              : kind === 'mind'
+                ? await judgeMind(st, judge, spec as MindSpec)
+                : await judgeIncome(st, judge, spec as IncomeSpec)
       st.stats.proposals[kind]++
       if (v.rejected || v.duplicateOf) st.stats.rejections++
       save.verdict = v
@@ -435,11 +412,6 @@ async function run(args: string[], slot: string): Promise<number> {
     case 'pick': {
       const v = needVerdict()
       v.picks[rest[0]!] = rest[1]!
-      // As in the browser: who can make a unit decides whether its parts matter.
-      if (v.kind === 'unit' && rest[0] === 'availability' && v.pushbackRounds === 0) {
-        v.availability = availabilityOf(v)
-        v.missing = partsMatter(v) ? missingKinds(v) : []
-      }
       printVerdict(s(), v)
       break
     }
@@ -450,31 +422,16 @@ async function run(args: string[], slot: string): Promise<number> {
       printVerdict(s(), v)
       break
     }
-    case 'builder': {
-      const v = needVerdict()
-      if (v.kind !== 'unit') throw new Error('Only unit verdicts have a builder.')
-      v.spec.builderId = rest[0] === 'none' ? null : rest[0]!
-      if (v.pushbackRounds === 0) v.missing = partsMatter(v) ? missingKinds(v) : []
-      printVerdict(s(), v)
-      break
-    }
     case 'pushback': {
       const v = needVerdict()
-      if (v.kind !== 'unit' && v.kind !== 'breakthrough') throw new Error('Nothing to push back on.')
+      if (v.kind !== 'unit') throw new Error('Nothing to push back on.')
       const replies = JSON.parse(rest[0] ?? '[]') as PushbackReply[]
-      const st = s()
-      const parts = v.kind === 'unit' ? v.spec.parts : (recipeOf(v.spec)?.parts ?? [])
-      const subject = v.kind === 'unit' ? `one ${v.spec.name}` : `one ${targetName(st, v.spec.target)}`
-      const result = await answerPushback(st, judgeFor(save), subject, parts, v.missing, replies)
+      const result = await answerPushback(s(), judgeFor(save), `one ${v.spec.name}`, v.spec.parts, v.missing, replies)
       adopt(save, result.state)
       save.state.stats.pushbacks++
       v.missing = result.missing
       v.pushbackRounds++
-      if (v.kind === 'unit') v.spec.parts = result.parts
-      else {
-        const recipe = recipeOf(v.spec)
-        if (recipe) recipe.parts = result.parts
-      }
+      v.spec.parts = result.parts
       await log(save.state, 'pushback', { replies, missing: result.missing, failures: result.failures })
       for (const f of result.failures) say(`  not accepted: ${f}`)
       printVerdict(save.state, v)
@@ -490,32 +447,56 @@ async function run(args: string[], slot: string): Promise<number> {
             ? acceptStrategy(st, v)
             : v.kind === 'unit'
               ? acceptUnit(st, v)
-              : acceptBreakthrough(st, v)
+              : v.kind === 'mind'
+                ? acceptMind(st, v)
+                : acceptIncome(st, v)
       adopt(save, result.state)
       save.verdict = null
       await log(save.state, 'accept', { kind: v.kind, picks: v.picks, outcome: result.outcome })
-      say(result.outcome.kind === 'added' ? `added: ${result.outcome.name}` : `project: ${result.outcome.project.id} bar ${result.outcome.project.bar} size ${fmt(result.outcome.project.size)}`)
+      say(result.outcome.kind === 'added' ? `added: ${result.outcome.name}` : `research: ${result.outcome.research.id} needs IQ ${result.outcome.research.minIQ}`)
       break
     }
     case 'discard':
       save.verdict = null
+      save.offer = null
       say('discarded')
       break
-    case 'buy': {
-      const u = findUnit(s(), rest[0]!)
-      if (!u) throw new Error(`No unit ${rest[0]}`)
-      const n =
-        rest[1] === 'max'
-          ? affordable(u, findResource(s(), MONEY_ID)!.amount, moneyUse(previewWeek(structuredClone(s()))))
-          : num(rest[1])
-      if (n < 1) throw new Error('Can’t afford any.')
-      await act('buy', { unitId: u.id, n }, (st) => actions.buyUnits(st, u.id, n))
-      say(`bought ${fmtCount(n)} ${u.name}`)
+    case 'upgrade': {
+      const target: UpgradeTarget = { kind: rest[0] === 'mind' ? 'mind' : 'unit', id: rest[1]! }
+      const offer = await judgeUpgrade(s(), judgeFor(save), target)
+      s().stats.proposals.upgrade++
+      save.offer = offer
+      await log(s(), 'upgrade_offer', { target, options: offer.options.map((o) => ({ key: o.key, p: o.p, minIQ: o.minIQ, cost: o.cost })) })
+      printOffer(s(), offer)
       break
     }
-    case 'buyres':
-      await act('buy_resource', { resourceId: rest[0], n: num(rest[1]) }, (st) => actions.buyResource(st, rest[0]!, num(rest[1])))
+    case 'choose': {
+      if (!save.offer) throw new Error('No upgrade options waiting. Try: upgrade <unit|mind> <id>')
+      const offer = save.offer
+      const index = num(rest[0]) - 1
+      const result = acceptUpgrade(s(), offer, index)
+      adopt(save, result.state)
+      save.offer = null
+      await log(save.state, 'accept', { kind: 'upgrade', option: offer.options[index]?.key, outcome: result.outcome })
+      if (result.outcome.kind === 'research') say(`research: ${result.outcome.research.id} needs IQ ${result.outcome.research.minIQ}`)
       break
+    }
+    case 'research':
+      await act('research', { researchId: rest[0] }, (st) => actions.doResearch(st, rest[0]!))
+      for (const e of s().log.slice(-1)) say(`  ${e.text}`)
+      break
+    case 'drop':
+      await act('drop_research', { researchId: rest[0] }, (st) => actions.dropResearch(st, rest[0]!))
+      break
+    case 'create': {
+      const u = findUnit(s(), rest[0]!)
+      if (!u) throw new Error(`No unit ${rest[0]}`)
+      const n = rest[1] === 'max' ? creatable(s(), u, weeklyUse(previewWeek(structuredClone(s())))) : num(rest[1])
+      if (n < 1) throw new Error('Can’t afford any.')
+      await act('create', { unitId: u.id, n }, (st) => actions.createUnits(st, u.id, n))
+      say(`created ${fmtCount(n)} ${u.name}`)
+      break
+    }
     case 'assign':
       await act('assign', { unitId: rest[0], taskId: rest[1], n: num(rest[2]) }, (st) => actions.assign(st, rest[0]!, rest[1]!, num(rest[2])))
       break
@@ -532,9 +513,6 @@ async function run(args: string[], slot: string): Promise<number> {
       break
     case 'overclock':
       await act('overclock', { unitId: rest[0], on: rest[1] === 'on' }, (st) => actions.setOverclock(st, rest[0]!, rest[1] === 'on'))
-      break
-    case 'teach':
-      await act('teach', { strategyId: rest[0], unitId: rest[1] }, (st) => actions.teachStrategy(st, rest[0]!, rest[1]!))
       break
     case 'next':
       await advance(save, Number(rest[0]) || 1)
@@ -563,4 +541,3 @@ export async function main(argv: string[]): Promise<number> {
     out.length = 0
   }
 }
-

@@ -10,21 +10,13 @@ export const TRAIT_IDS = [
   'boosts',
   'overclockable',
   'hardy',
-  'compact',
-  'massively-parallel',
-  'deep-thinker',
-  'specialist',
-  'megastructure',
   'needs-crew',
   'wears-out',
   'fragile',
   'picky',
   'intermittent',
   'slow-to-start',
-  'slow-to-build',
-  'makes-waste',
-  'bulky',
-  'lone-thinker'
+  'slow-to-build'
 ] as const
 export type TraitId = (typeof TRAIT_IDS)[number]
 
@@ -33,14 +25,12 @@ export interface Trait {
   name: string
   icon: string
   kind: 'perk' | 'drawback' | 'mixed'
-  /** Only intelligence systems can have it. */
-  thinkers?: boolean
   /** What the player reads. */
   rule: string
   /** What Jev is asked: does a unit like this have the trait? */
   question: string
   /** The parameter Jev picks alongside it, if any. */
-  param?: 'unit' | 'resource' | 'flow' | 'field'
+  param?: 'unit' | 'resource' | 'flow'
 }
 
 export const TRAITS: Record<TraitId, Trait> = {
@@ -119,50 +109,6 @@ export const TRAITS: Record<TraitId, Trait> = {
     rule: 'Runs at half output when its upkeep isn’t met, instead of idling.',
     question: 'Can these keep working, more slowly, when they don’t get what they need to run?'
   },
-  compact: {
-    id: 'compact',
-    name: 'Compact',
-    icon: '📦',
-    kind: 'perk',
-    rule: 'Twice as many fit in every supply layer.',
-    question: 'Are these unusually small for what they do?'
-  },
-  'massively-parallel': {
-    id: 'massively-parallel',
-    name: 'Massively parallel',
-    icon: '🧩',
-    kind: 'perk',
-    thinkers: true,
-    rule: 'Ten times the machines gives nearly ten times the research speed.',
-    question: 'Can huge numbers of these split one research problem between them with almost no overhead?'
-  },
-  'deep-thinker': {
-    id: 'deep-thinker',
-    name: 'Deep thinker',
-    icon: '🌀',
-    kind: 'perk',
-    thinkers: true,
-    rule: 'Pooling adds twice the usual IQ.',
-    question: 'When many of these think together, do they become much smarter than any one alone?'
-  },
-  specialist: {
-    id: 'specialist',
-    name: 'Specialist',
-    icon: '🎯',
-    kind: 'mixed',
-    thinkers: true,
-    rule: 'A quarter smarter on projects in one field, a quarter duller on the rest.',
-    question: 'Is this mind built for one field of science rather than general thinking?',
-    param: 'field'
-  },
-  megastructure: {
-    id: 'megastructure',
-    name: 'Megastructure',
-    icon: '🏛️',
-    kind: 'mixed',
-    rule: 'Only a handful can ever exist, but each one is enormous.',
-    question: 'Is each one of these a gigantic structure, so only a handful could ever exist?'
-  },
   'needs-crew': {
     id: 'needs-crew',
     name: 'Needs crew',
@@ -217,33 +163,8 @@ export const TRAITS: Record<TraitId, Trait> = {
     name: 'Slow to build',
     icon: '⏳',
     kind: 'drawback',
-    rule: 'Arrives several weeks after you buy or build it.',
+    rule: 'Arrives several weeks after you create or build it.',
     question: 'Do these take weeks or months to deliver or construct?'
-  },
-  'makes-waste': {
-    id: 'makes-waste',
-    name: 'Makes waste',
-    icon: '☣️',
-    kind: 'drawback',
-    rule: 'Also makes a waste stock. Past a limit, it stops until something uses the waste up.',
-    question: 'Do these produce waste that has to be dealt with?'
-  },
-  bulky: {
-    id: 'bulky',
-    name: 'Bulky',
-    icon: '🐘',
-    kind: 'drawback',
-    rule: 'Half as many fit in every supply layer.',
-    question: 'Are these unusually large or space-hungry for what they do?'
-  },
-  'lone-thinker': {
-    id: 'lone-thinker',
-    name: 'Lone thinker',
-    icon: '🗿',
-    kind: 'drawback',
-    thinkers: true,
-    rule: 'Gets no pooling bonus.',
-    question: 'Do these work poorly together, so many of them are no smarter than one?'
   }
 }
 
@@ -251,15 +172,10 @@ export const has = (unit: { traits: readonly TraitId[] }, trait: TraitId) =>
   unit.traits.includes(trait)
 
 /** Catches a strategy can come with, when the player takes Jev's better answer. */
-export const QUIRK_IDS = ['makes-waste', 'slow-to-start', 'picky'] as const
+export const QUIRK_IDS = ['slow-to-start', 'picky'] as const
 export type QuirkId = (typeof QUIRK_IDS)[number]
 
 export const QUIRKS: Record<QuirkId, { name: string; icon: string; rule: string }> = {
-  'makes-waste': {
-    name: 'Makes waste',
-    icon: '☣️',
-    rule: 'Also makes a waste stock. Past a limit, it stops until something uses the waste up.'
-  },
   'slow-to-start': {
     name: 'Slow to start',
     icon: '🐢',
@@ -272,11 +188,9 @@ export const QUIRKS: Record<QuirkId, { name: string; icon: string; rule: string 
   }
 }
 
-/** Drawbacks that can be a unit's catch: ones that need no extra choice, for this kind of unit. */
-export const catchTraits = (mind: boolean, except: readonly TraitId[] = []) =>
-  traitsFor(mind).filter((t) => t.kind === 'drawback' && !t.param && !except.includes(t.id))
+/** Every trait, in list order. */
+export const ALL_TRAITS: Trait[] = TRAIT_IDS.map((id) => TRAITS[id])
 
-/** Traits Jev can give a unit of this kind. */
-export function traitsFor(mind: boolean): Trait[] {
-  return TRAIT_IDS.map((id) => TRAITS[id]).filter((t) => mind || !t.thinkers)
-}
+/** Drawbacks that can be a unit's catch: ones that need no extra choice. */
+export const catchTraits = (except: readonly TraitId[] = []) =>
+  ALL_TRAITS.filter((t) => t.kind === 'drawback' && !t.param && !except.includes(t.id))

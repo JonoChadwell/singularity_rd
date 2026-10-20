@@ -4,12 +4,11 @@ import {
   findResource,
   findUnit,
   labour,
-  owned,
-  unitLimit
+  owned
 } from './model'
-import { completeProject, effectiveIQ, researchSpeed, strategyRate } from './research'
+import { strategyRate } from './research'
 import { has } from './traits'
-import type { GameState, Project, Strategy, UnitType, UnitWeek, WeekReport } from './types'
+import type { GameState, Strategy, UnitType, UnitWeek, WeekReport } from './types'
 
 /** Crew is rationed like a flow, under a pseudo-resource per crewed unit type. */
 const crewId = (unitId: string) => `crew:${unitId}`
@@ -25,8 +24,7 @@ interface Runner {
   makes: Map<string, number>
   /** Build strategies: units per machine per week. */
   builds: { unitId: string; perMachine: number; cap: number } | null
-  strategy: Strategy | null
-  project: Project | null
+  strategy: Strategy
   /** Share of machines running, which sets what they use. */
   f: number
   /** Share of full output. Below `f` only for Hardy units short of upkeep. */
@@ -44,8 +42,7 @@ function emptyUnitWeek(): UnitWeek {
     done: 0,
     resting: false,
     built: 0,
-    lost: 0,
-    choked: false
+    lost: 0
   }
 }
 
@@ -67,15 +64,6 @@ export function outputFactor(state: GameState, u: UnitType): number {
     f *= Math.max(0, (u.count - cold) / u.count)
   }
   return f
-}
-
-const wastePerMachine = (u: UnitType) => labour(u)
-
-/** Whether a unit is stopped because its waste has piled up past the limit. */
-export function choked(state: GameState, u: UnitType): boolean {
-  if (!u.waste) return false
-  const waste = findResource(state, u.waste)
-  return !!waste && waste.amount >= B.WASTE_LIMIT_WEEKS * Math.max(1, u.count) * wastePerMachine(u)
 }
 
 export const resting = (state: GameState, u: UnitType) =>
@@ -101,79 +89,58 @@ function buildRunners(state: GameState, report: WeekReport): Runner[] {
       week.resting = true
       continue
     }
-    if (choked(state, u)) {
-      week.choked = true
-      continue
-    }
     const factor = outputFactor(state, u)
     for (const [taskId, machines] of Object.entries(byTask)) {
+      const strategy = state.strategies.find((s) => s.id === taskId)
+      if (!strategy) continue
       const runner: Runner = {
-        label: '',
+        label: strategy.name,
         unit: u,
         machines,
         needs: new Map(),
         upkeep: new Set(),
         makes: new Map(),
         builds: null,
-        strategy: null,
-        project: null,
+        strategy,
         f: 1,
         o: 1,
         limitedBy: null,
         picky: has(u, 'picky')
       }
-      const project = state.projects.find((p) => p.id === taskId)
-      const strategy = state.strategies.find((s) => s.id === taskId)
-      if (project) {
-        runner.project = project
-        runner.label = `${u.name} on ${project.name}`
-      } else if (strategy) {
-        runner.strategy = strategy
-        runner.label = strategy.name
-        const rate = strategyRate(state, strategy)
-        for (const f of rate.inputs) {
-          runner.needs.set(f.resourceId, (runner.needs.get(f.resourceId) ?? 0) + f.amount)
+      const rate = strategyRate(state, strategy)
+      for (const f of rate.inputs) {
+        runner.needs.set(f.resourceId, (runner.needs.get(f.resourceId) ?? 0) + f.amount)
+      }
+      if (strategy.quirk === 'picky') runner.picky = true
+      if (strategy.kind === 'make') {
+        const out = findResource(state, strategy.outputId)
+        const warm =
+          strategy.quirk === 'slow-to-start' ? Math.min(1, ((strategy.weeksRun ?? 0) + 1) / B.SLOW_WEEKS) : 1
+        runner.makes.set(strategy.outputId, rate.amount * factor * warm)
+        const by = u.byproduct ? findResource(state, u.byproduct) : undefined
+        if (by && out && by.id !== out.id) {
+          const value = rate.amount * factor * out.value * B.BY_PRODUCT_SHARE
+          runner.makes.set(by.id, (runner.makes.get(by.id) ?? 0) + value / by.value)
         }
-        if (strategy.quirk === 'picky') runner.picky = true
-        if (strategy.waste) {
-          const waste = findResource(state, strategy.waste)
-          if (waste && waste.amount >= B.WASTE_LIMIT_WEEKS * machines * wastePerMachine(u)) {
-            week.choked = true
-            continue
-          }
-          runner.makes.set(strategy.waste, wastePerMachine(u))
-        }
-        if (strategy.kind === 'make') {
-          const out = findResource(state, strategy.outputId)
-          const warm =
-            strategy.quirk === 'slow-to-start' ? Math.min(1, ((strategy.weeksRun ?? 0) + 1) / B.SLOW_WEEKS) : 1
-          runner.makes.set(strategy.outputId, rate.amount * factor * warm)
-          const by = u.byproduct ? findResource(state, u.byproduct) : undefined
-          if (by && out && by.id !== out.id) {
-            const value = rate.amount * factor * out.value * B.BY_PRODUCT_SHARE
-            runner.makes.set(by.id, (runner.makes.get(by.id) ?? 0) + value / by.value)
-          }
-        } else if (strategy.kind === 'crew') {
-          runner.makes.set(crewId(strategy.outputId), rate.amount)
-        } else {
-          const target = findUnit(state, strategy.outputId)
-          if (!target) continue
-          const goal = Math.min(strategy.target ?? 0, unitLimit(target))
-          const needed = Math.max(0, goal - owned(target) - (strategy.carry ?? 0))
-          const perMachine = rate.amount * factor
-          const useful = perMachine > 0 ? Math.ceil(needed / perMachine - 1e-9) : 0
-          const used = Math.min(machines, useful)
-          week.done += machines - used
-          if (used <= 0) continue
-          runner.machines = used
-          runner.builds = { unitId: target.id, perMachine, cap: needed }
-          // Builders that only need to build part of a batch use a matching share of parts.
-          const share = Math.min(1, needed / (used * perMachine))
-          for (const [id, amount] of runner.needs) runner.needs.set(id, amount * share)
-          runner.builds.perMachine *= share
-        }
-        if (u.waste) runner.makes.set(u.waste, wastePerMachine(u))
-      } else continue
+      } else if (strategy.kind === 'crew') {
+        runner.makes.set(crewId(strategy.outputId), rate.amount)
+      } else {
+        const target = findUnit(state, strategy.outputId)
+        if (!target) continue
+        const goal = strategy.target ?? 0
+        const needed = Math.max(0, goal - owned(target) - (strategy.carry ?? 0))
+        const perMachine = rate.amount * factor
+        const useful = perMachine > 0 ? Math.ceil(needed / perMachine - 1e-9) : 0
+        const used = Math.min(machines, useful)
+        week.done += machines - used
+        if (used <= 0) continue
+        runner.machines = used
+        runner.builds = { unitId: target.id, perMachine, cap: needed }
+        // Builders that only need to build part of a batch use a matching share of parts.
+        const share = Math.min(1, needed / (used * perMachine))
+        for (const [id, amount] of runner.needs) runner.needs.set(id, amount * share)
+        runner.builds.perMachine *= share
+      }
       upkeepNeeds(u, runner)
       runners.push(runner)
     }
@@ -222,11 +189,8 @@ export function simulateWeek(state: GameState): WeekReport {
     flows: {},
     shares: {},
     runs: {},
-    groups: {},
-    progress: {},
     units: {},
-    wasted: {},
-    finished: []
+    wasted: {}
   }
   const runners = buildRunners(state, report)
   const isFlow = (id: string) => isCrew(id) || findResource(state, id)?.kind === 'flow'
@@ -314,12 +278,10 @@ export function simulateWeek(state: GameState): WeekReport {
       const amount = Math.min(r.builds.cap, r.builds.perMachine * r.machines * r.o)
       built.set(r.builds.unitId, (built.get(r.builds.unitId) ?? 0) + amount)
     }
-    if (r.strategy) {
-      const run = (report.runs[r.strategy.id] ??= { units: 0, fraction: 0, limitedBy: null })
-      run.units += r.machines
-      run.fraction = r.o
-      run.limitedBy = r.o < 1 - 1e-9 ? r.limitedBy : null
-    }
+    const run = (report.runs[r.strategy.id] ??= { units: 0, fraction: 0, limitedBy: null })
+    run.units += r.machines
+    run.fraction = r.o
+    run.limitedBy = r.o < 1 - 1e-9 ? r.limitedBy : null
     const week = report.units[r.unit.id]!
     if (r.limitedBy && r.upkeep.has(r.limitedBy) && r.f < 1 - 1e-9) {
       week.unpaid += r.machines * (1 - r.o)
@@ -327,16 +289,11 @@ export function simulateWeek(state: GameState): WeekReport {
     }
   }
 
-  // Research.
-  for (const p of state.projects) {
-    const groups = runners.filter((r) => r.project?.id === p.id)
-    report.groups[p.id] = groups.map((r) => {
-      const machines = r.machines * r.f
-      const eff = effectiveIQ(r.unit, machines, p.field)
-      const speed = researchSpeed(r.unit, machines, eff, p.bar)
-      return { unitId: r.unit.id, machines, effectiveIQ: eff, clears: eff >= p.bar, speed }
-    })
-    report.progress[p.id] = report.groups[p.id]!.reduce((n, g) => n + g.speed, 0)
+  // Passive incomes arrive with the week's other stock.
+  for (const income of state.incomes) {
+    if (!findResource(state, income.resourceId)) continue
+    stockIn.set(income.resourceId, (stockIn.get(income.resourceId) ?? 0) + income.amount)
+    note(income.resourceId, income.name, income.amount)
   }
 
   // ---- End of the week.
@@ -399,15 +356,7 @@ export function simulateWeek(state: GameState): WeekReport {
     if (runners.some((r) => r.strategy === s && r.o > 0)) s.weeksRun = (s.weeksRun ?? 0) + 1
   }
 
-  for (const p of [...state.projects]) {
-    p.progress += report.progress[p.id] ?? 0
-    if (p.progress >= p.size - 1e-9) {
-      p.progress = p.size
-      report.finished.push(completeProject(state, p))
-    }
-  }
-
-  for (const res of state.resources) res.boughtThisWeek = 0
+  state.proposedThisWeek = false
   state.week += 1
   return report
 }

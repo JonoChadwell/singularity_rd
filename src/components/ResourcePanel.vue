@@ -5,6 +5,7 @@
       <button class="add" @click="ui.openInvent({ kind: 'resource' })">+ Resource</button>
     </div>
     <p class="muted small hint">Hover or focus one to see where next week’s comes from and goes.</p>
+    <p v-if="!game.state.resources.length" class="empty">Nothing yet. Propose one: Money, Power, Training Data…</p>
     <ul class="plain-list list">
       <li v-for="r in game.state.resources" :key="r.id" tabindex="0">
         <span class="icon">{{ r.icon }}</span>
@@ -18,14 +19,28 @@
               {{ Math.round(share(r.id) * 100) }}%
             </span>
           </div>
-          <button
-            v-if="unmade(r.id)"
-            class="link"
-            :title="`Propose a strategy that makes ${r.name}`"
-            @click.stop="ui.openInvent({ kind: 'strategy', outputId: r.id })"
-          >
-            How will you get this?
-          </button>
+          <div v-if="unmade(r.id)" class="how small">
+            <template v-if="ways(r).length > 1">
+              <span class="muted">How will you get this?</span>
+              <button
+                v-for="w in ways(r)"
+                :key="w.kind"
+                class="link"
+                :title="`Propose ${w.label.toLowerCase()} that makes ${r.name}`"
+                @click.stop="ui.openInvent({ kind: w.kind, outputId: r.id })"
+              >
+                {{ w.label }}
+              </button>
+            </template>
+            <button
+              v-else
+              class="link"
+              :title="`Propose ${ways(r)[0]!.label.toLowerCase()} that makes ${r.name}`"
+              @click.stop="ui.openInvent({ kind: ways(r)[0]!.kind, outputId: r.id })"
+            >
+              How will you get this?
+            </button>
+          </div>
         </div>
         <div class="amount num">
           <template v-if="r.kind === 'stock'">
@@ -57,9 +72,6 @@
             </p>
           </template>
           <p v-else class="muted">Nothing makes or uses this next week.</p>
-          <p v-if="r.market" class="muted">
-            Humanity sells {{ fmt(r.market) }} a week at {{ fmt(r.value) }} Money each.
-          </p>
         </div>
       </li>
     </ul>
@@ -68,7 +80,8 @@
 
 <script setup lang="ts">
 import { netFlow } from '@/engine/economy'
-import { fmt, MONEY_ID } from '@/engine/model'
+import { fmt } from '@/engine/model'
+import type { Resource } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 import Delta from './DeltaValue.vue'
@@ -79,14 +92,32 @@ const flows = (id: string) => game.preview.flows[id] ?? []
 const made = (id: string) => flows(id).reduce((n, f) => n + Math.max(0, f.amount), 0)
 const share = (id: string) => game.preview.shares[id] ?? 1
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
-/** Nothing makes it, and it can't simply be bought. */
+/**
+ * The proposals that could make a resource. Only stocks can be passive income, and strategies
+ * need a unit to run them; a flow with no units yet still points at strategies, whose form says
+ * to propose a unit first.
+ */
+function ways(r: Resource): { kind: 'income' | 'strategy'; label: string }[] {
+  const out: { kind: 'income' | 'strategy'; label: string }[] = []
+  if (r.kind === 'stock') out.push({ kind: 'income', label: 'A passive income' })
+  if (game.state.units.length || r.kind === 'flow') out.push({ kind: 'strategy', label: 'A strategy' })
+  return out
+}
+
+/** Nothing makes it: no strategy and no passive income. */
 const unmade = (id: string) =>
-  id !== MONEY_ID &&
   !game.state.strategies.some((s) => s.kind === 'make' && s.outputId === id) &&
-  !game.state.resources.find((r) => r.id === id)?.market
+  !game.state.incomes.some((i) => i.resourceId === id)
 </script>
 
 <style scoped>
+.how {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+
 .hint {
   margin: -4px 0 10px;
 }
