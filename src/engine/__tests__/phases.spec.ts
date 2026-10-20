@@ -16,7 +16,7 @@ import { makeBuildStrategy } from '../research'
 import { describeState } from '../stateText'
 import type { GameState } from '../types'
 import { acceptUnit, answerPushback, judgeUnit, type UnitSpec } from '../unitProposal'
-import { acceptUpgrade, judgeUpgrade, upgradeCandidates } from '../upgrade'
+import { acceptUpgrade, judgeUpgrade, softwareSteps, upgradeCandidates } from '../upgrade'
 import { choice, FakeJudge, noul, score } from './fakeJudge'
 
 // ---------------------------------------------------------------- worlds
@@ -600,6 +600,21 @@ describe('fixes', () => {
     s = acceptUpgrade(s, { ...offer, options: [offer.options[option >= 0 ? option : 0]!] }, 0).state
     s = doResearch(s, s.research[0]!.id)
     expect(keys()).not.toContain('parts_money')
+  })
+
+  it('keeps offering a mind software steps all the way to its ceiling', async () => {
+    let s = phase2(1e9)
+    const server = { kind: 'mind', id: SERVER_ID } as const
+    // Take the smallest step every time: the same +5% again and again must stay on offer.
+    for (let i = 0; i < 10 && softwareSteps(s.minds[0]!).length; i++) {
+      const offer = await judgeUpgrade(s, new FakeJudge({ 'd_*': score(1) }), server)
+      const smallest = offer.options.findIndex((o) => o.key === `software_${Math.min(...softwareSteps(s.minds[0]!))}`)
+      expect(smallest).toBeGreaterThanOrEqual(0)
+      s = acceptUpgrade(s, offer, smallest).state
+      s = doResearch(s, s.research[0]!.id)
+      s = runWeek(s)
+    }
+    expect(currentIQ(s.minds[0]!)).toBe(150)
   })
 
   it('refuses a pushback reply for a kind of part Jev didn’t ask for', async () => {

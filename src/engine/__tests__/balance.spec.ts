@@ -148,14 +148,14 @@ describe('Phase 2 bots', () => {
     const risky = await play(await phase2(2), steady(reckless), 120)
     expect(used(risky)).toBeLessThan(used(calm) - 10)
     expect(risky.weeksLost).toBeGreaterThan(30)
-    // The same gamble on a brilliant goal, with two minds to design, runs out of time…
-    expect((await play(await phase2(0), steady(reckless), 120)).lost).not.toBeNull()
-    // …unless cover buys the weeks back.
-    const covered = await play(await phase2(0), steady({ ...reckless, coverBelow: 20 }), 120)
-    expect(covered.won).not.toBeNull()
-    expect(covered.weeksGained).toBeGreaterThan(0)
+    // Everything at "humanity would panic" loses, and cover can't buy that much back.
     const panic = { reinvest: true, answers: { alarm: score(4) } }
-    expect((await play(await phase2(2), steady(panic), 120)).lost).not.toBeNull()
+    for (const a of APPROACHES) {
+      expect((await play(await phase2(a), steady(panic), 120)).lost).not.toBeNull()
+      const covered = await play(await phase2(a), steady({ ...panic, coverBelow: 25 }), 120)
+      expect(covered.weeksGained).toBeGreaterThan(0)
+      expect(covered.lost).not.toBeNull()
+    }
   })
 
   it('make cover cost growth when it isn’t needed', async () => {

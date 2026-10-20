@@ -142,11 +142,14 @@ export function upgradeCandidates(state: GameState, target: UpgradeTarget): Cand
   const thing = targetOf(state, target)
   if (!thing) return []
   const all = target.kind === 'mind' ? mindCandidates(state, thing as Mind) : unitCandidates(state, thing as UnitType)
+  // A mind's software steps repeat by size (+5% again is the next version), so only waiting
+  // research rules a mind's option out; an industry unit's done upgrades are gone for good.
+  const done = target.kind === 'unit' ? state.upgrades.flatMap((u) => (u.targetId === target.id && u.key ? [u.key] : [])) : []
   const taken = new Set([
     ...state.research.flatMap((r) =>
       r.effect.kind === 'upgrade' && r.effect.target.id === target.id ? [changeKey(r.effect.changes)] : []
     ),
-    ...state.upgrades.flatMap((u) => (u.targetId === target.id && u.key ? [u.key] : []))
+    ...done
   ])
   return all.filter((c) => !taken.has(changeKey(c.changes)))
 }
