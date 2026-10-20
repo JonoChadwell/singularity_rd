@@ -186,7 +186,7 @@ function printStatus(s: GameState) {
   const [lo, hi] = designRange(s)
   say(`WEEK ${s.week} · Jev calls ${s.stats.jevCalls}`)
   say(
-    `Best IQ ${Math.round(bestIQ(s))} · designs within reach IQ ${lo}–${hi} · ` +
+    `Best IQ ${Math.round(bestIQ(s))}${lockReason(s, 'mind') ? '' : ` · designs within reach IQ ${lo}–${hi}`} · ` +
       (s.proposedThisWeek ? 'research PROPOSED this week' : 'can propose one research this week')
   )
   say('\nRESOURCES')
@@ -209,7 +209,8 @@ function printStatus(s: GameState) {
       const w = preview.units[u.id]
       const { byTask, free } = allocation(s, u)
       say(
-        `  ${u.id} "${u.name}" ×${fmtCount(u.count)} (built ${fmtCount(u.built)}) · create up to ${fmtCount(creatable(s, u, weeklyUse(preview)))} now`
+        `  ${u.id} "${u.name}" ×${fmtCount(u.count)} (built ${fmtCount(u.built)}) · create up to ${fmtCount(creatable(s, u, weeklyUse(preview)))} now` +
+          (s.phase.n === 2 ? ` · humans notice at ${fmt(10 ** Math.max((u.noticed ?? 0) + 1, 4))}${u.risky ? ' (RISKY: −2 weeks each)' : ''}` : '')
       )
       say(
         `      upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · parts ${describeFlows(s, u.parts)} · value ${fmt(u.value)}` +
@@ -557,8 +558,9 @@ async function run(args: string[], slot: string): Promise<number> {
       if (!u) throw new Error(`No unit ${rest[0]}`)
       const n = rest[1] === 'max' ? creatable(s(), u, weeklyUse(previewWeek(structuredClone(s())))) : num(rest[1])
       if (n < 1) throw new Error('Can’t afford any.')
+      const notice = actions.createNotice(s(), u.id, n)
       await act('create', { unitId: u.id, n }, (st) => actions.createUnits(st, u.id, n))
-      say(`created ${fmtCount(n)} ${u.name}`)
+      say(`created ${fmtCount(n)} ${u.name}${notice ? ` · humans noticed: −${notice} week${notice === 1 ? '' : 's'}` : ''}`)
       break
     }
     case 'assign':
