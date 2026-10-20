@@ -60,4 +60,15 @@ End with a report in this shape:
 4. **Friction.** Confusing output, rules you couldn't find, steps that felt like chores.
 5. **Balance.** Was each phase's difficulty right? Which choices mattered? Was risk a real
    choice? Did cover matter?
-6. **Fun** (if your brief asks for it). See your brief.
+6. **Fun** (if your brief asks for it):
+   - **Scores, 1 to 5,** each with one line of why: Phase 1 fun; Phase 2 fun; how well the
+     game engaged with your ideas; difficulty (1 too easy, 3 right, 5 too hard) for each
+     phase; clarity.
+   - **Ideas.** Did your inventions change how the game played, or were they names on the
+     same numbers? Did Jev's verdicts feel like a response to what you wrote? Quote examples.
+   - **Tension.** Did the clock ever worry you? Did risk and cover feel like choices?
+   - **Best three moments and worst three moments,** with the week.
+   - **Dull stretches:** which weeks, and why.
+   - **The one change** you'd make first to make it more fun.
+
+Keep your notes short and use `next n` through quiet weeks: these games are long.
