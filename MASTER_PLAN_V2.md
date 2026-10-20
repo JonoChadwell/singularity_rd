@@ -165,8 +165,8 @@ compounds the one before it, so ordering matters.
 
 **Software upgrades with diminishing returns.** The upgrade offer for a mind now offers
 software steps that close a share of the gap to the ceiling: a third, a half or two-thirds,
-each rounded down to 5% of the hardware's IQ, at least 5%. The Starting Server goes
-100 → 125 (half) → 135 → 140 → 145. A step's cost grows with the IQ it adds, and steeply with
+each rounded down to 5% of the hardware's IQ, at least 5%. Taking the biggest step each time,
+the Starting Server goes 100 → 130 → 140 → 145 → 150. A step's cost grows with the IQ it adds, and steeply with
 how high it goes (`mindDesignCost(after) − mindDesignCost(before)`). A mind can always work on
 its own upgrade: the minimum IQ is never above the target mind's current IQ.
 

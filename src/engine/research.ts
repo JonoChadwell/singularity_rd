@@ -1,5 +1,16 @@
 import * as B from './balance'
-import { defaultTask, findMind, findResource, findStrategy, findUnit, labour, makeId, partsFor } from './model'
+import {
+  defaultTask,
+  describeIncome,
+  findMind,
+  findResource,
+  findStrategy,
+  findUnit,
+  labour,
+  makeId,
+  partsFor
+} from './model'
+import { coverWeeks, moveClock, winPhase } from './phase'
 import { has, type TraitId } from './traits'
 import type { Change, Cost, Flow, GameState, Mind, Research, Strategy, UnitType } from './types'
 
@@ -117,7 +128,7 @@ const scaled = (flows: Flow[], resourceId: string, factor: number) =>
 
 export function applyMindChanges(mind: Mind, changes: Change[]) {
   for (const c of changes) {
-    if (c.kind === 'software') mind.software.bonus = Math.min(B.IQ_CEILING - 1, mind.software.bonus + c.share)
+    if (c.kind === 'software') mind.software.bonus = Math.min(B.IQ_CEILING - 1, Math.round((mind.software.bonus + c.share) * 100) / 100)
     if (c.kind === 'hardware') mind.hardware = { name: c.name, iq: Math.round(mind.hardware.iq * (1 + c.share)) }
   }
 }
@@ -185,15 +196,23 @@ export function addMind(state: GameState, mind: Mind) {
 export function completeResearch(state: GameState, r: Research): string {
   const effect = r.effect
   state.research = state.research.filter((x) => x.id !== r.id)
+  if (r.risk?.weeks) moveClock(state, -r.risk.weeks, `${r.name} alarmed humans`)
   switch (effect.kind) {
     case 'income': {
       state.incomes.push({ ...effect.income })
-      const res = findResource(state, effect.income.resourceId)
-      return `${r.icon} ${effect.income.name}: +${B.nice(effect.income.amount)} ${res?.name ?? '?'} a week.`
+      return `${r.icon} ${effect.income.name}: ${describeIncome(state, effect.income)} a week.`
     }
     case 'unit': {
       addUnit(state, effect.unit)
       return `${effect.unit.icon} ${effect.unit.name} is designed. Create them from parts on its card.`
+    }
+    case 'goal':
+      return winPhase(state, effect.phase)
+    case 'cover': {
+      const weeks = coverWeeks(state, effect.weeks)
+      state.covers++
+      moveClock(state, weeks, `Cover: ${r.name}`)
+      return `${r.icon} ${r.name}: humans look the other way.`
     }
     case 'mind':
       addMind(state, effect.mind)

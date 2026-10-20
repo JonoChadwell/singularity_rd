@@ -1,5 +1,7 @@
 import { simulateWeek } from './economy'
 import { findResource, fmt } from './model'
+import { checkClock } from './phase'
+import { checkNotices } from './risk'
 import type { GameState, LogEntry } from './types'
 
 /** Milestones are moments, not goals: fixed templates filled with the player's names. */
@@ -21,8 +23,17 @@ export function checkMilestones(state: GameState, week = state.week) {
   }
 }
 
+/** Why the week can't be played yet, or null. */
+export function weekBlocker(state: GameState): string | null {
+  if (state.phase.status === 'lost') return 'The game is over.'
+  if (state.phase.status === 'planning') return 'Make a plan for this phase first.'
+  return null
+}
+
 /** Plays one week: simulates it, then writes the week report into the log. */
 export function runWeek(current: GameState): GameState {
+  const blocker = weekBlocker(current)
+  if (blocker) throw new Error(blocker)
   const state = structuredClone(current)
   const week = state.week
   const report = simulateWeek(state)
@@ -43,6 +54,9 @@ export function runWeek(current: GameState): GameState {
   state.quietWeeks = state.decidedThisWeek ? 0 : state.quietWeeks + 1
   state.decidedThisWeek = false
   checkMilestones(state, week)
+  // Units built this week can get noticed; then the clock is checked.
+  checkNotices(state)
+  checkClock(state, week)
   if (state.log.length > 400) state.log = state.log.slice(-400)
   return state
 }

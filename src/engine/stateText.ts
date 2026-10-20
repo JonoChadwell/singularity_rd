@@ -13,9 +13,18 @@ export function describeState(state: GameState): string {
     if (u.traits.length) bits.push(u.traits.map((t) => TRAITS[t].name).join(', '))
     return `- ${u.name}${bits.length ? ` (${bits.join('; ')})` : ''}: ${u.description}`
   }
+  const plan = state.phase.plan
+  const planLines = plan
+    ? [
+        `The AI's current goal: ${plan.goal}.`,
+        state.phase.n === 1 ? `Its plan: ${plan.means}` : `Its plan for humans: ${plan.means}`,
+        ''
+      ]
+    : []
   return [
     'A game. An AI that began as one unattended research server is inventing its way to the singularity. The player proposes resources, units, strategies and upgrades, and you judge them. Be generous and playful: odd paths work if they hang together.',
     '',
+    ...planLines,
     'Resources:',
     ...state.resources.map((r) => `- ${r.name} (${r.kind}): ${r.description}`),
     '',

@@ -21,10 +21,12 @@ import {
   scale,
   type Accepted
 } from './proposals'
+import { lockReason } from './phase'
 import { priceCost } from './research'
+import { alarmQuestion, asksAlarm, riskFrom } from './risk'
 import { proposalText } from './stateText'
 import { ALL_TRAITS, TRAITS } from './traits'
-import type { Change, Cost, GameState, Mind, UnitType, UpgradeTarget } from './types'
+import type { Change, Cost, GameState, Mind, Risk, UnitType, UpgradeTarget } from './types'
 
 // Upgrades. Jev doesn't write, so the game lists every improvement that could apply to the
 // unit or mind, and Jev picks the three most natural, says how hard each is, and who pays.
@@ -40,6 +42,7 @@ export interface UpgradeOption extends Candidate {
   p: number
   minIQ: number
   cost: Cost
+  risk: Risk | null
 }
 
 export interface UpgradeOffer {
@@ -63,20 +66,32 @@ export function targetOf(state: GameState, target: UpgradeTarget): UnitType | Mi
 
 export const targetName = (state: GameState, target: UpgradeTarget) => targetOf(state, target)?.name ?? '?'
 
-function mindCandidates(m: Mind): Candidate[] {
+/**
+ * Software steps that close a third, a half or two-thirds of the gap to the ceiling, rounded
+ * down to SOFTWARE_ROUND and at least that, so each upgrade adds less than the last.
+ */
+export function softwareSteps(m: Mind): number[] {
   const room = iqRoom(m)
-  const fits = B.IQ_STEPS.filter((s) => s <= room + 1e-9)
-  const steps = fits.length || room < 0.1 - 1e-9 ? fits : [Math.floor(room * 10 + 1e-9) / 10]
+  if (room < B.SOFTWARE_ROUND - 1e-9) return []
+  const round = (x: number) => Math.max(1, Math.floor(x / B.SOFTWARE_ROUND + 1e-9)) * B.SOFTWARE_ROUND
+  const steps = B.SOFTWARE_STEPS.map((f) => Math.round(round(room * f) * 100) / 100)
+  return [...new Set(steps)].filter((s) => s <= room + 1e-9)
+}
+
+function mindCandidates(state: GameState, m: Mind): Candidate[] {
+  const hardware = lockReason(state, 'hardware')
+    ? []
+    : B.HARDWARE_STEPS.map((share, i) => {
+        const name = nextHardwareName(m.hardware.name, i + 1)
+        return { key: `hardware_${share}`, name, changes: [{ kind: 'hardware', name, share }] as Change[] }
+      })
   return [
-    ...steps.map((share) => ({
+    ...softwareSteps(m).map((share) => ({
       key: `software_${share}`,
       name: `${m.software.name} ${softwareVersion(m.software.bonus + share)}`,
       changes: [{ kind: 'software', share }] as Change[]
     })),
-    ...B.HARDWARE_STEPS.map((share, i) => {
-      const name = nextHardwareName(m.hardware.name, i + 1)
-      return { key: `hardware_${share}`, name, changes: [{ kind: 'hardware', name, share }] as Change[] }
-    })
+    ...hardware
   ]
 }
 
@@ -122,7 +137,7 @@ const changeKey = (changes: Change[]) =>
 export function upgradeCandidates(state: GameState, target: UpgradeTarget): Candidate[] {
   const thing = targetOf(state, target)
   if (!thing) return []
-  const all = target.kind === 'mind' ? mindCandidates(thing as Mind) : unitCandidates(state, thing as UnitType)
+  const all = target.kind === 'mind' ? mindCandidates(state, thing as Mind) : unitCandidates(state, thing as UnitType)
   const waiting = new Set(
     state.research.flatMap((r) =>
       r.effect.kind === 'upgrade' && r.effect.target.id === target.id ? [changeKey(r.effect.changes)] : []
@@ -177,11 +192,17 @@ function iqAfter(m: Mind, changes: Change[]): number {
  * Asks Jev for the three best ways to improve a unit or mind, in one call. Each comes with its
  * minimum IQ and cost.
  */
+export function precheckUpgrade(state: GameState, target: UpgradeTarget): string | null {
+  const locked = lockReason(state, target.kind === 'unit' ? 'unit-upgrade' : 'upgrade')
+  if (locked) return locked
+  if (!targetOf(state, target)) return 'Choose something to upgrade.'
+  return proposalSlotBlocker(state)
+}
+
 export async function judgeUpgrade(state: GameState, judge: Judge, target: UpgradeTarget): Promise<UpgradeOffer> {
-  const thing = targetOf(state, target)
-  if (!thing) throw new Error('Choose something to upgrade.')
-  const slot = proposalSlotBlocker(state)
-  if (slot) throw new Error(slot)
+  const refusal = precheckUpgrade(state, target)
+  if (refusal) throw new Error(refusal)
+  const thing = targetOf(state, target)!
   const candidates = upgradeCandidates(state, target)
   if (!candidates.length) throw new Error(`Nothing left to improve on ${thing.name} for now.`)
   const keyOf = (i: number) => `c${i}`
@@ -198,6 +219,11 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
         { type: 'score', instructions: `How hard would the research be for: ${text(c)}?`, criteria: scale(B.UPGRADE_DIFFICULTY) }
       ])
     ),
+    ...(asksAlarm(state)
+      ? Object.fromEntries(
+          candidates.map((c, i) => [`a_${keyOf(i)}`, alarmQuestion(`improving ${thing.name} this way (${text(c)})`)])
+        )
+      : {}),
     ...payQuestion(state, `improvements to ${thing.name}`)
   }
   const answers = await judge.ask(
@@ -221,17 +247,23 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
     target,
     options: order.map(({ c, i, p }) => {
       const [, bandIQ, share] = B.pick(B.UPGRADE_DIFFICULTY, read.level(`d_${keyOf(i)}`, B.UPGRADE_DIFFICULTY.length))
+      const risk = riskFrom(answers, `a_${keyOf(i)}`)
       let minIQ = bandIQ
       let value: number
       if (target.kind === 'mind') {
-        const iq = iqAfter(thing as Mind, c.changes)
-        minIQ = Math.max(minIQ, iq * B.DESIGN_BAR)
-        value = share * B.MIND_UPGRADE_SHARE * B.mindDesignCost(iq)
+        const m = thing as Mind
+        const before = currentIQ(m)
+        const iq = iqAfter(m, c.changes)
+        // A mind can always work on its own upgrade; harder ones just cost more.
+        minIQ = Math.min(Math.max(minIQ, iq * B.DESIGN_BAR), before)
+        const hardware = c.changes.some((x) => x.kind === 'hardware') ? B.HARDWARE_COST : 1
+        value = share * B.MIND_UPGRADE_SHARE * hardware * (B.mindDesignCost(iq) - B.mindDesignCost(before))
       } else {
         const u = thing as UnitType
         value = share * B.UPGRADE_FLEET_SHARE * u.value * Math.max(u.count, B.MIN_FLEET)
       }
-      return { ...c, p, minIQ: floorIQ(minIQ), cost: priceCost(state, value, pay) }
+      if (risk) value *= B.RISK_COST
+      return { ...c, p, minIQ: floorIQ(minIQ), cost: priceCost(state, value, pay), risk }
     })
   }
 }
@@ -253,7 +285,8 @@ export function acceptUpgrade(current: GameState, offer: UpgradeOffer, index: nu
       icon: '💡',
       minIQ: option.minIQ,
       cost: option.cost,
-      effect: { kind: 'upgrade', target: offer.target, changes: option.changes }
+      effect: { kind: 'upgrade', target: offer.target, changes: option.changes },
+      risk: option.risk
     })
   )
 }

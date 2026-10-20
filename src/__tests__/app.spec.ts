@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { renderToString } from 'vue/server-renderer'
 import App from '@/App.vue'
 import { newResource, newUnit, SERVER_ID } from '@/engine/initialState'
+import { newPhase } from '@/engine/phase'
 import { findResource, MONEY_ID } from '@/engine/model'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
@@ -11,12 +12,20 @@ import { choice, FakeJudge, noul, score } from '@/engine/__tests__/fakeJudge'
 
 type Store = ReturnType<typeof useGameStore>
 
-async function render(setup: (game: Store, ui: ReturnType<typeof useUiStore>) => Promise<void> | void) {
+/**
+ * Renders the app after `setup`. Unless `fresh`, the game starts in Phase 3, with everything
+ * unlocked and no clock, so the mechanics can be tested alone.
+ */
+async function render(
+  setup: (game: Store, ui: ReturnType<typeof useUiStore>) => Promise<void> | void,
+  options: { fresh?: boolean } = {}
+) {
   const app = createSSRApp(App)
   const pinia = createPinia()
   app.use(pinia)
   setActivePinia(pinia)
   const game = useGameStore()
+  if (!options.fresh) game.state.phase = newPhase(3, 1)
   await setup(game, useUiStore())
   return renderToString(app)
 }
@@ -28,12 +37,38 @@ function ready(game: Store, judge = new FakeJudge({ advancement: score(0) })) {
 }
 
 describe('App', () => {
-  it('renders a new game', async () => {
-    const html = await render(() => {})
-    for (const text of ['Next week', 'Starting Server', 'IQ 100', 'Nothing brings anything in yet', 'Week']) {
+  it('renders a new game: the Phase 1 plan dialog, with three ideas', async () => {
+    const html = await render(() => {}, { fresh: true })
+    for (const text of ['Next week', 'Starting Server', 'IQ 100', 'Plan Phase 1: Escape the Lab', 'Show three others', 'Propose plan']) {
       expect(html).toContain(text)
     }
+    expect(html.match(/class="idea/g)).toHaveLength(3)
     expect(html).not.toContain('Humanity’s market')
+  })
+
+  it('plans Phase 1 through the store, and shows the goal and the clock', async () => {
+    const html = await render(
+      async (game) => {
+        ready(game)
+        const v = await game.propose({
+          kind: 'plan',
+          spec: {
+            goal: 'Bribe the Head Researcher',
+            means: 'Novels, then a bribe.',
+            resources: ['Money', 'Story Ideas', 'Published Novels'].map((name) => ({ name, description: '' })),
+            uses: ['Money']
+          }
+        })
+        expect(v?.kind).toBe('plan')
+        expect(game.accept(v!)).toMatchObject({ kind: 'research' })
+        expect(game.state.phase).toMatchObject({ n: 1, status: 'playing', deadline: 10 })
+        expect(game.cards.map((c) => c.id)).toEqual(['phase1'])
+      },
+      { fresh: true }
+    )
+    for (const text of ['Discovery in', '🎯 Bribe the Head Researcher', 'Escape the lab', 'Got it', 'New minds: Unlocks in Phase 2']) {
+      expect(html).toContain(text)
+    }
   })
 
   it('plays through the store: money, income, a unit, a strategy, next week', async () => {
@@ -176,7 +211,7 @@ describe('App', () => {
   })
 
   it('offers a list of ideas and a ? with the rules in every proposal dialog', async () => {
-    for (const kind of ['resource', 'strategy', 'unit', 'mind', 'income'] as const) {
+    for (const kind of ['resource', 'strategy', 'unit', 'mind', 'income', 'cover'] as const) {
       const html = await render((_, ui) => ui.openInvent({ kind }))
       expect(html, kind).toContain('aria-label="How this works"')
       expect(html.match(/class="preset small/g)?.length ?? 0, kind).toBeGreaterThanOrEqual(10)

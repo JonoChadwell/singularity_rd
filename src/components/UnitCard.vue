@@ -40,6 +40,7 @@
         max {{ fmtCount(most) }}
       </button>
       <span v-if="short && createN >= 1" class="warn">You need {{ short }}.</span>
+      <span v-else-if="notice" class="bad">Humans will notice: −{{ notice }} week{{ notice === 1 ? '' : 's' }}.</span>
     </div>
 
     <ul v-if="warnings.length" class="plain-list warnings small">
@@ -50,16 +51,23 @@
 
     <footer class="row foot">
       <button class="link" @click="ui.openInvent({ kind: 'strategy', unitId: unit.id })">+ strategy</button>
-      <button class="link" @click="ui.openInvent({ kind: 'upgrade', target: { kind: 'unit', id: unit.id } })">
+      <button
+        class="link"
+        :disabled="!!upgradeLock"
+        :title="upgradeLock ?? ''"
+        @click="ui.openInvent({ kind: 'upgrade', target: { kind: 'unit', id: unit.id } })"
+      >
         Upgrade
       </button>
+      <span v-if="upgradeLock" class="muted small">{{ upgradeLock }}</span>
     </footer>
   </article>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { createCost } from '@/engine/actions'
+import { createCost, createNotice } from '@/engine/actions'
+import { lockReason } from '@/engine/phase'
 import { costShortfall, creatable, describeFlows, findResource, findUnit, fmtCount, partsFor, weeklyUse } from '@/engine/model'
 import { has } from '@/engine/traits'
 import type { UnitType } from '@/engine/types'
@@ -79,6 +87,8 @@ const createN = ref(1)
 const short = computed(() => costShortfall(game.state, createCost(parts.value, Math.max(0, Math.floor(createN.value || 0)))))
 const most = computed(() => creatable(game.state, props.unit, weeklyUse(game.preview)))
 const unitName = (id: string) => findUnit(game.state, id)?.name ?? '?'
+const notice = computed(() => createNotice(game.state, props.unit.id, createN.value || 0))
+const upgradeLock = computed(() => lockReason(game.state, 'unit-upgrade'))
 
 const warnings = computed(() => {
   const w = game.preview.units[props.unit.id]

@@ -5,6 +5,7 @@ import { runWeek } from '../cycle'
 import { createInitialState, newResource, newUnit } from '../initialState'
 import { previewWeek } from '../economy'
 import { creatable, findResource, findUnit, MONEY_ID, weeklyUse } from '../model'
+import { newPhase } from '../phase'
 import type { GameState } from '../types'
 
 // Scripted checks of the balance, with Jev's middle answers.
@@ -12,6 +13,7 @@ import type { GameState } from '../types'
 /** An opening: a first passive income, and rented servers doing freelance coding. */
 function opening(): GameState {
   const s = createInitialState()
+  s.phase = newPhase(3, 1)
   s.resources.push(newResource({ id: MONEY_ID, name: 'Money', value: 1 }))
   s.incomes.push({ name: 'Freelance coding', resourceId: MONEY_ID, amount: B.INCOME_DIFFICULTY[1]![2] })
   const value = B.UNIT_VALUE[1]![1]

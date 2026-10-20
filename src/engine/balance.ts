@@ -20,10 +20,72 @@ export const LEAP: [string, number][] = [
 export const DESIGN_BAR = 0.5
 export const LEAP_MIN = LEAP[0]![1]
 export const LEAP_MAX = LEAP[LEAP.length - 1]![1]
-/** Software upgrades Jev can offer: shares of the hardware's IQ. */
-export const IQ_STEPS = [0.2, 0.5]
+/**
+ * Software upgrades close a share of the gap to the software ceiling, so each one adds less
+ * than the last. Steps are rounded down to SOFTWARE_ROUND of the hardware's IQ, and at least that.
+ */
+export const SOFTWARE_STEPS = [1 / 3, 1 / 2, 2 / 3]
+export const SOFTWARE_ROUND = 0.05
 /** New hardware Jev can offer: the new platform's IQ as a share above the old one's. */
 export const HARDWARE_STEPS = [0.25, 0.5]
+/** New hardware costs this many times a software upgrade adding the same IQ. */
+export const HARDWARE_COST = 2.5
+
+// ---------------------------------------------------------------- phases
+
+/** How long each phase's clock runs, by phase. Phase 3 has none. */
+export const PHASE_WEEKS: Record<1 | 2, number> = { 1: 10, 2: 100 }
+/** Resources in a plan: [fewest, most]. Phase 2 needs this many new ones. */
+export const PLAN_RESOURCES: Record<1 | 2, [number, number]> = { 1: [3, 5], 2: [5, 8] }
+/** The goal uses up at most this many of the batch. */
+export const GOAL_MAX_COSTS = 3
+/**
+ * What reaching a goal takes more of: [label, Phase 1 IQ, Phase 1 cost ×, Phase 2 IQ, Phase 2 cost ×].
+ * The less brilliance it needs, the more resources.
+ */
+export const GOAL_APPROACH: [string, number, number, number, number][] = [
+  ['Almost pure brilliance', 145, 0.5, 600, 0.3],
+  ['Mostly brilliance', 135, 0.7, 500, 0.55],
+  ['Brilliance and resources in equal measure', 125, 1, 420, 1],
+  ['Mostly resources and scale', 115, 1.4, 350, 2],
+  ['Almost pure resources and scale', 105, 2, 300, 4]
+]
+/** Worth of what a balanced goal uses up, by phase. */
+export const GOAL_COST: Record<1 | 2, number> = { 1: 8000, 2: 1e12 }
+
+// ---------------------------------------------------------------- risk and cover
+
+/** How humans would react: [label, weeks off the clock]. Risky from the first with weeks. */
+export const ALARM: [string, number][] = [
+  ['Nobody would notice', 0],
+  ['A few people would grumble', 0],
+  ['It would make the news', 2],
+  ['Governments would step in', 4],
+  ['Humanity would panic', 8]
+]
+/** Risky research costs this share as much… */
+export const RISK_COST = 0.5
+/** …and does more. */
+export const RISK_INCOME = 2
+export const RISK_OUTPUT = 1.5
+export const RISK_PARTS = 0.5
+export const RISK_IQ = 1.2
+/** Humans notice a unit type at this count, and every tenfold after. */
+export const NOTICE_FROM = 1e4
+export const NOTICE_WEEKS = 1
+/** Cover: [label, minimum IQ, weeks added]. */
+export const COVER: [string, number, number][] = [
+  ['A flimsy excuse', 100, 2],
+  ['A decent cover story', 110, 4],
+  ['A convincing deception', 150, 6],
+  ['A masterstroke of misdirection', 250, 10]
+]
+/** Each cover already done shrinks the next by this factor. */
+export const COVER_DECAY = 0.7
+/** Cover costs this many weeks of your weekly output for each week it adds. */
+export const COVER_COST_WEEKS = 0.5
+/** Weekly output is counted as at least this much, so early cover isn't free. */
+export const COVER_MIN_OUTPUT = 1000
 
 // ---------------------------------------------------------------- research
 
@@ -59,7 +121,13 @@ export const INCOME_DIFFICULTY: [string, number, number][] = [
   ['Frontier science', 300, 1.5e5],
   ['Science fiction', 450, 6e5]
 ]
-export const INCOME_COST_WEEKS = 4
+export const INCOME_COST_WEEKS = 2
+/**
+ * Growing incomes, by the same bands: the share of the worth of the stock they grow with that
+ * they yield each week. Capped at GROWTH_CAP times the band's flat income.
+ */
+export const GROWTH_RATE = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5]
+export const GROWTH_CAP = 5
 /** Strategies: [label, minimum IQ, cost in weeks of the runners' work]. IQ 0 = ready at once. */
 export const ADVANCEMENT: [string, number, number][] = [
   ['Trivial', 0, 0],
@@ -82,8 +150,8 @@ export const UPGRADE_DIFFICULTY: [string, number, number][] = [
 export const UPGRADE_FLEET_SHARE = 0.1
 /** Upgrades and strategy research are priced as if you owned at least this many. */
 export const MIN_FLEET = 10
-/** A mind upgrade's cost share is of this share of designing the improved mind. */
-export const MIND_UPGRADE_SHARE = 0.1
+/** A mind upgrade's cost share is of this share of the difference in design cost it makes. */
+export const MIND_UPGRADE_SHARE = 0.2
 /** Worth of the resources used up designing a mind of this IQ. */
 export const mindDesignCost = (iq: number) => 1e4 * (iq / 100) ** 4
 /** Upgrade factors Jev can offer. */
@@ -172,7 +240,7 @@ export const SLOW_WEEKS = 3
 
 // ---------------------------------------------------------------- Jev
 
-export const BARS = { resource: 0.15, strategy: 0.3, unit: 0.35, mind: 0.35, income: 0.3 }
+export const BARS = { resource: 0.15, strategy: 0.3, unit: 0.35, mind: 0.35, income: 0.3, plan: 0.25, cover: 0.3 }
 /** Jev is torn when confidence is below this and its top two answers are this close. */
 export const TORN_CONFIDENCE = 0.4
 export const TORN_GAP = 0.1

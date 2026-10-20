@@ -81,6 +81,7 @@
 <script setup lang="ts">
 import { netFlow } from '@/engine/economy'
 import { fmt } from '@/engine/model'
+import { lockReason } from '@/engine/phase'
 import type { Resource } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
@@ -100,12 +101,14 @@ const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
 function ways(r: Resource): { kind: 'income' | 'strategy'; label: string }[] {
   const out: { kind: 'income' | 'strategy'; label: string }[] = []
   if (r.kind === 'stock') out.push({ kind: 'income', label: 'A passive income' })
+  if (lockReason(game.state, 'strategy')) return out
   if (game.state.units.length || r.kind === 'flow') out.push({ kind: 'strategy', label: 'A strategy' })
   return out
 }
 
-/** Nothing makes it: no strategy and no passive income. */
+/** Nothing makes it, and there's a way it could be made now. */
 const unmade = (id: string) =>
+  ways(game.state.resources.find((r) => r.id === id)!).length > 0 &&
   !game.state.strategies.some((s) => s.kind === 'make' && s.outputId === id) &&
   !game.state.incomes.some((i) => i.resourceId === id)
 </script>

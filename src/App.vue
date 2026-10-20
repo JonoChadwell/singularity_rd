@@ -8,18 +8,21 @@
     </header>
 
     <JevBanner />
+    <PhaseBar />
     <p v-if="game.lastError && !ui.invent" class="error" role="alert">{{ game.lastError }}</p>
     <p v-if="ui.notice" class="notice" :class="ui.notice.tone" role="status">
       {{ ui.notice.text }}
       <button class="close" aria-label="Dismiss" @click="ui.notice = null">✕</button>
     </p>
 
-    <main class="grid">
+    <GameOver v-if="game.state.phase.status === 'lost'" />
+    <main v-else class="grid">
       <div class="col">
         <NextWeek />
         <ResourcePanel />
       </div>
       <section class="panel col">
+        <ExplainerCards />
         <div class="tabs" role="tablist">
           <button
             v-for="t in TABS"
@@ -38,17 +41,27 @@
             <p class="muted small">
               Your smartest mind sets how hard a research you can do. Each one is a single machine.
             </p>
-            <button class="add" @click="ui.openInvent({ kind: 'mind' })">+ Intelligence system</button>
+            <button class="add" :disabled="!!mindLock" :title="mindLock ?? ''" @click="ui.openInvent({ kind: 'mind' })">
+              + Intelligence system
+            </button>
           </div>
+          <p v-if="mindLock" class="muted small locked">🔒 New minds: {{ mindLock }}</p>
           <MindCard v-for="m in minds" :key="m.id" :mind="m" />
         </template>
 
         <template v-else-if="ui.tab === 'industry'">
           <div class="tab-head">
             <p class="muted small">Units that make things. Each runs its strategies every week.</p>
-            <button class="add" @click="ui.openInvent({ kind: 'unit' })">+ Unit</button>
+            <button class="add" :disabled="!!unitLock" :title="unitLock ?? ''" @click="ui.openInvent({ kind: 'unit' })">
+              + Unit
+            </button>
           </div>
-          <p v-if="!game.state.units.length" class="empty">
+          <p v-if="unitLock" class="empty">🔒 Industry: {{ unitLock }}</p>
+          <p v-else-if="game.state.phase.firstUnit" class="empty">
+            Your plan’s first unit, {{ game.state.phase.firstUnit.name }}, is waiting.
+            <button class="link" @click="ui.openFirstUnit()">Design it (free)</button>
+          </p>
+          <p v-else-if="!game.state.units.length" class="empty">
             No industry yet. Propose a unit: a power plant, a robot, a hired human, a lemon grove.
           </p>
           <UnitCard v-for="u in game.state.units" :key="u.id" :unit="u" />
@@ -61,7 +74,8 @@
       </div>
     </main>
 
-    <UpgradeDialog v-if="ui.invent?.kind === 'upgrade'" :key="JSON.stringify(ui.invent)" :request="ui.invent" />
+    <PlanDialog v-if="game.state.phase.status === 'planning'" :key="`plan-${game.state.phase.n}`" />
+    <UpgradeDialog v-else-if="ui.invent?.kind === 'upgrade'" :key="JSON.stringify(ui.invent)" :request="ui.invent" />
     <ProposalDialog v-else-if="ui.invent" :key="JSON.stringify(ui.invent)" :request="ui.invent" />
   </div>
 </template>
@@ -70,9 +84,13 @@
 import { computed, onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
+import ExplainerCards from '@/components/ExplainerCards.vue'
+import GameOver from '@/components/GameOver.vue'
 import JevBanner from '@/components/JevBanner.vue'
 import MindCard from '@/components/MindCard.vue'
 import NextWeek from '@/components/NextWeek.vue'
+import PhaseBar from '@/components/PhaseBar.vue'
+import PlanDialog from '@/components/PlanDialog.vue'
 import ProposalDialog from '@/components/ProposalDialog.vue'
 import ResearchPanel from '@/components/ResearchPanel.vue'
 import ResourcePanel from '@/components/ResourcePanel.vue'
@@ -80,10 +98,13 @@ import UnitCard from '@/components/UnitCard.vue'
 import UpgradeDialog from '@/components/UpgradeDialog.vue'
 import WeekReport from '@/components/WeekReport.vue'
 import { currentIQ } from '@/engine/model'
+import { lockReason } from '@/engine/phase'
 
 const game = useGameStore()
 const ui = useUiStore()
 onMounted(() => game.checkJev())
+const mindLock = computed(() => lockReason(game.state, 'mind'))
+const unitLock = computed(() => lockReason(game.state, 'unit'))
 
 const minds = computed(() => [...game.state.minds].sort((a, b) => currentIQ(b) - currentIQ(a)))
 
@@ -172,7 +193,8 @@ h1 {
   gap: 10px;
 }
 
-.tab-head p {
+.tab-head p,
+.locked {
   margin: 0;
 }
 

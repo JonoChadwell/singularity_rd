@@ -22,6 +22,7 @@
           <li v-for="c in o.changes" :key="JSON.stringify(c)">{{ describeChange(game.state, offer.target, c) }}</li>
         </ul>
         <div class="small muted">Uses up {{ describeCost(game.state, o.cost) }}</div>
+        <div v-if="o.risk" class="small bad">⚠️ {{ riskText(o.risk, 'upgrade') }}</div>
         <div class="row foot">
           <span class="small muted">Jev: {{ Math.round(o.p * 100) }}% the most natural</span>
           <button class="small primary" @click="choose(i)">Add as research</button>
@@ -34,6 +35,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { bestIQ, describeCost } from '@/engine/model'
+import { riskText } from '@/engine/risk'
 import { describeChange, targetName, type UpgradeOffer } from '@/engine/upgrade'
 import { useGameStore } from '@/stores/game'
 import { useUiStore, type InventRequest } from '@/stores/ui'
@@ -45,7 +47,7 @@ const ui = useUiStore()
 const dialog = ref<HTMLDialogElement>()
 
 const HELP =
-  'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up.'
+  'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up. Software upgrades close a third, a half or two-thirds of the gap to the ceiling, so each adds less than the last.'
 
 const target = props.request.target!
 const name = computed(() => targetName(game.state, target))
@@ -157,7 +159,8 @@ dialog::backdrop {
   gap: 2px;
 }
 
-.chip.bad {
+.chip.bad,
+.bad {
   color: var(--bad);
 }
 </style>

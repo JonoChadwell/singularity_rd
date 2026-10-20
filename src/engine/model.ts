@@ -1,6 +1,6 @@
 import * as B from './balance'
 import { has, TRAITS } from './traits'
-import type { Flow, GameState, Mind, Research, Resource, Strategy, UnitType } from './types'
+import type { Flow, GameState, Income, Mind, Research, Resource, Strategy, UnitType } from './types'
 
 // ---------------------------------------------------------------- formatting
 
@@ -105,6 +105,24 @@ export function describeFlows(state: GameState, flows: Flow[], multiplier = 1): 
     .join(' + ')
 }
 
+/** What an income yields this week: a fixed amount, or so much per one owned, up to its cap. */
+export function incomeYield(state: GameState, i: Income): number {
+  if (!i.per) return i.amount
+  const have = findResource(state, i.per)?.amount ?? 0
+  return Math.min(i.cap ?? Infinity, i.amount * have)
+}
+
+/** An income in words: "+300 💰 Money" or "0.02 📚 Novels per 💡 Story Idea owned (+1.4 now, up to 50)". */
+export function describeIncome(state: GameState, i: Income): string {
+  if (!i.per) return `+${describeFlows(state, [i])}`
+  const out = findResource(state, i.resourceId)
+  const per = findResource(state, i.per)
+  return (
+    `${fmt(i.amount)} ${out?.icon ?? '?'} ${out?.name ?? '?'} per ${per?.icon ?? '?'} ${per?.name ?? '?'} owned ` +
+    `(+${fmt(incomeYield(state, i))} now, up to ${fmt(i.cap ?? Infinity)})`
+  )
+}
+
 // ---------------------------------------------------------------- intelligence
 
 /** A mind's IQ is its hardware's, raised by its software. */
@@ -113,8 +131,8 @@ export const currentIQ = (m: Mind) => m.hardware.iq * (1 + m.software.bonus)
 export const ceilingIQ = (m: Mind) => m.hardware.iq * B.IQ_CEILING
 /** The most a software upgrade can still add, as a share of the hardware's IQ. */
 export const iqRoom = (m: Mind) => Math.max(0, B.IQ_CEILING - 1 - m.software.bonus)
-/** Software versions count upgrades in tenths: +30% of the hardware's IQ is v1.3. */
-export const softwareVersion = (bonus: number) => `v${(1 + bonus).toFixed(1)}`
+/** Software versions count upgrades in hundredths: +30% of the hardware's IQ is v1.3, +25% is v1.25. */
+export const softwareVersion = (bonus: number) => `v${(1 + bonus).toFixed(2).replace(/(\.\d)0$/, '$1')}`
 export const softwareLabel = (m: Mind) => `${m.software.name} ${softwareVersion(m.software.bonus)}`
 
 /** The smartest mind's IQ: what research has to reach. */

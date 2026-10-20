@@ -5,13 +5,15 @@
         <div class="muted small">Week</div>
         <div class="week num">{{ game.state.week }}</div>
       </div>
-      <button class="primary next" @click="game.nextWeek()">Next week</button>
+      <button class="primary next" :disabled="!!blocked" :title="blocked ?? ''" @click="game.nextWeek()">
+        Next week
+      </button>
     </div>
     <p class="small slot" :class="game.state.proposedThisWeek ? 'good' : 'muted'">
       {{
         game.state.proposedThisWeek
           ? '🔬 You’ve proposed this week’s research. Next week you can propose another.'
-          : '🧠 You can propose one research this week: a strategy, income, unit, mind or upgrade.'
+          : `🧠 You can propose one research this week: ${kinds}.`
       }}
     </p>
     <ul v-if="game.alerts.length" class="plain-list alerts" aria-label="Before you press">
@@ -40,6 +42,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Alert } from '@/engine/alerts'
+import { weekBlocker } from '@/engine/cycle'
+import { lockReason, type Feature } from '@/engine/phase'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 
@@ -47,6 +51,18 @@ const game = useGameStore()
 const ui = useUiStore()
 const all = ref(false)
 const shown = computed(() => (all.value ? game.alerts : game.alerts.slice(0, 6)))
+const blocked = computed(() => weekBlocker(game.state))
+/** What the week's proposal could be, given what's unlocked. */
+const kinds = computed(() => {
+  const s = game.state
+  const open = (f: Feature) => !lockReason(s, f)
+  const list = ['an income', 'an upgrade']
+  if (open('strategy')) list.unshift('a strategy')
+  if (open('unit')) list.push('a unit')
+  if (open('mind')) list.push('a mind')
+  if (open('cover')) list.push('cover')
+  return `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}`
+})
 
 function follow(a: Alert) {
   if (a.prompt) ui.follow(a.prompt.to)

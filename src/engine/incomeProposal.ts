@@ -1,6 +1,7 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
 import { findResource } from './model'
+import { lockReason } from './phase'
 import {
   addResearch,
   baseVerdict,
@@ -18,6 +19,7 @@ import {
   type Accepted,
   type VerdictBase
 } from './proposals'
+import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import type { Cost, GameState, Income } from './types'
 
@@ -28,6 +30,8 @@ export interface IncomeSpec {
   description: string
   /** The stock resource it yields. */
   outputId: string
+  /** A stock it grows with: it yields more the more of this you own. */
+  perId?: string | null
 }
 
 export interface IncomeVerdict extends VerdictBase {
@@ -35,7 +39,35 @@ export interface IncomeVerdict extends VerdictBase {
   spec: IncomeSpec
 }
 
+/** Every income, done or waiting as research: [grows with, yields]. */
+function growthEdges(state: GameState): [string, string][] {
+  const incomes = [
+    ...state.incomes,
+    ...state.research.flatMap((r) => (r.effect.kind === 'income' ? [r.effect.income] : []))
+  ]
+  return incomes.flatMap((i) => (i.per ? [[i.per, i.resourceId] as [string, string]] : []))
+}
+
+/** Every stock that grows, directly or not, from `from`. */
+export function growsFrom(state: GameState, from: string): Set<string> {
+  const edges = growthEdges(state)
+  const seen = new Set<string>()
+  const queue = [from]
+  while (queue.length) {
+    const at = queue.shift()!
+    for (const [a, b] of edges) {
+      if (a === at && !seen.has(b)) {
+        seen.add(b)
+        queue.push(b)
+      }
+    }
+  }
+  return seen
+}
+
 export function precheckIncome(state: GameState, spec: IncomeSpec): string | null {
+  const locked = lockReason(state, 'income')
+  if (locked) return locked
   const slot = proposalSlotBlocker(state)
   if (slot) return slot
   const nameError = precheckName(state, spec.name)
@@ -43,18 +75,29 @@ export function precheckIncome(state: GameState, spec: IncomeSpec): string | nul
   const output = findResource(state, spec.outputId)
   if (!output) return state.resources.length ? 'Choose what it yields.' : 'Propose a resource first: something it could yield.'
   if (output.kind !== 'stock') return 'Passive income yields a stock, something that keeps.'
+  if (spec.perId) {
+    const per = findResource(state, spec.perId)
+    if (!per) return 'Unknown resource to grow with.'
+    if (per.kind !== 'stock') return 'An income can only grow with a stock, something you own a pile of.'
+    if (per.id === output.id) return 'It can’t grow with what it yields.'
+    if (growsFrom(state, output.id).has(per.id)) {
+      return `That would make a loop: ${per.name} already grows from ${output.name}.`
+    }
+  }
   return null
 }
 
 export async function judgeIncome(state: GameState, judge: Judge, raw: IncomeSpec): Promise<IncomeVerdict> {
-  const spec: IncomeSpec = { ...raw, ...cleanText(raw.name, raw.description) }
+  const spec: IncomeSpec = { ...raw, ...cleanText(raw.name, raw.description), perId: raw.perId || null }
   const refusal = precheckIncome(state, spec)
   if (refusal) throw new Error(refusal)
   const output = findResource(state, spec.outputId)!
+  const per = spec.perId ? findResource(state, spec.perId) : undefined
+  const grows = per ? `, getting more the more ${per.name} it owns` : ''
   const questions: Record<string, JevQuestion> = {
     plausible: {
       type: 'noul',
-      instructions: `Could the AI plausibly get ${output.name} this way every week, once it has worked out how, without owning any units?`
+      instructions: `Could the AI plausibly get ${output.name} this way every week${grows}, once it has worked out how, without owning any units?`
     },
     efficiency: {
       type: 'score',
@@ -66,14 +109,15 @@ export async function judgeIncome(state: GameState, judge: Judge, raw: IncomeSpe
       instructions: 'How much research would it take to work out how to do this, and how much could it bring in?',
       criteria: scale(B.INCOME_DIFFICULTY)
     },
-    ...payQuestion(state, `how to ${spec.name.toLowerCase()}`)
+    ...payQuestion(state, `how to ${spec.name.toLowerCase()}`),
+    ...alarmQuestions(state)
   }
   const answers = await judge.ask(
     proposalText(state, [
       'The player proposes a passive income: something the AI works out once, then gets every week with no units.',
       `Name: "${spec.name}"`,
       `How: "${spec.description || '(not said)'}"`,
-      `Yields: ${output.name}.`
+      `Yields: ${output.name}${per ? `, more for every ${per.name} the AI owns (it doesn't use them up)` : ''}.`
     ]),
     questions,
     'income'
@@ -87,13 +131,25 @@ export async function judgeIncome(state: GameState, judge: Judge, raw: IncomeSpe
 export function draftIncome(state: GameState, v: IncomeVerdict): { income: Income; minIQ: number; cost: Cost } {
   const read = reader(v)
   const output = findResource(state, v.spec.outputId)!
-  const [, minIQ, weekly] = B.pick(B.INCOME_DIFFICULTY, read.level('difficulty', B.INCOME_DIFFICULTY.length))
+  const band = read.level('difficulty', B.INCOME_DIFFICULTY.length)
+  const [, minIQ, weekly] = B.pick(B.INCOME_DIFFICULTY, band)
   const efficiency = B.pick(B.EFFICIENCY, read.level('efficiency', B.EFFICIENCY.length))[1]
-  const income: Income = {
-    name: v.spec.name,
-    resourceId: output.id,
-    amount: B.nice((weekly * efficiency) / Math.max(1e-9, output.value))
-  }
+  const boost = v.risk ? B.RISK_INCOME : 1
+  const per = v.spec.perId ? findResource(state, v.spec.perId) : undefined
+  const income: Income = per
+    ? {
+        name: v.spec.name,
+        resourceId: output.id,
+        // A share of the worth of what it grows with, in the output.
+        amount: B.nice((B.pick(B.GROWTH_RATE, band) * efficiency * boost * per.value) / Math.max(1e-9, output.value)),
+        per: per.id,
+        cap: B.nice((B.GROWTH_CAP * weekly * efficiency * boost) / Math.max(1e-9, output.value))
+      }
+    : {
+        name: v.spec.name,
+        resourceId: output.id,
+        amount: B.nice((weekly * efficiency * boost) / Math.max(1e-9, output.value))
+      }
   return { income, minIQ: floorIQ(minIQ), cost: costFor(state, v, B.INCOME_COST_WEEKS * weekly) }
 }
 
@@ -112,7 +168,8 @@ export function acceptIncome(current: GameState, v: IncomeVerdict): Accepted {
       icon: '💸',
       minIQ,
       cost,
-      effect: { kind: 'income', income }
+      effect: { kind: 'income', income },
+      risk: v.risk
     })
   )
 }

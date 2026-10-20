@@ -4,40 +4,26 @@ import { CachedJudge, checkJevHealth, JevJudge, type Judge } from '@/ai/jev'
 import * as actions from '@/engine/actions'
 import { alertsFor } from '@/engine/alerts'
 import { runWeek } from '@/engine/cycle'
+import { acceptAny, judgeAny, type ProposalInput, type Verdict } from '@/engine/dispatch'
 import { previewWeek } from '@/engine/economy'
-import { acceptIncome, judgeIncome, type IncomeSpec, type IncomeVerdict } from '@/engine/incomeProposal'
 import { createInitialState } from '@/engine/initialState'
-import { acceptMind, judgeMind, type MindSpec, type MindVerdict } from '@/engine/mindProposal'
-import {
-  acceptResource,
-  acceptStrategy,
-  judgeResource,
-  judgeStrategy,
-  type Outcome,
-  type ResourceSpec,
-  type ResourceVerdict,
-  type StrategySpec,
-  type StrategyVerdict
-} from '@/engine/proposals'
+import { cardsFor } from '@/engine/phase'
+import { projectGoal } from '@/engine/projection'
+import type { Outcome } from '@/engine/proposals'
 import type { GameState, UpgradeTarget } from '@/engine/types'
-import {
-  acceptUnit,
-  answerPushback,
-  judgeUnit,
-  type PushbackReply,
-  type UnitSpec,
-  type UnitVerdict
-} from '@/engine/unitProposal'
+import { answerPushback, type PushbackReply, type UnitVerdict } from '@/engine/unitProposal'
 import { acceptUpgrade, judgeUpgrade, type UpgradeOffer } from '@/engine/upgrade'
 import { logEvent, snapshot } from '@/telemetry'
 
-const SAVE_KEY = 'singularity-rd/save/v9'
+export type { ProposalInput, Verdict }
+
+const SAVE_KEY = 'singularity-rd/save/v10'
 
 function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    return parsed?.version === 9 ? parsed : null
+    return parsed?.version === 10 ? parsed : null
   } catch {
     return null
   }
@@ -56,15 +42,6 @@ export type JevStatus =
   | { kind: 'ready'; model: string }
   | { kind: 'unconfigured' }
   | { kind: 'error'; message: string }
-
-export type ProposalInput =
-  | { kind: 'resource'; spec: ResourceSpec }
-  | { kind: 'strategy'; spec: StrategySpec }
-  | { kind: 'unit'; spec: UnitSpec }
-  | { kind: 'mind'; spec: MindSpec }
-  | { kind: 'income'; spec: IncomeSpec }
-
-export type Verdict = ResourceVerdict | StrategyVerdict | UnitVerdict | MindVerdict | IncomeVerdict
 
 export const useGameStore = defineStore('game', () => {
   const loaded = load()
@@ -89,6 +66,9 @@ export const useGameStore = defineStore('game', () => {
    *  recomputes on any change, and yields a plain copy. */
   const preview = computed(() => previewWeek(JSON.parse(JSON.stringify(state.value)) as GameState))
   const alerts = computed(() => alertsFor(state.value, preview.value))
+  const cards = computed(() => cardsFor(state.value))
+  /** When the goal would be affordable at today's rates. Runs weeks ahead on a copy. */
+  const projection = computed(() => projectGoal(JSON.parse(JSON.stringify(state.value)) as GameState))
 
   /** Takes a new state, keeping Jev's answers and call count from the current one. */
   function adopt(next: GameState) {
@@ -122,8 +102,14 @@ export const useGameStore = defineStore('game', () => {
   function nextWeek() {
     lastError.value = ''
     const week = state.value.week
-    adopt(runWeek(raw()))
+    try {
+      adopt(runWeek(raw()))
+    } catch (err) {
+      lastError.value = (err as Error).message
+      return
+    }
     const s = state.value
+    if (s.phase.status === 'lost') log('game_end', { lost: true, phase: s.phase.n, reason: s.phase.lostReason, stats: s.stats })
     log('week', {
       week,
       report: s.lastWeek,
@@ -145,8 +131,14 @@ export const useGameStore = defineStore('game', () => {
     act('build_target', { strategyId, target }, (s) => actions.setBuildTarget(s, strategyId, target))
   const setOverclock = (unitId: string, on: boolean) =>
     act('overclock', { unitId, on }, (s) => actions.setOverclock(s, unitId, on))
-  const research = (researchId: string) =>
-    act('research', { researchId }, (s) => actions.doResearch(s, researchId))
+  const research = (researchId: string) => {
+    const before = state.value.phase.n
+    const done = act('research', { researchId }, (s) => actions.doResearch(s, researchId))
+    if (done && state.value.phase.n !== before) log('phase_won', { phase: before, history: state.value.history })
+    return done
+  }
+  const dismissCard = (id: string) => act('dismiss_card', { id }, (s) => actions.dismissCard(s, id))
+  const shuffleIdeas = () => act('shuffle_ideas', {}, (s) => actions.shuffleIdeas(s))
   const dropResearch = (researchId: string) =>
     act('drop_research', { researchId }, (s) => actions.dropResearch(s, researchId))
 
@@ -157,13 +149,7 @@ export const useGameStore = defineStore('game', () => {
     lastError.value = ''
     const input = JSON.parse(JSON.stringify(reactiveInput)) as ProposalInput
     try {
-      const s = raw()
-      let verdict: Verdict
-      if (input.kind === 'resource') verdict = await judgeResource(s, judge, input.spec)
-      else if (input.kind === 'strategy') verdict = await judgeStrategy(s, judge, input.spec)
-      else if (input.kind === 'unit') verdict = await judgeUnit(s, judge, input.spec)
-      else if (input.kind === 'mind') verdict = await judgeMind(s, judge, input.spec)
-      else verdict = await judgeIncome(s, judge, input.spec)
+      const verdict = await judgeAny(raw(), judge, input)
       state.value.stats.proposals[input.kind]++
       if (verdict.rejected || verdict.duplicateOf) state.value.stats.rejections++
       log('proposal', {
@@ -172,7 +158,8 @@ export const useGameStore = defineStore('game', () => {
         rejected: verdict.rejected,
         duplicateOf: verdict.duplicateOf,
         torn: verdict.torn.map((t) => t.key),
-        missing: 'missing' in verdict ? verdict.missing : undefined
+        missing: 'missing' in verdict ? verdict.missing : undefined,
+        risk: verdict.risk
       })
       return verdict
     } catch (err) {
@@ -187,19 +174,9 @@ export const useGameStore = defineStore('game', () => {
   function accept(reactiveVerdict: Verdict): Outcome | undefined {
     lastError.value = ''
     try {
-      const s = raw()
       // A plain copy, so no reactive proxies end up inside the game state.
       const verdict = JSON.parse(JSON.stringify(reactiveVerdict)) as Verdict
-      const result =
-        verdict.kind === 'resource'
-          ? acceptResource(s, verdict)
-          : verdict.kind === 'strategy'
-            ? acceptStrategy(s, verdict)
-            : verdict.kind === 'unit'
-              ? acceptUnit(s, verdict)
-              : verdict.kind === 'mind'
-                ? acceptMind(s, verdict)
-                : acceptIncome(s, verdict)
+      const result = acceptAny(raw(), verdict)
       adopt(result.state)
       log('accept', { kind: verdict.kind, picks: verdict.picks, outcome: result.outcome })
       return result.outcome
@@ -296,6 +273,10 @@ export const useGameStore = defineStore('game', () => {
     setOverclock,
     research,
     dropResearch,
+    dismissCard,
+    shuffleIdeas,
+    cards,
+    projection,
     propose,
     accept,
     requestUpgrade,

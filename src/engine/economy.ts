@@ -3,6 +3,7 @@ import {
   allocation,
   findResource,
   findUnit,
+  incomeYield,
   labour,
   owned
 } from './model'
@@ -192,6 +193,8 @@ export function simulateWeek(state: GameState): WeekReport {
     units: {},
     wasted: {}
   }
+  // Growing incomes count what was owned at the start of the week.
+  const yields = state.incomes.map((income) => incomeYield(state, income))
   const runners = buildRunners(state, report)
   const isFlow = (id: string) => isCrew(id) || findResource(state, id)?.kind === 'flow'
 
@@ -290,11 +293,11 @@ export function simulateWeek(state: GameState): WeekReport {
   }
 
   // Passive incomes arrive with the week's other stock.
-  for (const income of state.incomes) {
-    if (!findResource(state, income.resourceId)) continue
-    stockIn.set(income.resourceId, (stockIn.get(income.resourceId) ?? 0) + income.amount)
-    note(income.resourceId, income.name, income.amount)
-  }
+  state.incomes.forEach((income, i) => {
+    if (!findResource(state, income.resourceId)) return
+    stockIn.set(income.resourceId, (stockIn.get(income.resourceId) ?? 0) + yields[i]!)
+    note(income.resourceId, income.name, yields[i]!)
+  })
 
   // ---- End of the week.
 

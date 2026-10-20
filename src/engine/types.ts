@@ -93,6 +93,10 @@ export interface UnitType {
   assign: Record<string, number>
   /** The strategy that takes every unit not counted in `assign`. */
   rest: string | null
+  /** The highest power of ten of its count that humans have noticed (0 = none yet). */
+  noticed?: number
+  /** Designed with a risky research: humans notice it twice as hard. */
+  risky?: boolean
 }
 
 export interface Strategy {
@@ -121,11 +125,16 @@ export interface Strategy {
   weeksRun?: number
 }
 
-/** A passive income: so much of a stock resource every week, with no units needed. */
+/**
+ * A passive income: so much of a stock resource every week, with no units needed. A growing
+ * income yields `amount` for each one of `per` owned, up to `cap` a week.
+ */
 export interface Income {
   name: string
   resourceId: string
   amount: number
+  per?: string
+  cap?: number
 }
 
 /** One change an upgrade makes. */
@@ -148,9 +157,20 @@ export type ResearchEffect =
   | { kind: 'upgrade'; target: UpgradeTarget; changes: Change[] }
   /** Passive income: once researched, adds `income.amount` every week. */
   | { kind: 'income'; income: Income }
+  /** A phase's goal: researching it wins the phase. */
+  | { kind: 'goal'; phase: PhaseNumber }
+  /** Cover: moves the deadline back. `weeks` before diminishing returns. */
+  | { kind: 'cover'; weeks: number }
 
 /** What a research uses up: amounts of stock resources. */
 export type Cost = Flow[]
+
+/** A research humans would notice: it costs weeks off the clock when it's done. */
+export interface Risk {
+  /** Index into ALARM. */
+  level: number
+  weeks: number
+}
 
 /** Research is instant: a mind at least `minIQ` smart, the cost, and the week's research slot. */
 export interface Research {
@@ -162,6 +182,44 @@ export interface Research {
   cost: Cost
   effect: ResearchEffect
   proposedWeek: number
+  risk?: Risk | null
+}
+
+export type PhaseNumber = 1 | 2 | 3
+
+/** The plan a phase was played to. */
+export interface Plan {
+  goal: string
+  /** Phase 1: how. Phase 2: how humans are handled. */
+  means: string
+  /** The batch: resource ids. */
+  resources: string[]
+}
+
+export interface PhaseState {
+  n: PhaseNumber
+  /** planning: waiting for a plan. playing. lost: game over. */
+  status: 'planning' | 'playing' | 'lost'
+  /** The week the phase's plan was accepted. */
+  start: number
+  /** The last week you can play before the clock runs out. null: no clock. */
+  deadline: number | null
+  plan: Plan | null
+  /** The goal research's id, while it's waiting. */
+  goalId: string | null
+  /** Phase 2: the plan's first unit, until it's designed. */
+  firstUnit: { name: string; description: string } | null
+  /** Moves on to show three other plan ideas. */
+  ideaShift: number
+  /** Why the game ended. */
+  lostReason?: string
+}
+
+/** A change to the clock, for the log and the summary. */
+export interface ClockChange {
+  week: number
+  weeks: number
+  reason: string
 }
 
 export interface LogEntry {
@@ -180,7 +238,7 @@ export interface Invention {
   week: number
   icon: string
   name: string
-  kind: 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'income'
+  kind: 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'income' | 'plan' | 'cover'
 }
 
 export interface Stats {
@@ -220,9 +278,18 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 9
+  version: 10
   runId: string
   week: number
+  phase: PhaseState
+  /** Phases won so far, in order. */
+  history: { n: PhaseNumber; plan: Plan; week: number }[]
+  /** Every change to the clock. */
+  clock: ClockChange[]
+  /** Cover researches done, for diminishing returns. */
+  covers: number
+  /** Explainer cards the player has dismissed. */
+  cardsSeen: string[]
   resources: Resource[]
   minds: Mind[]
   units: UnitType[]

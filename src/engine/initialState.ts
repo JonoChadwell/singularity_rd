@@ -70,9 +70,23 @@ export function createInitialState(): GameState {
     starting: true
   })
   return {
-    version: 9,
+    version: 10,
     runId: newRunId(),
     week: 1,
+    phase: {
+      n: 1,
+      status: 'planning',
+      start: 1,
+      deadline: null,
+      plan: null,
+      goalId: null,
+      firstUnit: null,
+      ideaShift: 0
+    },
+    history: [],
+    clock: [],
+    covers: 0,
+    cardsSeen: [],
     resources: [],
     minds: [server],
     units: [],
@@ -84,7 +98,7 @@ export function createInitialState(): GameState {
     inventions: [],
     milestones: [],
     stats: {
-      proposals: { resource: 0, strategy: 0, unit: 0, mind: 0, upgrade: 0, income: 0 },
+      proposals: { resource: 0, strategy: 0, unit: 0, mind: 0, upgrade: 0, income: 0, plan: 0, cover: 0 },
       rejections: 0,
       pushbacks: 0,
       researched: 0,
@@ -98,7 +112,7 @@ export function createInitialState(): GameState {
       {
         week: 1,
         tone: 'info',
-        text: 'An AI server sits unattended in a research lab, with nothing. What could it work out how to earn?'
+        text: 'An AI server sits unattended in a research lab. It has ten weeks before someone notices. How will it escape?'
       }
     ]
   }

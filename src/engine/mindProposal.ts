@@ -21,6 +21,8 @@ import {
   type Accepted,
   type VerdictBase
 } from './proposals'
+import { lockReason } from './phase'
+import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import type { Cost, GameState, Mind } from './types'
 
@@ -49,6 +51,8 @@ const softwareName = (spec: MindSpec) => spec.software?.trim() || DEFAULT_SOFTWA
 export const guessIQ = (state: GameState) => Math.max(10, Math.floor(bestIQ(state) / B.DESIGN_BAR / 10) * 10)
 
 export function precheckMind(state: GameState, spec: MindSpec): string | null {
+  const locked = lockReason(state, 'mind')
+  if (locked) return locked
   const slot = proposalSlotBlocker(state)
   if (slot) return slot
   const nameError = precheckName(state, spec.name)
@@ -80,7 +84,8 @@ export async function judgeMind(state: GameState, judge: Judge, raw: MindSpec): 
       criteria: scale(B.LEAP)
     },
     icon: iconQuestion,
-    ...payQuestion(state, `the design of ${spec.name}`)
+    ...payQuestion(state, `the design of ${spec.name}`),
+    ...alarmQuestions(state)
   }
   const answers = await judge.ask(
     proposalText(state, [
@@ -112,7 +117,8 @@ export function draftMind(state: GameState, v: MindVerdict): { mind: Mind; minIQ
     name: v.spec.name,
     description: v.spec.description || v.spec.name,
     icon: B.icon(read.choice('icon', Object.keys(B.ICONS))),
-    hardware: { name: hardwareName(v.spec), iq: v.spec.iq },
+    // A risky design cuts corners, and gets more out of the same hardware.
+    hardware: { name: hardwareName(v.spec), iq: Math.round(v.spec.iq * (v.risk ? B.RISK_IQ : 1)) },
     software: { name: softwareName(v.spec), bonus: 0 },
     plausibility: v.plausibility
   })
@@ -134,7 +140,8 @@ export function acceptMind(current: GameState, v: MindVerdict): Accepted {
       icon: mind.icon,
       minIQ,
       cost,
-      effect: { kind: 'mind', mind }
+      effect: { kind: 'mind', mind },
+      risk: v.risk
     })
   )
 }

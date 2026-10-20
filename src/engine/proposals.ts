@@ -12,15 +12,17 @@ import {
 import * as B from './balance'
 import { findResource, findUnit, labour, makeId, namesInUse, runsOn } from './model'
 import { addStrategy, costMultiplier, priceCost, spendable } from './research'
+import { lockReason, moveClock } from './phase'
+import { alarmQuestions, riskFrom } from './risk'
 import { proposalText } from './stateText'
 import { QUIRK_IDS, QUIRKS, TRAITS, type QuirkId, type TraitId } from './traits'
-import type { Cost, GameState, Research, Resource, Strategy } from './types'
+import type { Cost, GameState, Research, Resource, Risk, Strategy } from './types'
 
 export const NAME_MAX = 40
 export const DESCRIPTION_MAX = 240
 export const MAX_INPUTS = 2
 
-export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'income'
+export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'income' | 'plan' | 'cover'
 
 /** What the better of two answers costs: a drawback for a unit, a quirk for a strategy. */
 export type Complication = { kind: 'trait'; trait: TraitId } | { kind: 'quirk'; quirk: QuirkId }
@@ -61,6 +63,8 @@ export interface VerdictBase {
   bar: number
   rejected: string | null
   duplicateOf: string | null
+  /** Phase 2: research humans would notice. */
+  risk: Risk | null
 }
 
 export type Outcome =
@@ -119,8 +123,13 @@ export function payers(answers: Record<string, JevAnswer>): { resourceId: string
 }
 
 /** A research's cost: `value` worth of the resources Jev picked, more for less plausible ideas. */
-export function costFor(state: GameState, v: Pick<VerdictBase, 'answers' | 'plausibility' | 'bar'>, value: number): Cost {
-  return priceCost(state, value * costMultiplier(v.plausibility, v.bar), payers(v.answers))
+export function costFor(
+  state: GameState,
+  v: Pick<VerdictBase, 'answers' | 'plausibility' | 'bar'> & { risk?: Risk | null },
+  value: number
+): Cost {
+  const risky = v.risk ? B.RISK_COST : 1
+  return priceCost(state, value * costMultiplier(v.plausibility, v.bar) * risky, payers(v.answers))
 }
 
 /**
@@ -247,7 +256,8 @@ export function baseVerdict(
     plausibility,
     bar,
     rejected: null,
-    duplicateOf: null
+    duplicateOf: null,
+    risk: riskFrom(answers)
   }
 }
 
@@ -374,7 +384,7 @@ export function resourceFrom(
 /** Resources have a very low bar: "a thing I could get". They're added at once. */
 export async function judgeResource(state: GameState, judge: Judge, raw: ResourceSpec): Promise<ResourceVerdict> {
   const spec = cleanText(raw.name, raw.description)
-  const refusal = precheckName(state, spec.name)
+  const refusal = lockReason(state, 'resource') ?? precheckName(state, spec.name)
   if (refusal) throw new Error(refusal)
   const questions = resourceQuestions(state)
   const answers = await judge.ask(
@@ -433,6 +443,8 @@ export interface StrategyVerdict extends VerdictBase {
 }
 
 export function precheckStrategy(state: GameState, spec: StrategySpec): string | null {
+  const locked = lockReason(state, 'strategy')
+  if (locked) return locked
   const slot = proposalSlotBlocker(state)
   if (slot) return slot
   const nameError = precheckName(state, spec.name)
@@ -475,7 +487,8 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
       instructions: 'How much research would it take to work out how to do this?',
       criteria: scale(B.ADVANCEMENT)
     },
-    ...payQuestion(state, `how ${unit.name} could do this`)
+    ...payQuestion(state, `how ${unit.name} could do this`),
+    ...alarmQuestions(state)
   }
   const quirks = QUIRK_IDS.filter((q) => q !== 'picky' || inputs.length > 0 || unit.upkeep.length > 0)
   questions.catch = quirkQuestion(quirks)
@@ -537,7 +550,7 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
     kind: 'make',
     inputs,
     outputId: output.id,
-    amount: B.nice(((work + inputValue) * efficiency) / output.value)
+    amount: B.nice(((work + inputValue) * efficiency * (v.risk ? B.RISK_OUTPUT : 1)) / output.value)
   }
   const quirk = catchesOf(v).find((c) => c.kind === 'quirk')
   if (quirk?.kind === 'quirk') strategy.quirk = quirk.quirk
@@ -557,6 +570,8 @@ export function acceptStrategy(current: GameState, v: StrategyVerdict): Accepted
   if (!minIQ) {
     addStrategy(state, strategy)
     logProposal(state, 'good', `${unit.icon} ${strategy.name} is ready.`)
+    // Nothing to research, so humans notice straight away.
+    if (v.risk) moveClock(state, -v.risk.weeks, `${strategy.name} alarmed humans`)
     return { state, outcome: { kind: 'added', name: strategy.name } }
   }
   return addResearch(
@@ -567,7 +582,8 @@ export function acceptStrategy(current: GameState, v: StrategyVerdict): Accepted
       icon: '🧭',
       minIQ,
       cost,
-      effect: { kind: 'strategy', strategy }
+      effect: { kind: 'strategy', strategy },
+      risk: v.risk
     })
   )
 }

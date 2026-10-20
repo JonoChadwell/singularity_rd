@@ -3,7 +3,7 @@
     <div class="head">
       <div class="title">
         <HelpTip :text="COPY[kind].help" />
-        <h2 :id="titleId">{{ COPY[kind].title }}</h2>
+        <h2 :id="titleId">{{ first ? 'Design your first unit' : COPY[kind].title }}</h2>
       </div>
       <button type="button" class="close" aria-label="Close" @click="ui.closeInvent()">✕</button>
     </div>
@@ -58,12 +58,23 @@
           Propose a resource first: something it could yield, like Money.
           <button type="button" class="link" @click="introduce('Money')">+ Money</button>
         </p>
-        <label v-else class="field">
-          <span>Yields</span>
-          <select v-model="income.outputId">
-            <option v-for="r in stocks" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
-          </select>
-        </label>
+        <template v-else>
+          <label class="field">
+            <span>Yields</span>
+            <select v-model="income.outputId">
+              <option v-for="r in stocks" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Grows with</span>
+            <select v-model="income.perId">
+              <option value="">nothing: a fixed amount every week</option>
+              <option v-for="r in stocks.filter((x) => x.id !== income.outputId)" :key="r.id" :value="r.id">
+                {{ r.icon }} {{ r.name }}: more, the more you own
+              </option>
+            </select>
+          </label>
+        </template>
         <p class="muted small note">
           Don’t see what it yields? <button type="button" class="link" @click="introduce('')">+ Resource</button>
         </p>
@@ -158,12 +169,21 @@
         </div>
       </div>
       <div v-else-if="verdict.kind === 'unit' && unitDraft" class="outcome">
-        <p class="small warn">{{ researchText(unitDraft) }}</p>
+        <p v-if="first" class="small good">Your plan’s first unit: no research needed, and it doesn’t use this week’s proposal.</p>
+        <p v-else class="small warn">{{ researchText(unitDraft) }}</p>
         <UnitSummary :unit="unitDraft.unit" :state="game.state" />
       </div>
       <div v-else-if="verdict.kind === 'income' && incomeDraft" class="outcome small">
-        <div>💸 +{{ describeFlows(game.state, [incomeDraft.income]) }} every week, once researched.</div>
+        <div>💸 {{ describeIncome(game.state, incomeDraft.income) }} every week, once researched.</div>
         <div class="warn">{{ researchText(incomeDraft) }}</div>
+      </div>
+      <div v-else-if="verdict.kind === 'cover' && coverDraft" class="outcome small">
+        <div>
+          🕶️ Adds {{ coverDraft.now }} week{{ coverDraft.now === 1 ? '' : 's' }} to the clock, once researched{{
+            coverDraft.now < coverDraft.weeks ? ` (${coverDraft.weeks} before your earlier covers)` : ''
+          }}.
+        </div>
+        <div class="warn">{{ researchText(coverDraft) }}</div>
       </div>
       <div v-else-if="verdict.kind === 'mind' && mindDraft" class="outcome small">
         <div>
@@ -179,10 +199,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { IQ_CEILING, MAX_PARTS } from '@/engine/balance'
+import { draftCover, precheckCover } from '@/engine/coverProposal'
 import { DEFAULT_SOFTWARE, draftMind, guessIQ, precheckMind } from '@/engine/mindProposal'
 import { draftIncome, precheckIncome } from '@/engine/incomeProposal'
-import { bestIQ, describeCost, describeFlows, designRange, findResource, fmt, softwareVersion } from '@/engine/model'
+import { bestIQ, describeCost, describeFlows, describeIncome, designRange, findResource, fmt, softwareVersion } from '@/engine/model'
 import {
+  COVER_PRESETS,
   INCOME_PRESETS,
   MIND_PRESETS,
   resolveResources,
@@ -217,7 +239,7 @@ import UnitSummary from './UnitSummary.vue'
 import VerdictView from './VerdictView.vue'
 
 const props = defineProps<{ request: InventRequest }>()
-type Kind = 'resource' | 'strategy' | 'unit' | 'mind' | 'income'
+type Kind = 'resource' | 'strategy' | 'unit' | 'mind' | 'income' | 'cover'
 
 const COPY: Record<
   Kind,
@@ -257,9 +279,17 @@ const COPY: Record<
   },
   income: {
     title: 'Propose a passive income',
-    help: 'A passive income is something the AI works out once and then gets every week, with no units: freelance work, trading, scraping data. Name a stock it yields; Jev judges how plausible and how effective it is, and how hard it is to work out. It becomes research. Once done it adds a fixed amount every week; more income needs a new proposal. Proposing it uses the week’s one research proposal.',
+    help: 'A passive income is something the AI works out once and then gets every week, with no units: freelance work, trading, scraping data. Name a stock it yields; Jev judges how plausible and how effective it is, and how hard it is to work out. It becomes research. It can grow with another stock you own: it then yields more the more you have of it, up to a cap, without using it up. It can’t grow with what it yields, or make a loop. Proposing it uses the week’s one research proposal.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. Freelance coding, Quant trading',
+    description: 'How does it work? (optional, but helps Jev)',
+    cost: 'One Jev call. It becomes research.'
+  },
+  cover: {
+    title: 'Propose cover',
+    help: 'Cover buys time: once researched, it moves the day humans stop you further away. Jev judges how plausible and how convincing it is. More convincing cover adds more weeks but needs more IQ. Each cover you’ve already done makes the next one add 30% less. It costs some weeks of your current output, paid in resources you have. Cover is never risky. It uses the week’s one research proposal.',
+    presets: 'Pick one to fill the form, or write your own:',
+    name: 'e.g. PR campaign, Shell companies',
     description: 'How does it work? (optional, but helps Jev)',
     cost: 'One Jev call. It becomes research.'
   }
@@ -270,6 +300,7 @@ const ui = useUiStore()
 const dialog = ref<HTMLDialogElement>()
 const nameInput = ref<HTMLInputElement>()
 const kind = props.request.kind as Kind
+const first = kind === 'unit' && !!props.request.first
 const titleId = `invent-${kind}`
 
 const name = ref(props.request.name ?? '')
@@ -286,7 +317,7 @@ const strategy = reactive({
 const unit = reactive(guessUnitSpec(game.state))
 const mind = reactive({ iq: props.request.iq ?? guessIQ(game.state), hardware: '', software: '' })
 const stocks = computed(() => game.state.resources.filter((r) => r.kind === 'stock'))
-const income = reactive({ outputId: props.request.outputId ?? stocks.value[0]?.id ?? '' })
+const income = reactive({ outputId: props.request.outputId ?? stocks.value[0]?.id ?? '', perId: '' })
 
 // ---------------------------------------------------------------- presets
 
@@ -298,6 +329,7 @@ const presetItems = computed<PresetItem[]>(() => {
   if (kind === 'resource') return RESOURCE_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
   if (kind === 'strategy') return STRATEGY_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
   if (kind === 'income') return INCOME_PRESETS.map((p) => ({ ...p, icon: '💸', blocked: blocked(p.name) }))
+  if (kind === 'cover') return COVER_PRESETS.map((p) => ({ ...p, icon: '🕶️', blocked: blocked(p.name) }))
   if (kind === 'mind') {
     const best = Math.round(bestIQ(game.state))
     return MIND_PRESETS.map((p) => ({
@@ -337,7 +369,14 @@ function applyPreset(presetId: string) {
     description.value = p.description
     const output = resolveResources(game.state, [p.output])
     if (output.ids[0]) income.outputId = output.ids[0]
-    missingResources.value = output.missing
+    const per = resolveResources(game.state, p.per ? [p.per] : [])
+    income.perId = per.ids[0] ?? ''
+    missingResources.value = [...output.missing, ...per.missing]
+  } else if (kind === 'cover') {
+    const p = COVER_PRESETS.find((x) => x.name === presetId)
+    if (!p) return
+    name.value = p.name
+    description.value = p.description
   } else if (kind === 'mind') {
     const p = MIND_PRESETS.find((x) => x.name === presetId)
     if (!p) return
@@ -388,11 +427,12 @@ const input = computed<ProposalInput>(() => {
     return { kind, spec: { ...base, unitId: strategy.unitId, inputIds: strategy.inputIds.filter(Boolean), outputId: strategy.outputId } }
   }
   if (kind === 'unit') {
-    return { kind, spec: { ...base, parts: [...unit.parts], upkeep: [...unit.upkeep], builderId: unit.builderId } }
+    return { kind, spec: { ...base, parts: [...unit.parts], upkeep: [...unit.upkeep], builderId: unit.builderId, first } }
   }
   if (kind === 'mind') return { kind, spec: { ...base, iq: mind.iq, hardware: mind.hardware, software: mind.software } }
-  if (kind === 'income') return { kind, spec: { ...base, outputId: income.outputId } }
-  return { kind, spec: base }
+  if (kind === 'income') return { kind, spec: { ...base, outputId: income.outputId, perId: income.perId || null } }
+  if (kind === 'cover') return { kind, spec: base }
+  return { kind: 'resource', spec: base }
 })
 
 const blocker = computed(() => {
@@ -402,6 +442,7 @@ const blocker = computed(() => {
   if (i.kind === 'unit') return precheckUnit(game.state, i.spec)
   if (i.kind === 'mind') return precheckMind(game.state, i.spec)
   if (i.kind === 'income') return precheckIncome(game.state, i.spec)
+  if (i.kind === 'cover') return precheckCover(game.state, i.spec)
   return precheckName(game.state, name.value)
 })
 
@@ -421,6 +462,7 @@ const strategyDraft = computed(() => (verdict.value?.kind === 'strategy' ? draft
 const unitDraft = computed(() => (verdict.value?.kind === 'unit' ? draftUnit(game.state, verdict.value) : null))
 const mindDraft = computed(() => (verdict.value?.kind === 'mind' ? draftMind(game.state, verdict.value) : null))
 const incomeDraft = computed(() => (verdict.value?.kind === 'income' ? draftIncome(game.state, verdict.value) : null))
+const coverDraft = computed(() => (verdict.value?.kind === 'cover' ? draftCover(game.state, verdict.value) : null))
 const strategyText = computed(() => {
   const d = strategyDraft.value
   if (!d) return ''
@@ -433,8 +475,9 @@ const researchText = (d: { minIQ: number; cost: Parameters<typeof describeCost>[
 
 const acceptLabel = computed(() => {
   const v = verdict.value
+  if (v?.kind === 'unit' && first) return 'Add to industry'
   if (v?.kind === 'strategy' && strategyDraft.value?.minIQ) return 'Add as research'
-  if (v?.kind === 'unit' || v?.kind === 'income') return 'Add as research'
+  if (v?.kind === 'unit' || v?.kind === 'income' || v?.kind === 'cover') return 'Add as research'
   if (v?.kind === 'mind') return 'Add as research'
   return 'Accept'
 })
@@ -461,10 +504,12 @@ function accept() {
     outcome.kind === 'added'
       ? { tone: 'good', text: `${outcome.name} added.` }
       : { tone: 'good', text: `${outcome.research.name} is research: needs IQ ${outcome.research.minIQ}. See Research.` }
-  // Back to the form that asked for this resource, if any.
+  // Back to the form that asked for this resource, if any. A first unit goes on to its first strategy.
+  const made = first ? game.state.units.find((u) => u.name === name.value.trim()) : undefined
   if (props.request.then) ui.openInvent(props.request.then)
+  else if (made) ui.openInvent({ kind: 'strategy', unitId: made.id })
   else ui.closeInvent()
-  ui.notice = notice
+  ui.notice = made ? { tone: 'good', text: `${made.name} is ready. Now give it something to do.` } : notice
 }
 </script>
 

@@ -7,10 +7,12 @@ import {
   findResource,
   findStrategy,
   findUnit,
+  owned,
   partsFor,
   tasksFor
 } from './model'
 import { completeResearch } from './research'
+import { checkNotices, noticeWeeks } from './risk'
 import type { Flow, GameState } from './types'
 
 // Planning actions. They take no time: each returns a new state, or throws a reason.
@@ -18,6 +20,20 @@ import type { Flow, GameState } from './types'
 function draft(current: GameState): GameState {
   const state = structuredClone(current)
   state.decidedThisWeek = true
+  return state
+}
+
+/** Dismisses an explainer card. Not a decision. */
+export function dismissCard(current: GameState, id: string): GameState {
+  const state = structuredClone(current)
+  if (!state.cardsSeen.includes(id)) state.cardsSeen.push(id)
+  return state
+}
+
+/** Shows three other plan ideas. */
+export function shuffleIdeas(current: GameState): GameState {
+  const state = structuredClone(current)
+  state.phase.ideaShift++
   return state
 }
 
@@ -37,7 +53,14 @@ export function createUnits(current: GameState, unitId: string, n: number): Game
   u.built += n
   addUnits(u, n, true)
   checkMilestones(state)
+  checkNotices(state)
   return state
+}
+
+/** Weeks humans would take off if you created `n` more of a unit now. */
+export function createNotice(state: GameState, unitId: string, n: number): number {
+  const u = findUnit(state, unitId)
+  return u ? noticeWeeks(u, owned(u) + Math.max(0, Math.floor(n))) : 0
 }
 
 /** Sets how many machines of a type work on a task. */
@@ -105,7 +128,7 @@ export function researchBlocker(state: GameState, researchId: string): string | 
  * limit is on proposing research, not doing it.
  */
 export function doResearch(current: GameState, researchId: string): GameState {
-  const blocker = researchBlocker(current, researchId)
+  const blocker = current.phase.status === 'lost' ? 'The game is over.' : researchBlocker(current, researchId)
   if (blocker) throw new Error(blocker)
   const state = draft(current)
   const r = findResearch(state, researchId)!
@@ -122,7 +145,9 @@ export function doResearch(current: GameState, researchId: string): GameState {
 /** Drops a research you no longer want. */
 export function dropResearch(current: GameState, researchId: string): GameState {
   const state = draft(current)
-  if (!findResearch(state, researchId)) throw new Error('No such research.')
+  const r = findResearch(state, researchId)
+  if (!r) throw new Error('No such research.')
+  if (r.effect.kind === 'goal') throw new Error('The goal is the point of the phase: it can’t be dropped.')
   state.research = state.research.filter((r) => r.id !== researchId)
   return state
 }

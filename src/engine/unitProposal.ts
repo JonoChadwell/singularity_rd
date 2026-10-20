@@ -13,6 +13,7 @@ import {
   type TornSpec,
   gate,
   iconQuestion,
+  logProposal,
   newResearch,
   options,
   payQuestion,
@@ -25,7 +26,9 @@ import {
   type Accepted,
   type VerdictBase
 } from './proposals'
-import { crewPer } from './research'
+import { lockReason } from './phase'
+import { addUnit, crewPer } from './research'
+import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import { ALL_TRAITS, catchTraits, TRAITS, type TraitId } from './traits'
 import type { Cost, Flow, GameState, UnitType } from './types'
@@ -40,6 +43,8 @@ export interface UnitSpec {
   upkeep: string[]
   /** A unit that can also build it, with a build strategy. null = only created from parts. */
   builderId: string | null
+  /** Phase 2's first unit, from the plan: free, and designed at once. */
+  first?: boolean
 }
 
 
@@ -79,7 +84,10 @@ export function guessUnitSpec(state: GameState): UnitSpec {
 }
 
 export function precheckUnit(state: GameState, spec: UnitSpec): string | null {
-  const slot = proposalSlotBlocker(state)
+  const locked = lockReason(state, 'unit')
+  if (locked) return locked
+  if (spec.first && !state.phase.firstUnit) return 'Your first unit is already designed.'
+  const slot = spec.first ? null : proposalSlotBlocker(state)
   if (slot) return slot
   const nameError = precheckName(state, spec.name)
   if (nameError) return nameError
@@ -172,7 +180,9 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
       instructions: 'How hard would the research be to design it, or to work out how to make it if it exists today?',
       criteria: scale(B.DIFFICULTY)
     },
-    ...payQuestion(state, `the design of ${spec.name}`)
+    ...payQuestion(state, `the design of ${spec.name}`),
+    // The plan's first unit is part of the plan, so it's never risky.
+    ...(spec.first ? {} : alarmQuestions(state))
   }
   spec.upkeep.forEach((id, i) => {
     questions[`upkeep_${i}`] = {
@@ -303,8 +313,9 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
     icon: B.icon(read.choice('icon', Object.keys(B.ICONS))),
     value,
     plausibility: v.plausibility,
-    // Perks make it dearer to make, drawbacks cheaper.
-    parts: priceParts(state, spec.parts, value * traitPriceFactor(ids)),
+    // Perks make it dearer to make, drawbacks cheaper. Risky designs cut corners.
+    parts: priceParts(state, spec.parts, value * traitPriceFactor(ids) * (v.risk ? B.RISK_PARTS : 1)),
+    risky: !!v.risk,
     upkeep,
     builderId: spec.builderId,
     traits: ids,
@@ -324,10 +335,22 @@ export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
   if (v.rejected || v.duplicateOf) throw new Error('This proposal was not accepted.')
   if (v.missing.length) throw new Error('Answer Jev’s pushback first.')
   const state = structuredClone(current)
-  claimProposal(state)
+  if (v.spec.first) {
+    const refusal = precheckUnit(state, v.spec)
+    if (refusal) throw new Error(refusal)
+  } else {
+    claimProposal(state)
+  }
   const { unit, minIQ, cost } = draftUnit(state, v)
   state.inventions.push({ week: state.week, icon: unit.icon, name: unit.name, kind: 'unit' })
   state.decidedThisWeek = true
+  if (v.spec.first) {
+    // The plan's first unit comes designed: no research, no week's proposal.
+    state.phase.firstUnit = null
+    addUnit(state, unit)
+    logProposal(state, 'good', `${unit.icon} ${unit.name} is designed. Create them from parts on its card.`)
+    return { state, outcome: { kind: 'added', name: unit.name } }
+  }
   return addResearch(
     state,
     newResearch(state, {
@@ -336,7 +359,8 @@ export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
       icon: unit.icon,
       minIQ,
       cost,
-      effect: { kind: 'unit', unit }
+      effect: { kind: 'unit', unit },
+      risk: v.risk
     })
   )
 }

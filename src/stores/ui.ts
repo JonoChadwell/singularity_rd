@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Prompt } from '@/engine/alerts'
+import { lockReason } from '@/engine/phase'
 import type { UpgradeTarget } from '@/engine/types'
+import { useGameStore } from './game'
 
-export type InventKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'income'
+export type InventKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'income' | 'cover'
 
 /** Which proposal dialog is open, and anything to pre-fill from where it was opened. */
 export interface InventRequest {
@@ -21,6 +23,8 @@ export interface InventRequest {
   description?: string
   /** The dialog to reopen once this one's proposal is accepted. */
   then?: InventRequest
+  /** Units: the plan's first unit, which is free. */
+  first?: boolean
 }
 
 export type Tab = 'minds' | 'industry' | 'research'
@@ -46,13 +50,30 @@ export const useUiStore = defineStore('ui', () => {
     focus.value = unitId
   }
 
+  /** Opens the dialog for the plan's free first unit. */
+  function openFirstUnit() {
+    const first = useGameStore().state.phase.firstUnit
+    if (first) openInvent({ kind: 'unit', first: true, name: first.name, description: first.description })
+  }
+
   /** Follows a wall's prompt into the right proposal. */
   function follow(prompt: Prompt) {
     switch (prompt.kind) {
-      case 'make-resource':
-        return openInvent({ kind: 'strategy', outputId: prompt.resourceId })
+      case 'make-resource': {
+        // Before industry, the only way to make something is a passive income.
+        const state = useGameStore().state
+        return openInvent(
+          lockReason(state, 'strategy')
+            ? { kind: 'income', outputId: prompt.resourceId }
+            : { kind: 'strategy', outputId: prompt.resourceId }
+        )
+      }
       case 'upgrade':
         return openInvent({ kind: 'upgrade', target: { kind: 'unit', id: prompt.unitId } })
+      case 'upgrade-mind':
+        return openInvent({ kind: 'upgrade', target: { kind: 'mind', id: prompt.mindId } })
+      case 'first-unit':
+        return openFirstUnit()
       case 'design-mind':
         return openInvent({ kind: 'mind', iq: prompt.iq })
       case 'income':
@@ -65,5 +86,5 @@ export const useUiStore = defineStore('ui', () => {
     }
   }
 
-  return { invent, notice, tab, focus, openInvent, closeInvent, show, follow }
+  return { invent, notice, tab, focus, openInvent, closeInvent, show, follow, openFirstUnit }
 })

@@ -17,6 +17,7 @@
     <p v-if="verdict.rejected" class="bad">✋ Rejected: {{ verdict.rejected }} Reword it, or try another angle.</p>
     <p v-else-if="verdict.duplicateOf" class="ai">🔁 Jev thinks that’s the same as {{ verdict.duplicateOf }}.</p>
     <template v-else>
+      <p v-if="riskLine" class="risk small">⚠️ {{ riskLine }}</p>
       <fieldset v-for="t in verdict.torn" :key="t.key" class="torn">
         <legend class="small">Jev is torn on {{ t.topic }}.</legend>
         <label v-for="(o, i) in t.options" :key="o.value" class="choice">
@@ -105,6 +106,7 @@
 import { computed, ref, watch } from 'vue'
 import { MAX_TRAITS, type PartKind } from '@/engine/balance'
 import { complicationName, NAME_MAX } from '@/engine/proposals'
+import { RISK_BONUS, riskText } from '@/engine/risk'
 import TraitChips from './TraitChips.vue'
 import { TRAITS } from '@/engine/traits'
 import { chosenTraits, nearLine, type PushbackReply } from '@/engine/unitProposal'
@@ -135,6 +137,10 @@ const PLACEHOLDERS: Record<PartKind, string> = {
 }
 
 const pct = (p: number) => `${Math.round(p * 100)}%`
+const riskLine = computed(() => {
+  const v = props.verdict
+  return v.risk && v.kind in RISK_BONUS ? riskText(v.risk, v.kind as keyof typeof RISK_BONUS) : ''
+})
 const missing = computed(() => ('missing' in props.verdict ? props.verdict.missing : []))
 const keptList = computed(() => (props.verdict.kind === 'unit' ? chosenTraits(props.verdict).map((t) => t.trait) : []))
 const kept = computed(() => new Set<string>(keptList.value))
@@ -195,6 +201,13 @@ async function answer() {
   bottom: -3px;
   width: 2px;
   background: var(--text);
+}
+
+.risk {
+  border: 1px solid var(--bad);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--bad);
 }
 
 .torn {

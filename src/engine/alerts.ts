@@ -1,15 +1,22 @@
 import { researchBlocker } from './actions'
-import { bestIQ, findResource, fmt, fmtCount } from './model'
+import { bestIQ, currentIQ, findResource, fmt, fmtCount } from './model'
+import { lockReason, weeksLeft } from './phase'
+import { goalOf } from './projection'
 import type { GameState, WeekReport } from './types'
+
+const bestMindId = (state: GameState) =>
+  [...state.minds].sort((a, b) => currentIQ(b) - currentIQ(a))[0]?.id ?? ''
 
 /** Where a wall's prompt leads: straight into the right proposal. */
 export type Prompt =
   | { kind: 'make-resource'; resourceId: string }
   | { kind: 'upgrade'; unitId: string }
+  | { kind: 'upgrade-mind'; mindId: string }
   | { kind: 'design-mind'; iq: number }
   | { kind: 'assign'; unitId: string }
   | { kind: 'income' }
   | { kind: 'research' }
+  | { kind: 'first-unit' }
 
 export interface Alert {
   key: string
@@ -63,8 +70,31 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
     }
   }
 
+  // The clock.
+  const left = weeksLeft(state)
+  if (left !== null && left <= 3) {
+    const who = state.phase.n === 1 ? 'The lab discovers you' : 'Humans stop you'
+    add({
+      key: 'clock',
+      tone: 'bad',
+      text: left <= 1 ? `${who} at the end of this week, unless you reach the goal.` : `${who} in ${left} weeks.`
+    })
+  }
+  const goal = goalOf(state)
+  if (goal && !researchBlocker(state, goal.id)) {
+    add({ key: 'goal-ready', tone: 'warn', text: `🎯 ${goal.name} is ready to research: it wins the phase.`, prompt: { label: 'Research', to: { kind: 'research' } } })
+  }
+  if (state.phase.firstUnit) {
+    add({
+      key: 'first-unit',
+      tone: 'warn',
+      text: `Your plan’s first unit, ${state.phase.firstUnit.name}, isn’t designed yet. It’s free.`,
+      prompt: { label: 'Design it', to: { kind: 'first-unit' } }
+    })
+  }
+
   // The very start, or any time nothing brings anything in.
-  if (!state.incomes.length && !state.units.length) {
+  if (state.phase.status === 'playing' && !state.incomes.length && !state.units.length) {
     add({
       key: 'start',
       tone: 'warn',
@@ -74,7 +104,7 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
   }
 
   // Research that's ready to do now.
-  const ready = state.research.filter((r) => !researchBlocker(state, r.id))
+  const ready = state.research.filter((r) => r.effect.kind !== 'goal' && !researchBlocker(state, r.id))
   if (ready.length) {
     add({
       key: 'research-ready',
@@ -86,12 +116,15 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
 
   // Research nothing you own is smart enough for.
   const best = bestIQ(state)
+  const smarter = lockReason(state, 'mind')
+    ? { label: 'Upgrade the Starting Server?', to: { kind: 'upgrade-mind', mindId: bestMindId(state) } as Prompt }
+    : null
   for (const r of state.research.filter((x) => x.minIQ > best)) {
     add({
       key: `iq-${r.id}`,
       tone: 'info',
       text: `${r.name} needs IQ ${r.minIQ}; your smartest mind is IQ ${Math.round(best)}.`,
-      prompt: { label: 'Design something smarter?', to: { kind: 'design-mind', iq: r.minIQ } }
+      prompt: smarter ?? { label: 'Design something smarter?', to: { kind: 'design-mind', iq: r.minIQ } }
     })
   }
 

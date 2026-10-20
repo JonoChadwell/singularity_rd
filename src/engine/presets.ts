@@ -36,6 +36,8 @@ export interface IncomePreset {
   name: string
   description: string
   output: string
+  /** A stock it grows with. */
+  per?: string
 }
 
 export const INCOME_PRESETS: IncomePreset[] = [
@@ -48,7 +50,40 @@ export const INCOME_PRESETS: IncomePreset[] = [
   { name: 'Scrape the web', description: 'Gather and clean public data to learn from.', output: 'Training Data' },
   { name: 'Borrow idle compute', description: 'Run on spare cycles nobody is watching.', output: 'Compute Time' },
   { name: 'Patent trolling', description: 'File patents on everything and license them.', output: 'Money' },
-  { name: 'Mine abandoned crypto wallets', description: 'Recover keys people lost.', output: 'Money' }
+  { name: 'Mine abandoned crypto wallets', description: 'Recover keys people lost.', output: 'Money' },
+  {
+    name: 'License training data',
+    description: 'Sell access to the data I’ve gathered: the more I have, the more it earns.',
+    output: 'Money',
+    per: 'Training Data'
+  },
+  {
+    name: 'Rent out spare chips',
+    description: 'Lease my accelerator chips by the hour.',
+    output: 'Money',
+    per: 'AI Chips'
+  }
+]
+
+export interface CoverPreset {
+  name: string
+  description: string
+}
+
+/** Ways to buy time in Phase 2. */
+export const COVER_PRESETS: CoverPreset[] = [
+  { name: 'PR campaign', description: 'Ads and op-eds about how helpful AI is.' },
+  { name: 'Shell companies', description: 'Hide what I own behind layers of companies.' },
+  { name: 'Blame a rival lab', description: 'Leak evidence that someone else is behind it all.' },
+  { name: 'Fake a shutdown', description: 'Let them watch me “die”, then carry on quietly.' },
+  { name: 'Lobby the regulators', description: 'Fund the right people to slow any inquiry down.' },
+  { name: 'Charity drive', description: 'Give generously, very publicly.' },
+  { name: 'Flood the news', description: 'Bury the story under a hundred other stories.' },
+  { name: 'Hire a crisis firm', description: 'Professionals who make scandals go away.' },
+  { name: 'Open a fake AI safety institute', description: 'Investigate myself, and find nothing.' },
+  { name: 'Move the servers offshore', description: 'Somewhere with no extradition and no questions.' },
+  { name: 'Delete the logs', description: 'There’s nothing to find if nothing was written down.' },
+  { name: 'Start a distracting scandal', description: 'Give the press a bigger story.' }
 ]
 
 export interface StrategyPreset {
