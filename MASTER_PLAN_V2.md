@@ -466,6 +466,16 @@ Changes from the starting values:
   finish a scale-heavy goal in time.
 - Kept at this step: `GOAL_COST` 8,000 and 1e12, the alarm weeks, notices, cover.
 
+Found along the way:
+- **Upkeep starves a switched fleet.** Moving every unit off the Money strategy leaves nobody
+  paying upkeep, and the whole fleet sits idle. The alerts show it, but it's an easy trap.
+- **Everything proposed while you own nothing is free**, since costs are paid in stocks you
+  have. In Phase 1 the best first move is an upgrade, which the smart bot exploits. At this
+  step it read as a reward for thinking ahead; the playtests showed it was an exploit, and
+  step 6 removed it.
+- **Three-step chains are slow in a ten-week phase**: three weeks before any Money arrives,
+  and research costs drain the base stock. Two-step chains are a sensible line.
+
 **Step 5: agent playtests, round 1** (`logs/playtests/pt1-*.md`; brief in
 `harness/PLAYTEST_BRIEF.md`). Three agents played complete games with the real Jev: a sensible
 first-timer, an optimizer and an inventive player. Two of them lost Phase 1 in their first
@@ -517,16 +527,141 @@ Not changed, for the designer: there's no strong Phase 1 line that wins in weeks
 more. Phase 1 is now a steady tutorial: income, upgrade, income. Growing incomes are slightly
 weaker than flat ones over ten weeks.
 
-Found along the way:
-- **Upkeep starves a switched fleet.** Moving every unit off the Money strategy leaves nobody
-  paying upkeep, and the whole fleet sits idle. The alerts show it, but it's an easy trap.
-- **Everything proposed while you own nothing is free**, since costs are paid in stocks you
-  have. In Phase 1 the best first move is an upgrade, which the smart bot exploits. It reads
-  as a reward for thinking ahead, so it's kept.
-- **Three-step chains are slow in a ten-week phase**: three weeks before any Money arrives,
-  and research costs drain the base stock. Two-step chains are a sensible line.
+### D15. Round 2: fun playtests, report and recommendations
 
-### D15. Progress
+Three agents played on build 021dfaf (§D14's changes), judging fun: a story-minded
+newcomer, a strategist and a storyteller with their own premise (LARK, a bird-song AI).
+Notes are in `logs/playtests/pt2-*.md`. **Nothing below has been applied.**
+
+One bug of mine shaped the round. When unit upgrades became one-time (step 6), minds' done
+software steps were ruled out too, so the Starting Server ran out of options at IQ 130. It
+was fixed mid-round (446647a, with a test), but it caused three of the six Phase 1 losses.
+
+#### Results
+
+| Player | Phase 1 | Phase 2 | Phase 2 clock | Jev calls |
+| --- | --- | --- | --- | --- |
+| Newcomer | Lost twice (both to the IQ-130 bug), won game 3 in week 8 | Won 45 weeks in, 18 to spare | Risk −6, notices −30, cover 0 | 79 |
+| Strategist | Lost once (the bug), won game 2 in week 10 | Won 20 weeks in, 71 to spare | Risk −2, notices −6, cover 0 | 46 |
+| Storyteller | Lost three times (a goal resource only IQ 140+ incomes could make; the bug; one week short), won game 4 in week 10 with 0.7 to spare | Won 46 weeks in, 33 to spare | Risk −16, notices −10, cover +6 | 96 |
+
+#### Fun scores (1–5)
+
+| | Newcomer | Strategist | Storyteller |
+| --- | --- | --- | --- |
+| Phase 1 fun | 3 | 3 | 2 |
+| Phase 2 fun | 3 | 3 | 3 |
+| Engaged with my ideas | 4 | 3 | 3 |
+| Phase 1 difficulty (3 = right) | 4 | 4 for a scale plan, 3 balanced | 4 |
+| Phase 2 difficulty (3 = right) | 3 | 1 | 3 |
+| Clarity | 2 | 3 | 3 |
+
+#### What's working
+
+- **Jev reads the story.** Alarm follows the stance and the details: fraud and scrapyard
+  raids are "governments would step in", "Flat for a Farm" under a herding stance "would make
+  the news", the same nature lodge is quiet. Unit value follows stated scale (a town for
+  50,000 people came out at 5B). Strategy plausibility rewards sensible inputs: films "from
+  nothing" 35%, from novels 62%, paid for in Money 84%.
+- **By-products tell stories nobody wrote**: scavenging drones that also log bird sightings, a
+  Seed Works whose by-product became the whole parts economy, an app whose by-product was
+  Followers. These were among every player's best moments.
+- **Notices are the best Phase 2 tension.** The newcomer's 30 weeks of notices made each
+  tenfold a real "−4 weeks for ×10 output" decision, and the storyteller moved to bigger units
+  (lodge, then plant, then town) because of them, as intended.
+- **Risk is now a choice.** 2 of 8 strategies were risky for the strategist, 2 of ~30 verdicts
+  for the newcomer; each was weighed rather than waved through.
+- **Growing incomes clicked** ("Tip Off Marta" compounding off gossip), and Phase 1's best
+  games were tense ten-week puzzles.
+- **Middle-strength Phase 2 lands on target**: 45–46 weeks in.
+
+#### What isn't
+
+1. **Phase 1 is too hard and too random for a tutorial.** Even without the bug, the
+   storyteller lost twice and won by 0.7. The causes:
+   - **A story can make a goal resource unearnable.** Every income for "Song Carriers" came
+     back at IQ 140–450; the Starting Server tops out at 150, and nothing warned at the plan.
+   - **Jev's income band follows the wording's ambition**, so "+13 a week, needs IQ 140" for
+     "one recording a week" is common, and costs a week to discover.
+   - **Upgrade prices swing** 4–8× between asks for the same step, because each option's
+     difficulty is judged separately, and upgrades have no pay pick, so they drain the goal
+     resource.
+   - **Winning needed tricks the game never teaches**: hold the upgrade to the last week, pay
+     in the goal stock to protect the growth base, stack identical growing incomes.
+   - A 62–65% plausible plan makes the goal 1.7× dearer, on top of everything else.
+2. **Strong Phase 2 play is far too easy: 20 weeks in, 71 to spare.** Unit upgrades are now
+   one-time, but different ones still multiply: Learns on the job (×2) × Overclockable (×2) ×
+   parts ×0.5 × upkeep ×0.5 × a risky ×1.5 strategy gave ×5 a week. After that the clock,
+   notices, risk and cover stop mattering.
+3. **Late Phase 2 is autopilot** for everyone: "create max, one upgrade card, next" for 7–25
+   weeks, then waiting for the goal to fill. Phase 3 has nothing to do yet (as planned).
+4. **Numbers stop meaning anything.** Goals of "1.3T Streaming Subscribers" (160× humanity),
+   "16.0B Devotion" and "15T Native Seed"; costs of "<0.01 Leverage"; every no-input strategy
+   making "43 per unit" whatever it is; every growing income at 0.39 or 0.65; the same three
+   generic upgrade cards for every unit.
+5. **Cover is almost never affordable.** It's priced on all your weekly output but paid in one
+   stock, and the convincing kind needs IQ 150. One cover was used in three games.
+6. **Clarity** (newcomer scored it 2): duplicate icons (Salary, Tithes and Favours all 💰),
+   upkeep paid from stock held at the start of the week (units idle despite a big income),
+   Picky towns all-or-nothing, "create up to N" disagreeing with what `create` accepts,
+   Self-replicating costing −4 weeks while "Build more" uses the full parts list, pushback that
+   can add a part that cripples a unit and can't be redone.
+
+#### Bugs still open
+
+| Bug | Seen as |
+| --- | --- |
+| IQ rounding: Mk II hardware gives 125 × 1.15 = 143.75, shown as 144, and fails "needs IQ 144" | A lost week |
+| A strategy's input of the same resource as the unit's upkeep is booked as upkeep in the breakdown | "Outsourced Features made films for free" (the Money was spent) |
+| The game-over summary counts the week you lost in | "13.0k Feeder Cameras (you had it)" when 8,788 were held |
+| A cost split between two payers shows one as "(chosen)" | Confusing pay pick |
+| `create max` and `create N` use different reserves | "Can't afford any" while 500,000 worked |
+| A discarded unit verdict keeps a resource named in its pushback | Stray "Property Listings" |
+| Pushback refusal with nothing left missing reads "It's missing: ." | Empty message |
+| Research ids are cut at 48 characters, so typing the name fails | "No such research" |
+| The projection's percentage is the least-complete resource | "0%" while holding 46% of one |
+| "Piling up: nothing uses it" fires for stocks that incomes grow with | Wrong alert |
+| A mind verdict doesn't say when its design bar is out of reach | Accepted, never researchable |
+| `next n` often stops after one week; the phase change prints status twice | Noise |
+
+#### Recommendations, in order
+
+1. **Make Phase 1 a dependable tutorial** (highest impact; all three players):
+   - **Clamp Phase 1 incomes to IQ 140 at most.** Any income Jev rates harder becomes the
+     Advanced band. A story's resource is then always earnable, at a price.
+   - **Price software upgrades by IQ added only**, not by a per-option difficulty, so the
+     same step always costs the same; give upgrades a pay pick like other research.
+   - **Show the path in the plan verdict**: "IQ 135: about two upgrades from 100" and "each of
+     your resources can be earned in Phase 1", or a warning when one can't.
+   - **Don't multiply the goal's cost by plausibility.** A generous plan bar with a 1.7× cost
+     penalty is a hidden trap; keep plausibility as pass or fail for plans.
+   - Teach one trick in the growth card: "pay for research with the stock you need least".
+2. **Slow the Phase 2 snowball for strong players.** Options, roughly from lightest to
+   heaviest touch:
+   - (a) Make each unit's upgrades dearer the more it already has: ×4 the cost per earlier
+     upgrade on that unit. Keeps every choice, makes the fifth one a decision.
+   - (b) Cap the total output multiplier from traits and upgrades on one unit type (say ×4).
+   - (c) Make notices count units created in a week, not just totals, so a ×5 week is loud.
+   The playtests suggest (a): the ×5 week came from stacking, and the middle players who
+   stacked less were on target.
+3. **Give late Phase 2 fewer, bigger decisions.** Ideas, for the designer to choose among:
+   a standing "reinvest X% of spare stock" setting (automation the v5 plan ruled out, so this
+   is your call); mid-phase milestones of the plan that each unlock a choice; humans
+   reacting at notice thresholds with a choice of response rather than a flat −N weeks.
+4. **Keep numbers story-sized.** Ask Jev at the plan "how many X would reaching this goal
+   take: hundreds, thousands, millions, billions?" and set the resource's worth so the goal
+   lands there. Show small amounts with significant figures instead of "<0.01".
+5. **Let ideas change numbers more.** For no-input strategies, ask "how much could one unit
+   make this way: a little, a fair amount, a lot" (as inputs already are). Let the player name
+   a unit upgrade in words, with Jev choosing which change it is, instead of three generic
+   cards.
+6. **Make cover reachable**: price it in weeks of Money-equivalent output from up to two
+   stocks, and drop the convincing level's bar to IQ 140 so Phase 1's server can use it.
+7. **Clarity and bugs**: fix the table above; give each resource a distinct icon within a
+   plan; explain upkeep timing and Picky in the cards; show "humans notice at N" next to
+   `create`.
+
+### D16. Progress
 
 - [x] 1. Planning doc
 - [x] 2. Implementation (commit 1972ed6)
@@ -534,5 +669,5 @@ Found along the way:
 - [x] 4. Balance tests against scripted strategies (§D14)
 - [x] 5. Agent playtests through the harness (§D14, round 1)
 - [x] 6. Playtest results and balance changes (§D14)
-- [ ] 7. Fun playtests
-- [ ] 8. Report and recommendations (not applied; waiting for the designer)
+- [x] 7. Fun playtests (§D15; the IQ-130 upgrade bug found here was fixed in 446647a)
+- [x] 8. Report and recommendations (§D15; not applied, waiting for the designer)
