@@ -44,11 +44,11 @@ export const GOAL_MAX_COSTS = 3
  * The less brilliance it needs, the more resources.
  */
 export const GOAL_APPROACH: [string, number, number, number, number][] = [
-  ['Almost pure brilliance', 145, 0.5, 600, 0.3],
-  ['Mostly brilliance', 135, 0.7, 500, 0.55],
+  ['Almost pure brilliance', 145, 0.6, 600, 0.3],
+  ['Mostly brilliance', 135, 0.8, 500, 0.55],
   ['Brilliance and resources in equal measure', 125, 1, 420, 1],
-  ['Mostly resources and scale', 115, 1.4, 350, 2],
-  ['Almost pure resources and scale', 105, 2, 300, 4]
+  ['Mostly resources and scale', 115, 1.2, 350, 2],
+  ['Almost pure resources and scale', 105, 1.4, 300, 4]
 ]
 /** Worth of what a balanced goal uses up, by phase. */
 export const GOAL_COST: Record<1 | 2, number> = { 1: 8000, 2: 1e12 }
@@ -126,7 +126,7 @@ export const INCOME_COST_WEEKS = 2
  * Growing incomes, by the same bands: the share of the worth of the stock they grow with that
  * they yield each week. Capped at GROWTH_CAP times the band's flat income.
  */
-export const GROWTH_RATE = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5]
+export const GROWTH_RATE = [0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 export const GROWTH_CAP = 5
 /** Strategies: [label, minimum IQ, cost in weeks of the runners' work]. IQ 0 = ready at once. */
 export const ADVANCEMENT: [string, number, number][] = [

@@ -106,7 +106,7 @@ describe('phase plans', () => {
     expect(scaled.goal.minIQ).toBe(B.GOAL_APPROACH[4]![1])
     const worth = (d: typeof brilliant) => d.goal.cost[0]!.amount * findResource(d.state, MONEY_ID)!.value
     expect(worth(brilliant)).toBeCloseTo(B.GOAL_COST[1] * B.GOAL_APPROACH[0]![2], -2)
-    expect(worth(scaled)).toBeGreaterThan(worth(brilliant) * 3)
+    expect(worth(scaled)).toBeGreaterThan(worth(brilliant) * 2)
   })
 
   it('only uses up stocks, and refuses a goal that uses up nothing that keeps', async () => {
@@ -444,19 +444,20 @@ describe('growing incomes', () => {
     const s = chain()
     const v = await judgeIncome(s, new FakeJudge({ difficulty: score(1), efficiency: score(2) }), incomeSpec({ name: 'Write novels', outputId: 'novels', perId: 'ideas' }))
     const { income, cost } = draftIncome(s, v)
-    // Band 1: a tenth of the Story Ideas' worth each week, in Novels worth 100.
-    expect(income).toMatchObject({ per: 'ideas', amount: (B.GROWTH_RATE[1]! * 10) / 100 })
+    // Band 1: a share of the Story Ideas' worth (10 each) each week, in Novels worth 100.
+    const per = (B.GROWTH_RATE[1]! * 10) / 100
+    expect(income).toMatchObject({ per: 'ideas', amount: per })
     expect(income.cap).toBe((B.GROWTH_CAP * B.INCOME_DIFFICULTY[1]![2]) / 100)
     expect(cost).toEqual([])
 
     let state = doResearch(acceptIncome(s, v).state, 'write-novels')
     findResource(state, 'ideas')!.amount = 1000
     state = runWeek(state)
-    expect(findResource(state, 'novels')!.amount).toBeCloseTo(10)
+    expect(findResource(state, 'novels')!.amount).toBeCloseTo(per * 1000)
     expect(findResource(state, 'ideas')!.amount).toBe(1000)
     findResource(state, 'ideas')!.amount = 1e9
     state = runWeek(state)
-    expect(findResource(state, 'novels')!.amount).toBeCloseTo(10 + income.cap!)
+    expect(findResource(state, 'novels')!.amount).toBeCloseTo(per * 1000 + income.cap!)
   })
 
   it('can’t grow with what it yields, with a flow, or in a loop', () => {

@@ -7,8 +7,11 @@ import { previewWeek } from '../economy'
 import { creatable, findResource, findUnit, MONEY_ID, weeklyUse } from '../model'
 import { newPhase } from '../phase'
 import type { GameState } from '../types'
+import { chain2, flat, idle, phase1, phase2, play, smart, steady, type Result } from './bots'
+import { score } from './fakeJudge'
 
-// Scripted checks of the balance, with Jev's middle answers.
+// Scripted checks of the balance, with Jev's typical answers. The bots are in bots.ts; the
+// targets are MASTER_PLAN_V2.md §D11. Set BOT_REPORT=1 and run botreport.spec.ts to see them all.
 
 /** An opening: a first passive income, and rented servers doing freelance coding. */
 function opening(): GameState {
@@ -53,17 +56,107 @@ describe('balance', () => {
       for (const [label, iq] of table) expect(iq, label).toBeGreaterThanOrEqual(B.MIN_IQ)
       for (let i = 1; i < table.length; i++) expect(table[i]![2]).toBeGreaterThan(table[i - 1]![2])
     }
-    // A passive income pays for itself in a month.
-    expect(B.INCOME_COST_WEEKS).toBeLessThanOrEqual(6)
+    // A passive income pays for itself within a few weeks.
+    expect(B.INCOME_COST_WEEKS).toBeLessThanOrEqual(4)
   })
 
   it('allows two to four tiers: the software ceiling and the leap rule cap each leap', () => {
     // A tier at its software ceiling can design at most this multiple of its base IQ.
     const leap = (share: number) => B.IQ_CEILING / share
     expect(leap(B.DESIGN_BAR)).toBeCloseTo(3)
-    // From the Starting Server's 100 to IQ 1,000: rushing (×2 a tier) takes four tiers;
-    // maxing every tier with modest designs takes two.
     expect(Math.ceil(Math.log(10) / Math.log(2))).toBe(4)
     expect(Math.ceil(Math.log(10) / Math.log(leap(B.LEAP_MIN)))).toBe(2)
+  })
+
+  it('makes goals that need less brilliance need more resources', () => {
+    for (let i = 1; i < B.GOAL_APPROACH.length; i++) {
+      const [, iq1, cost1, iq2, cost2] = B.GOAL_APPROACH[i]!
+      const [, prevIq1, prevCost1, prevIq2, prevCost2] = B.GOAL_APPROACH[i - 1]!
+      expect(iq1).toBeLessThan(prevIq1)
+      expect(iq2).toBeLessThan(prevIq2)
+      expect(cost1).toBeGreaterThan(prevCost1)
+      expect(cost2).toBeGreaterThan(prevCost2)
+    }
+    // Phase 2 goals need IQ 300 to 600: past the Starting Server's 150, so at least one new tier.
+    expect(B.GOAL_APPROACH.map((a) => a[3])).toEqual(expect.arrayContaining([300, 600]))
+  })
+})
+
+const APPROACHES = [0, 2, 4]
+
+describe('Phase 1 bots', () => {
+  it('lose doing nothing useful: one income and no upgrades', async () => {
+    for (const a of APPROACHES) expect((await play(await phase1(a), idle, 12)).lost).toBe(10)
+  })
+
+  it('win with an income a week and upgrades as needed, by week 10 and usually 8', async () => {
+    const weeks = await Promise.all(APPROACHES.map(async (a) => (await play(await phase1(a), flat, 12)).won))
+    for (const w of weeks) expect(w).not.toBeNull()
+    expect(Math.max(...(weeks as number[]))).toBeLessThanOrEqual(10)
+    expect(weeks[1]).toBeLessThanOrEqual(8)
+  })
+
+  it('win in weeks 6 to 8 with a growing chain: novels, then royalties that grow with them', async () => {
+    for (const a of APPROACHES) {
+      const r = await play(await phase1(a), chain2, 12)
+      expect(r.won).toBeGreaterThanOrEqual(6)
+      expect(r.won).toBeLessThanOrEqual(8)
+    }
+  })
+
+  it('win in weeks 5 or 6 by upgrading first, while there’s nothing to pay with', async () => {
+    for (const a of APPROACHES) {
+      const r = await play(await phase1(a), smart, 12)
+      expect(r.won).toBeGreaterThanOrEqual(5)
+      expect(r.won).toBeLessThanOrEqual(6)
+    }
+  })
+})
+
+describe('Phase 2 bots', () => {
+  /** Phase 2 weeks used: from the plan in week 8 to the week the goal was researched, inclusive. */
+  const used = (r: Result) => (r.won === null ? Infinity : r.won - 8 + 1)
+
+  it('lose without reinvesting', async () => {
+    const r = await play(await phase2(2), steady({ reinvest: false }), 120)
+    expect(r.lost).toBe(107)
+  })
+
+  it('win a sensible game in 50 to 80 weeks, whatever the goal takes', async () => {
+    const weeks: number[] = []
+    for (const a of APPROACHES) {
+      const r = await play(await phase2(a), steady({ reinvest: true }), 120)
+      weeks.push(used(r))
+      // Owning millions of mills gets noticed, a week at a time.
+      expect(r.weeksLost).toBeGreaterThanOrEqual(3)
+      expect(r.weeksLost).toBeLessThanOrEqual(8)
+    }
+    for (const w of weeks) {
+      expect(w).toBeGreaterThanOrEqual(50)
+      expect(w).toBeLessThanOrEqual(80)
+    }
+    // Brilliant and scale-heavy goals are about as hard.
+    expect(Math.max(...weeks) - Math.min(...weeks)).toBeLessThanOrEqual(10)
+  })
+
+  it('win a strong game in 25 to 45 weeks, with better strategies and cheaper upkeep', async () => {
+    for (const a of APPROACHES) {
+      const r = await play(await phase2(a), steady({ reinvest: true, answers: { efficiency: score(3) }, firstUnit: { upkeep_0: score(0) } }), 120)
+      expect(used(r)).toBeGreaterThanOrEqual(25)
+      expect(used(r)).toBeLessThanOrEqual(45)
+    }
+  })
+
+  it('make risk a real choice: it wins sooner but spends the clock, and too much loses', async () => {
+    const calm = await play(await phase2(2), steady({ reinvest: true }), 120)
+    const risky = await play(await phase2(2), steady({ reinvest: true, answers: { alarm: score(3) } }), 120)
+    expect(used(risky)).toBeLessThan(used(calm) - 10)
+    expect(risky.weeksLost).toBeGreaterThan(20)
+    const panic = { reinvest: true, answers: { alarm: score(4) } }
+    expect((await play(await phase2(2), steady(panic), 120)).lost).not.toBeNull()
+    // Cover buys back enough weeks to save it.
+    const covered = await play(await phase2(2), steady({ ...panic, coverBelow: 25 }), 120)
+    expect(covered.won).not.toBeNull()
+    expect(covered.weeksGained).toBeGreaterThan(0)
   })
 })

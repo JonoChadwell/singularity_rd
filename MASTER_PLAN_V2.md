@@ -348,10 +348,10 @@ are the designer's.
 | `PHASE_WEEKS` | 10, 100 | |
 | `PLAN_BAR` | 0.25 | Plans are generous |
 | `PLAN_RESOURCES` | Phase 1: 3–5; Phase 2: 5–8 (5+ new) | |
-| `GOAL_APPROACH` | 5 levels: Phase 1 IQ 145 / 135 / 125 / 115 / 105, cost ×0.5 / 0.7 / 1 / 1.4 / 2. Phase 2 IQ 600 / 500 / 420 / 350 / 300, cost ×0.3 / 0.55 / 1 / 2 / 4 | Lower IQ, bigger cost |
+| `GOAL_APPROACH` | 5 levels: Phase 1 IQ 145 / 135 / 125 / 115 / 105, cost ×0.6 / 0.8 / 1 / 1.2 / 1.4. Phase 2 IQ 600 / 500 / 420 / 350 / 300, cost ×0.3 / 0.55 / 1 / 2 / 4 | Lower IQ, bigger cost |
 | `GOAL_COST` | Phase 1: 8,000 worth. Phase 2: 1e12 worth | Tuned by the bots in §D12 |
 | `INCOME_COST_WEEKS` | 2 (was 4) | Phase 1 has only ten weeks |
-| `GROWTH_RATE` | By income band: 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5 a week | Share of the stock's worth |
+| `GROWTH_RATE` | By income band: 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1 a week | Share of the stock's worth |
 | `GROWTH_CAP` | 5× the band's flat income | |
 | `SOFTWARE_STEPS` | ⅓, ½, ⅔ of the gap, floored to 5%, at least 5% | Replaces +20% / +50% |
 | `MIND_UPGRADE_SHARE` | 0.2 of the design-cost difference | Hardware ×2.5 |
@@ -422,14 +422,47 @@ designing one extra tier for the brilliance-heavy goals.
 
 ### D14. Tuning log
 
-(Filled in during step 6.)
+**Step 4: scripted bots** (`src/engine/__tests__/bots.ts`, asserted in `balance.spec.ts`;
+`BOT_REPORT=1 npx vitest run botreport` prints them all). The fake Jev gives typical answers:
+middle efficiency, every resource worth 10, incomes in the band the bot's IQ allows. Each bot
+plays all three goal types (brilliant, balanced, scale-heavy).
+
+| Bot | What it does | Result |
+| --- | --- | --- |
+| P1 idle | One income, never upgrades | Loses in week 10 |
+| P1 flat | An income every week, upgrades when short | Wins weeks 8, 8 and 10 |
+| P1 chain | Ideas → novels → money, three growing steps | Loses twice; wins in week 10 once |
+| P1 chain2 | Upgrade, novels, royalties that grow with novels | Wins weeks 7–8 |
+| P1 smart | Upgrade first, while nothing has a cost, then rich incomes | Wins weeks 5–6 |
+| P2 steady | First unit, money strategy, reinvest every week, one tier | Wins 58–62 weeks into the phase, −4 to −5 weeks to notices |
+| P2 clever | As steady, with Clever strategies and cheap upkeep | Wins in 38–42 weeks |
+| P2 hoarder | Never reinvests | Loses |
+| P2 reckless | Everything "Governments would step in" (−4 weeks each) | Wins in 40–42 weeks, spends 30–48 weeks of clock |
+| P2 panic | Everything "Humanity would panic" (−8 each) | Loses brilliant and balanced goals; three covers (+9 weeks) save the balanced one |
+
+Changes from the starting values:
+- `GROWTH_RATE` raised from 0.05–0.5 to **0.3–1.0** a week. At the old rates a growing
+  income needed ten weeks of stock behind it to match a flat one, so chains never paid in
+  Phase 1. The cap (5× the band's flat income) still bounds them later.
+- Phase 1 goal cost multipliers narrowed from ×0.5–2 to **×0.6–1.4**: the flat bot couldn't
+  finish a scale-heavy goal in time.
+- Kept: `GOAL_COST` 8,000 and 1e12, the alarm weeks, notices, cover.
+
+Found along the way:
+- **Upkeep starves a switched fleet.** Moving every unit off the Money strategy leaves nobody
+  paying upkeep, and the whole fleet sits idle. The alerts show it, but it's an easy trap.
+- **Everything proposed while you own nothing is free**, since costs are paid in stocks you
+  have. In Phase 1 the best first move is an upgrade, which the smart bot exploits. It reads
+  as a reward for thinking ahead, so it's kept.
+- **Three-step chains are slow in a ten-week phase**: three weeks before any Money arrives,
+  and research costs drain the base stock. Two-step chains are a sensible line.
 
 ### D15. Progress
 
 - [x] 1. Planning doc
-- [ ] 2. Implementation
-- [ ] 3. Unit tests
-- [ ] 4. Balance tests against scripted strategies
+- [x] 2. Implementation (commit 1972ed6)
+- [x] 3. Unit tests (`phases.spec.ts`; the older specs run the mechanics in Phase 3)
+- [x] 4. Balance tests against scripted strategies (§D14)
 - [ ] 5. Agent playtests through the harness
 - [ ] 6. Playtest results and balance changes
 - [ ] 7. Fun playtests
