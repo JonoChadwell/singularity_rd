@@ -29,8 +29,15 @@ export const SPEED_EXPONENT = 0.5
 export const MASSIVELY_PARALLEL_EXPONENT = 0.95
 export const DEEP_THINKER_POOL = 2
 export const SPECIALIST = 0.25
-/** IQ breakthroughs: shares of base IQ the player can choose. */
+/** Software upgrades: shares of the hardware's IQ the player can choose. */
 export const IQ_STEPS = [0.1, 0.2, 0.3, 0.5]
+/**
+ * Hardware upgrades: the new platform's IQ as a share above the old one's. Hardware is hard to
+ * change: each share of gain costs HARDWARE_GAIN times what software does, the new parts face
+ * Jev's pushback, and upkeep and price grow with the machine's labour.
+ */
+export const HARDWARE_STEPS = [0.25, 0.5]
+export const HARDWARE_GAIN = 2.5
 
 export const FINAL_PROJECT = {
   name: 'Theory of Everything',

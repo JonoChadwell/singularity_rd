@@ -6,6 +6,7 @@ import { alertsFor } from '@/engine/alerts'
 import {
   acceptBreakthrough,
   judgeBreakthrough,
+  recipeOf,
   targetName,
   type BreakthroughSpec,
   type BreakthroughVerdict
@@ -35,14 +36,14 @@ import {
 } from '@/engine/unitProposal'
 import { logEvent, snapshot } from '@/telemetry'
 
-const SAVE_KEY = 'singularity-rd/save/v5'
+const SAVE_KEY = 'singularity-rd/save/v6'
 const BEST_KEY = 'singularity-rd/best'
 
 function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    return parsed?.version === 5 ? parsed : null
+    return parsed?.version === 6 ? parsed : null
   } catch {
     return null
   }
@@ -241,12 +242,7 @@ export const useGameStore = defineStore('game', () => {
     lastError.value = ''
     try {
       const s = raw()
-      const layer =
-        verdict.kind === 'breakthrough'
-          ? verdict.spec.changes.find((c) => c.kind === 'layer' && c.layer === 'own')
-          : undefined
-      const parts =
-        verdict.kind === 'unit' ? verdict.spec.parts : layer?.kind === 'layer' ? layer.parts : []
+      const parts = verdict.kind === 'unit' ? verdict.spec.parts : (recipeOf(verdict.spec)?.parts ?? [])
       const subject =
         verdict.kind === 'unit' ? `one ${verdict.spec.name}` : `one ${targetName(s, verdict.spec.target)}`
       const result = await answerPushback(s, judge, subject, parts, verdict.missing, replies)
@@ -257,8 +253,8 @@ export const useGameStore = defineStore('game', () => {
       next.pushbackRounds++
       if (next.kind === 'unit') next.spec.parts = result.parts
       else {
-        const c = next.spec.changes.find((c) => c.kind === 'layer' && c.layer === 'own')
-        if (c?.kind === 'layer') c.parts = result.parts
+        const recipe = recipeOf(next.spec)
+        if (recipe) recipe.parts = result.parts
       }
       log('pushback', { replies, missing: result.missing, failures: result.failures })
       return { verdict: next as V, failures: result.failures }

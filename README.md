@@ -61,6 +61,23 @@ unanswered and a state snapshot), `proposal`, `accept`, `pushback`, `action` (bu
 build targets), `error`, `game_end` (with stats) or `game_abandoned`. Raw Jev traffic is logged as
 `jev` events (`purpose`, request, response and latency). The API key is never logged.
 
+### Command-line harness
+
+`npm run play -- <command>` plays the game without the browser: same engine, the real Jev
+(using the key in `.env.local`), and the same run log. The game is saved in
+`logs/harness/<slot>.json` between commands (`--slot <name>`, default `claude`).
+
+```sh
+npm run play -- new
+npm run play -- propose strategy '{"name":"Freelance coding","description":"","unitId":"starting-server","inputIds":[],"outputId":"money"}'
+npm run play -- accept
+npm run play -- next 10     # up to 10 weeks, stopping when something happens
+npm run play -- status
+```
+
+`npm run play -- help` lists every command: proposals and their verdicts (pick, trait, builder,
+pushback, accept), buying, assigning, build targets, and the week.
+
 ## Code map
 
 | Path | What |
@@ -82,6 +99,7 @@ build targets), `error`, `game_end` (with stats) or `game_abandoned`. Raw Jev tr
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |
 | `src/components/` | UI: tier ladder, Next week, panels, unit cards, proposal dialogs, verdicts |
 | `server/` | Vite plugins: Jev proxy and run logs |
+| `harness/` | Command-line harness: `play.mjs` loads `cli.ts` through Vite |
 | `old/` | The original transformers.js prototype, archived and not built |
 
 ## Scripts

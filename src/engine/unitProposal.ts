@@ -37,9 +37,17 @@ export interface UnitSpec {
   upkeep: string[]
   /** Who builds it in your own industry. null = only humanity's market. */
   builderId: string | null
-  /** Minds only. */
+  /** Minds only: the IQ of its hardware, running its first software. */
   targetIQ: number
+  /** Minds only: the hardware platform's name. Blank means named after the unit. */
+  hardware?: string
+  /** Minds only: the software's name. Blank means "Base Model". */
+  software?: string
 }
+
+export const DEFAULT_SOFTWARE = 'Base Model'
+const hardwareName = (spec: UnitSpec) => spec.hardware?.trim() || spec.name.trim()
+const softwareName = (spec: UnitSpec) => spec.software?.trim() || DEFAULT_SOFTWARE
 
 export const AVAILABILITY = {
   on_sale: 'It exists today: humanity sells these off the shelf',
@@ -164,7 +172,9 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
   const builder = spec.builderId ? findUnit(state, spec.builderId)! : null
   const parts = partList(state, spec.parts)
   const upkeep = partList(state, spec.upkeep)
-  const what = spec.mind ? `an intelligence system with IQ ${spec.targetIQ}` : 'an industry unit'
+  const what = spec.mind
+    ? `an intelligence system: ${hardwareName(spec)} hardware with IQ ${spec.targetIQ}, running ${softwareName(spec)}`
+    : 'an industry unit'
   const subject = `one ${spec.name} (${what})`
 
   const questions: Record<string, JevQuestion> = {
@@ -197,7 +207,7 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
   if (spec.mind && spec.targetIQ > B.OFF_THE_SHELF_MAX_IQ) {
     questions.leap = {
       type: 'score',
-      instructions: `The smartest mind the AI has is IQ ${best}; this design targets IQ ${spec.targetIQ}. Judging by its description and parts, how radical a design is it?`,
+      instructions: `The smartest mind the AI has is IQ ${best}; this design's hardware targets IQ ${spec.targetIQ}. Judging by its description, hardware and parts, how radical a design is it?`,
       criteria: scale(B.LEAP)
     }
   }
@@ -242,7 +252,7 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
       'The player proposes a new unit: something the AI can own many of.',
       `Name: "${spec.name}"`,
       `Description: "${spec.description || '(none given)'}"`,
-      `Kind: ${spec.mind ? `intelligence system (a mind that can do research), target IQ ${spec.targetIQ}` : 'industry'}.`,
+      `Kind: ${spec.mind ? `intelligence system (a mind that can do research). Hardware: "${hardwareName(spec)}", IQ ${spec.targetIQ}. Software: "${softwareName(spec)}"` : 'industry'}.`,
       `Made of: ${parts}. Runs on: ${upkeep}.`,
       `Built by: ${builder ? `the AI's own ${builder.name}` : "humanity's market"}.`
     ]),
@@ -382,7 +392,8 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
     description: spec.description || spec.name,
     icon: B.icon(read.choice('icon', Object.keys(B.ICONS))),
     mind: spec.mind,
-    baseIQ: iq,
+    hardware: spec.mind ? { name: hardwareName(spec), iq } : { name: '', iq: 0 },
+    software: spec.mind ? { name: softwareName(spec), bonus: 0 } : { name: '', bonus: 0 },
     value,
     plausibility: v.plausibility,
     parts: priceParts(state, spec.parts, value),
@@ -431,7 +442,7 @@ export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
   const project = newProject(state, {
     name: `Design ${unit.name}`,
     description: unit.mind
-      ? `Design an intelligence system with IQ ${unit.baseIQ}.`
+      ? `Design ${unit.hardware.name} hardware with IQ ${unit.hardware.iq}, running ${unit.software.name}.`
       : `Design ${unit.name}.`,
     icon: unit.icon,
     field,
@@ -533,4 +544,4 @@ export async function answerPushback(
 }
 
 /** Mind types, best first, for forms that ask which mind does something. */
-export const mindsByIQ = (state: GameState) => [...minds(state)].sort((a, b) => b.baseIQ - a.baseIQ)
+export const mindsByIQ = (state: GameState) => [...minds(state)].sort((a, b) => b.hardware.iq - a.hardware.iq)

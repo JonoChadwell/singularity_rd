@@ -1,15 +1,20 @@
 <template>
   <dialog ref="dialog" class="panel" aria-labelledby="breakthrough-title" @close="ui.closeInvent()">
     <div class="head">
-      <h2 id="breakthrough-title">Propose a breakthrough</h2>
+      <div class="title">
+        <HelpTip :text="HELP" />
+        <h2 id="breakthrough-title">Propose a breakthrough</h2>
+      </div>
       <button type="button" class="close" aria-label="Close" @click="ui.closeInvent()">✕</button>
     </div>
 
     <form v-if="!verdict" @submit.prevent="submit">
-      <p class="muted hint">
-        Pick a unit or strategy and edit a copy of its card. Anything can change. Say how in a line; Jev judges it.
-        The bigger the gain, the bigger the research project.
-      </p>
+      <PresetList
+        :items="presetItems"
+        label="Pick one to fill in the changes, or make your own:"
+        :selected="presetName"
+        @pick="applyPreset"
+      />
       <label class="field">
         <span>Change</span>
         <select v-model="targetKey" aria-label="What to change">
@@ -23,18 +28,45 @@
       </label>
 
       <div v-if="unit" class="editor">
-        <label v-if="unit.mind" class="field">
-          <span>IQ</span>
-          <select v-model.number="form.iq">
-            <option :value="0">Keep {{ Math.round(currentIQ(unit)) }}</option>
-            <option v-for="s in iqSteps" :key="s" :value="s">
-              +{{ Math.round(s * 100) }}% of base → {{ Math.round(currentIQ(unit) + unit.baseIQ * s) }}
-            </option>
-          </select>
-        </label>
-        <p v-if="unit.mind && !iqSteps.length" class="small warn">
-          At its ceiling of {{ Math.round(ceilingIQ(unit)) }}. Smarter needs new hardware: design a new tier.
-        </p>
+        <template v-if="unit.mind">
+          <label class="field">
+            <span>Software</span>
+            <select v-model.number="form.software">
+              <option :value="0">Keep {{ softwareLabel(unit) }}: IQ {{ Math.round(currentIQ(unit)) }}</option>
+              <option v-for="s in iqSteps" :key="s" :value="s">
+                Upgrade to {{ softwareVersion(unit.software.bonus + s) }}: IQ
+                {{ Math.round(unit.hardware.iq * (1 + unit.software.bonus + s)) }}
+              </option>
+            </select>
+          </label>
+          <p v-if="!iqSteps.length" class="small warn rule">
+            {{ unit.software.name }} is at the software ceiling of IQ {{ Math.round(ceilingIQ(unit)) }}. Smarter needs
+            new hardware.
+          </p>
+          <label class="field">
+            <span>Hardware</span>
+            <select v-model.number="form.hwShare">
+              <option :value="0">Keep {{ unit.hardware.name }}: hardware IQ {{ unit.hardware.iq }}</option>
+              <option v-for="s in HARDWARE_STEPS" :key="s" :value="s">
+                New hardware, +{{ Math.round(s * 100) }}%: hardware IQ {{ Math.round(unit.hardware.iq * (1 + s)) }}
+              </option>
+            </select>
+          </label>
+          <template v-if="form.hwShare">
+            <p class="small warn rule">
+              Hard to change: a much bigger project than software, Jev checks the new parts, and upkeep and price grow
+              with the machine’s work.
+            </p>
+            <label class="field">
+              <span>Named</span>
+              <input v-model="form.hwName" :maxlength="NAME_MAX" aria-label="New hardware name" />
+            </label>
+            <div class="field">
+              <span>Made from</span>
+              <ResourcePicker v-model="form.hwParts" :max="MAX_PARTS" label="Add a part" />
+            </div>
+          </template>
+        </template>
         <label v-for="f in unit.upkeep" :key="`u-${f.resourceId}`" class="field">
           <span>{{ resName(f.resourceId) }} upkeep</span>
           <select v-model.number="form.upkeep[f.resourceId]">
@@ -158,7 +190,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { FIELD_LABELS, IQ_STEPS, MAX_PARTS } from '@/engine/balance'
+import { FIELD_LABELS, HARDWARE_STEPS, IQ_STEPS, MAX_PARTS } from '@/engine/balance'
 import {
   describeChange,
   draftBreakthrough,
@@ -170,12 +202,27 @@ import {
   type BreakthroughSpec,
   type BreakthroughVerdict
 } from '@/engine/breakthroughProposal'
-import { ceilingIQ, currentIQ, describeFlows, findResource, findStrategy, findUnit, fmt, iqRoom, MONEY_ID } from '@/engine/model'
+import {
+  ceilingIQ,
+  currentIQ,
+  describeFlows,
+  findResource,
+  findStrategy,
+  findUnit,
+  fmt,
+  iqRoom,
+  MONEY_ID,
+  softwareLabel,
+  softwareVersion
+} from '@/engine/model'
+import { BREAKTHROUGH_PRESETS, matchUpkeep, presetBlocker, taken } from '@/engine/presets'
 import { DESCRIPTION_MAX, NAME_MAX } from '@/engine/proposals'
 import { traitsFor, TRAITS, type TraitId } from '@/engine/traits'
 import { FIELDS, type Change, type GameState, type Strategy, type UnitType } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 import { useUiStore, type InventRequest } from '@/stores/ui'
+import HelpTip from './HelpTip.vue'
+import PresetList, { type PresetItem } from './PresetList.vue'
 import ResourcePicker from './ResourcePicker.vue'
 import UnitSummary from './UnitSummary.vue'
 import VerdictView from './VerdictView.vue'
@@ -206,7 +253,10 @@ function blankForm() {
   const u = unit.value
   const wantsLayer = props.request.change === 'layer'
   return {
-    iq: 0,
+    software: 0,
+    hwShare: 0,
+    hwName: u?.mind ? `${u.hardware.name} Mk II` : '',
+    hwParts: u?.parts.length ? u.parts.map((p) => p.resourceId) : [MONEY_ID],
     upkeep: Object.fromEntries((u?.upkeep ?? []).map((f) => [f.resourceId, 1])) as Record<string, number>,
     parts: Object.fromEntries((u?.parts ?? []).map((f) => [f.resourceId, 1])) as Record<string, number>,
     remove: [] as TraitId[],
@@ -221,7 +271,54 @@ function blankForm() {
   }
 }
 const form = reactive(blankForm())
-watch(targetKey, () => Object.assign(form, blankForm()))
+watch(targetKey, () => {
+  Object.assign(form, blankForm())
+  presetName.value = ''
+})
+
+const HELP =
+  'A breakthrough changes something you already own. Pick a unit or strategy, then pick an idea from the list or edit a copy of its card yourself, and say how it works in a line. Software upgrades raise an intelligence system’s IQ, up to 1.5× its hardware. New hardware lifts that ceiling, but it’s much harder: a far bigger project, parts Jev must agree with, and more upkeep. Jev judges plausibility and difficulty, and its bar is a little higher than for units. The bigger the gain, the bigger the research project.'
+
+// ---------------------------------------------------------------- presets
+
+const presetName = ref('')
+const presetItems = computed<PresetItem[]>(() =>
+  BREAKTHROUGH_PRESETS.map((p) => ({
+    name: p.name,
+    description: p.description,
+    icon: p.on === 'strategy' ? '🧭' : p.hardware ? '🔩' : p.software ? '💾' : '💡',
+    blocked: taken(game.state, p.name)
+      ? 'Already researched or under way.'
+      : presetBlocker(game.state, p, unit.value, strategy.value)
+  }))
+)
+
+/** Fills in the changes from a preset. The player can still edit everything before proposing. */
+function applyPreset(presetId: string) {
+  const p = BREAKTHROUGH_PRESETS.find((x) => x.name === presetId)
+  const u = unit.value
+  const s = strategy.value
+  if (!p || presetBlocker(game.state, p, u, s)) return
+  Object.assign(form, blankForm())
+  presetName.value = p.name
+  name.value = p.name
+  description.value = p.description
+  if (p.software) form.software = p.software
+  if (p.hardware && u) {
+    form.hwShare = p.hardware.share
+    form.hwName = p.hardware.name(u.hardware.name)
+  }
+  const upkeep = p.upkeep && u ? matchUpkeep(game.state, u, p.upkeep.match) : undefined
+  if (upkeep && p.upkeep) form.upkeep[upkeep.resourceId] = p.upkeep.factor
+  if (p.parts && u) for (const f of u.parts) form.parts[f.resourceId] = p.parts
+  if (p.addTrait) form.addTrait = p.addTrait
+  if (p.removeTrait) form.remove = [p.removeTrait]
+  if (p.layer === 'own') form.own = true
+  if (p.layer === 'earth') form.earth = true
+  if (p.output) form.output = p.output
+  if (p.inputs && s) for (const f of s.inputs) form.inputs[f.resourceId] = p.inputs
+}
+if (props.request.preset) applyPreset(props.request.preset)
 
 const iqSteps = computed(() => (unit.value ? IQ_STEPS.filter((s) => s <= iqRoom(unit.value!) + 1e-9) : []))
 const addable = computed(() =>
@@ -261,7 +358,10 @@ watch(paramOptions, (opts) => {
 const changes = computed<Change[]>(() => {
   const out: Change[] = []
   if (unit.value) {
-    if (form.iq) out.push({ kind: 'iq', share: form.iq })
+    if (form.software) out.push({ kind: 'software', share: form.software })
+    if (form.hwShare) {
+      out.push({ kind: 'hardware', name: form.hwName.trim(), share: form.hwShare, parts: [...form.hwParts] })
+    }
     for (const [resourceId, factor] of Object.entries(form.upkeep)) if (factor !== 1) out.push({ kind: 'upkeep', resourceId, factor })
     for (const [resourceId, factor] of Object.entries(form.parts)) if (factor !== 1) out.push({ kind: 'parts', resourceId, factor })
     for (const trait of form.remove) out.push({ kind: 'trait', trait, add: false })
@@ -368,15 +468,16 @@ form {
   color: var(--text);
 }
 
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .close {
   border: none;
   background: transparent;
   padding: 2px 6px;
-}
-
-.hint {
-  font-size: 12px;
-  margin: 0;
 }
 
 .editor {

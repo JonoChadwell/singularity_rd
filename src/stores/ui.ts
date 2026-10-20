@@ -15,6 +15,13 @@ export interface InventRequest {
   /** Breakthroughs: what to change, and a change to start from. */
   target?: { kind: 'unit' | 'strategy'; id: string }
   change?: Change['kind']
+  /** A preset to fill the form from, by name. */
+  preset?: string
+  /** Resources: a name and description to start from. */
+  name?: string
+  description?: string
+  /** The dialog to reopen once this one's proposal is accepted. */
+  then?: InventRequest
 }
 
 export type Tab = 'minds' | 'industry' | 'projects' | 'market'

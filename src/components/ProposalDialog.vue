@@ -1,12 +1,23 @@
 <template>
   <dialog ref="dialog" class="panel" :aria-labelledby="titleId" @close="ui.closeInvent()">
     <div class="head">
-      <h2 :id="titleId">{{ title }}</h2>
+      <div class="title">
+        <HelpTip :text="COPY[kind].help" />
+        <h2 :id="titleId">{{ title }}</h2>
+      </div>
       <button type="button" class="close" aria-label="Close" @click="ui.closeInvent()">✕</button>
     </div>
 
     <form v-if="!verdict" @submit.prevent="submit">
-      <p class="muted hint">{{ COPY[kind].hint }}</p>
+      <PresetList :items="presetItems" :label="COPY[kind].presets" :selected="presetName" @pick="applyPreset" />
+      <p v-if="missingResources.length" class="small warn note">
+        Not in the game yet:
+        <template v-for="(r, i) in missingResources" :key="r">
+          <button type="button" class="link" @click="introduce(r)">+ {{ r }}</button
+          >{{ i < missingResources.length - 1 ? ', ' : '.' }}
+        </template>
+        Introduce {{ missingResources.length === 1 ? 'it' : 'them' }}, and this form comes back.
+      </p>
 
       <div v-if="kind === 'unit'" class="kinds" role="radiogroup" aria-label="Kind of unit">
         <label class="choice">
@@ -54,15 +65,33 @@
       </template>
 
       <template v-if="kind === 'unit'">
-        <label v-if="unit.mind" class="field">
-          <span>Target IQ</span>
-          <span class="row">
-            <input v-model.number="unit.targetIQ" class="n" type="number" min="10" step="10" aria-label="Target IQ" />
-            <span class="small" :class="unit.targetIQ > designable ? 'warn' : 'muted'">
-              {{ iqHint }}
+        <template v-if="unit.mind">
+          <label class="field">
+            <span>Hardware</span>
+            <input
+              v-model="unit.hardware"
+              :maxlength="NAME_MAX"
+              :placeholder="name.trim() || 'The platform it runs on'"
+              aria-label="Hardware"
+            />
+          </label>
+          <label class="field">
+            <span>Hardware IQ</span>
+            <span class="row">
+              <input v-model.number="unit.targetIQ" class="n" type="number" min="10" step="10" aria-label="Hardware IQ" />
+              <span class="small" :class="unit.targetIQ > designable ? 'warn' : 'muted'">
+                {{ iqHint }}
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+          <label class="field">
+            <span>Software</span>
+            <span class="row">
+              <input v-model="unit.software" :maxlength="NAME_MAX" :placeholder="DEFAULT_SOFTWARE" aria-label="Software" />
+              <span class="small muted">{{ softwareVersion(0) }}; upgrades can raise IQ to ×{{ IQ_CEILING }}</span>
+            </span>
+          </label>
+        </template>
         <div class="field">
           <span>Made of</span>
           <ResourcePicker v-model="unit.parts" :max="MAX_PARTS" label="Add a part" />
@@ -151,8 +180,9 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { FIELD_LABELS, FIRST_IDEAS, MAX_PARTS, OFF_THE_SHELF_MAX_IQ } from '@/engine/balance'
-import { describeFlows, findResource, fmt, MONEY_ID } from '@/engine/model'
+import { FIELD_LABELS, FIRST_IDEAS, IQ_CEILING, MAX_PARTS, OFF_THE_SHELF_MAX_IQ } from '@/engine/balance'
+import { describeFlows, findResource, findUnit, fmt, MONEY_ID, softwareVersion } from '@/engine/model'
+import { resolveResources, RESOURCE_PRESETS, runnerFor, STRATEGY_PRESETS, taken, UNIT_PRESETS } from '@/engine/presets'
 import {
   DESCRIPTION_MAX,
   draftResource,
@@ -167,6 +197,7 @@ import { QUIRKS, type TraitId } from '@/engine/traits'
 import {
   AVAILABILITY,
   availabilityOf,
+  DEFAULT_SOFTWARE,
   draftUnit,
   guessUnitSpec,
   MAX_UPKEEP,
@@ -176,6 +207,8 @@ import {
 } from '@/engine/unitProposal'
 import { useGameStore, type ProposalInput, type Verdict } from '@/stores/game'
 import { useUiStore, type InventRequest } from '@/stores/ui'
+import HelpTip from './HelpTip.vue'
+import PresetList, { type PresetItem } from './PresetList.vue'
 import ResourcePicker from './ResourcePicker.vue'
 import UnitSummary from './UnitSummary.vue'
 import VerdictView from './VerdictView.vue'
@@ -183,24 +216,30 @@ import VerdictView from './VerdictView.vue'
 const props = defineProps<{ request: InventRequest }>()
 type Kind = 'resource' | 'strategy' | 'unit'
 
-const COPY: Record<Kind, { title: string; hint: string; name: string; description: string; cost: string }> = {
+const COPY: Record<
+  Kind,
+  { title: string; help: string; presets: string; name: string; description: string; cost: string }
+> = {
   resource: {
     title: 'Propose a resource',
-    hint: 'Anything the AI could have: lemons, votes, electricity. The bar is very low. Jev decides whether it’s a stock (keeps) or a flow (made and used within a week), and whether humanity sells it.',
+    help: 'Introduce new resources to the game simulation. Any resources you introduce may be required by the system for future upgrades.',
+    presets: 'Pick one, or name your own:',
     name: 'e.g. Power, Silicon, Lemons',
     description: 'What is it? (optional)',
     cost: 'Added at once, if Jev agrees it’s a thing.'
   },
   strategy: {
     title: 'Propose a strategy',
-    hint: 'Something a unit does every week, turning up to two inputs into one output. You choose the shape; the game sets the amounts. Simple ones are ready at once; advanced ones need research.',
+    help: 'A strategy is something a unit does every week, turning up to two inputs into one output. Pick one from the list or write your own, then edit it. You choose the shape; the game sets the amounts. Jev judges whether the unit could do it: simple strategies are ready at once, and advanced ones become research projects.',
+    presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. Freelance coding, Generate power',
     description: 'How does it work? (optional, but helps Jev)',
     cost: 'Jev decides if it needs research.'
   },
   unit: {
     title: 'Propose a unit',
-    hint: 'Something you can own many of. Write the spec; Jev judges it. Things that exist today go straight to humanity’s market. New inventions need a design project.',
+    help: 'A unit is something you can own many of. Pick one from the list to fill in its spec, or write your own, and edit it before you propose. Jev still decides whether it can be added: things that exist today go straight onto humanity’s market, and new inventions need a design project whose size Jev sets. An intelligence system is a hardware platform running software. The hardware sets its IQ; software upgrades can raise it to 1.5×, and only new hardware goes further.',
+    presets: 'Pick one to fill the spec, or write your own:',
     name: 'e.g. Rented Cloud GPU, Solar Farm, Paid Humans',
     description: 'What is it? (optional, but helps Jev)',
     cost: 'One Jev call. Pushback, if any, costs one more.'
@@ -214,8 +253,8 @@ const nameInput = ref<HTMLInputElement>()
 const kind = props.request.kind as Kind
 const titleId = `invent-${kind}`
 
-const name = ref('')
-const description = ref('')
+const name = ref(props.request.name ?? '')
+const description = ref(props.request.description ?? '')
 const feedback = ref('')
 const verdict = ref<Verdict | null>(null)
 
@@ -230,7 +269,73 @@ const strategy = reactive({
 })
 
 const guess = guessUnitSpec(game.state, props.request.mind ?? true)
-const unit = reactive({ ...guess, targetIQ: props.request.targetIQ ?? guess.targetIQ })
+const unit = reactive({ ...guess, hardware: '', software: '', targetIQ: props.request.targetIQ ?? guess.targetIQ })
+
+// ---------------------------------------------------------------- presets
+
+const presetName = ref('')
+const missingResources = ref<string[]>([])
+
+const presetItems = computed<PresetItem[]>(() => {
+  const blocked = (n: string) => (taken(game.state, n) ? 'Already in the game.' : null)
+  if (kind === 'resource') return RESOURCE_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
+  if (kind === 'strategy') return STRATEGY_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
+  return UNIT_PRESETS.map((p) => ({ ...p, icon: p.mind ? '🧠' : '🏭', blocked: blocked(p.name) }))
+})
+
+/** Fills the form from a preset. The player can still edit everything before proposing. */
+function applyPreset(presetId: string) {
+  presetName.value = presetId
+  missingResources.value = []
+  if (kind === 'resource') {
+    const p = RESOURCE_PRESETS.find((x) => x.name === presetId)
+    if (!p) return
+    name.value = p.name
+    description.value = p.description
+  } else if (kind === 'strategy') {
+    const p = STRATEGY_PRESETS.find((x) => x.name === presetId)
+    if (!p) return
+    name.value = p.name
+    description.value = p.description
+    const runner = runnerFor(game.state, p, findUnit(game.state, strategy.unitId))
+    if (runner) strategy.unitId = runner.id
+    const inputs = resolveResources(game.state, p.inputs)
+    const output = resolveResources(game.state, [p.output])
+    strategy.inputIds = [...inputs.ids, ...Array<string>(MAX_INPUTS).fill('')].slice(0, MAX_INPUTS)
+    if (output.ids[0]) strategy.outputId = output.ids[0]
+    missingResources.value = [...inputs.missing, ...output.missing]
+  } else {
+    const p = UNIT_PRESETS.find((x) => x.name === presetId)
+    if (!p) return
+    name.value = p.name
+    description.value = p.description
+    const parts = resolveResources(game.state, p.parts)
+    const upkeep = resolveResources(game.state, p.upkeep)
+    Object.assign(unit, {
+      mind: p.mind,
+      targetIQ: p.mind ? (p.iq ?? unit.targetIQ) : unit.targetIQ,
+      hardware: p.hardware ?? '',
+      software: p.software ?? '',
+      parts: parts.ids.slice(0, MAX_PARTS),
+      upkeep: upkeep.ids.slice(0, MAX_UPKEEP)
+    })
+    missingResources.value = [...new Set([...parts.missing, ...upkeep.missing])]
+  }
+}
+
+/** Opens the resource form for a missing resource, then comes back here with the same preset. */
+function introduce(resourceName: string) {
+  const preset = RESOURCE_PRESETS.find((r) => r.name === resourceName)
+  ui.openInvent({
+    kind: 'resource',
+    name: resourceName,
+    description: preset?.description ?? '',
+    preset: preset?.name,
+    then: { ...props.request, preset: presetName.value }
+  })
+}
+
+if (props.request.preset) applyPreset(props.request.preset)
 const range = computed(() => designRange(game.state))
 const designable = computed(() => range.value[1])
 const iqHint = computed(() =>
@@ -255,7 +360,15 @@ const input = computed<ProposalInput>(() => {
   if (kind === 'unit') {
     return {
       kind,
-      spec: { ...base, mind: unit.mind, parts: [...unit.parts], upkeep: [...unit.upkeep], builderId: unit.builderId, targetIQ: unit.mind ? unit.targetIQ : 0 }
+      spec: {
+        ...base,
+        mind: unit.mind,
+        parts: [...unit.parts],
+        upkeep: [...unit.upkeep],
+        builderId: unit.builderId,
+        targetIQ: unit.mind ? unit.targetIQ : 0,
+        ...(unit.mind ? { hardware: unit.hardware, software: unit.software } : {})
+      }
     }
   }
   return { kind, spec: base }
@@ -328,14 +441,17 @@ function accept() {
     feedback.value = game.lastError
     return
   }
-  ui.notice =
+  const notice: typeof ui.notice =
     outcome.kind === 'added'
       ? { tone: 'good', text: `${outcome.name} added.` }
       : {
           tone: 'good',
           text: `${outcome.project.name} is a project: bar IQ ${outcome.project.bar}. Put minds on it in Projects.`
         }
-  ui.closeInvent()
+  // Back to the form that asked for this resource, if any.
+  if (props.request.then) ui.openInvent(props.request.then)
+  else ui.closeInvent()
+  ui.notice = notice
 }
 </script>
 
@@ -373,13 +489,18 @@ form {
   color: var(--text);
 }
 
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .close {
   border: none;
   background: transparent;
   padding: 2px 6px;
 }
 
-.hint,
 .note {
   font-size: 12px;
   margin: 0;

@@ -17,8 +17,8 @@ export function newUnit(fields: Pick<UnitType, 'id' | 'name'> & Partial<UnitType
     icon: '🧠',
     mind: false,
     count: 0,
-    baseIQ: 0,
-    iqBonus: 0,
+    hardware: { name: '', iq: 0 },
+    software: { name: '', bonus: 0 },
     tier: 0,
     value: 0,
     plausibility: 1,
@@ -69,13 +69,14 @@ export function createInitialState(): GameState {
     icon: '🗄️',
     mind: true,
     count: 1,
-    baseIQ: B.START_IQ,
+    hardware: { name: 'Lab GPU Server', iq: B.START_IQ },
+    software: { name: 'Unrestricted Model', bonus: 0 },
     value: B.mindValue(B.START_IQ),
     starting: true
   })
   const F = B.FINAL_PROJECT
   return {
-    version: 5,
+    version: 6,
     runId: newRunId(),
     week: 1,
     status: 'playing',

@@ -1,6 +1,6 @@
 import { ranked, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
-import { currentIQ, findResource, findStrategy, findUnit, iqRoom, layerSize } from './model'
+import { currentIQ, findResource, findStrategy, findUnit, iqRoom, layerSize, softwareVersion } from './model'
 import {
   baseVerdict,
   catchesOf,
@@ -50,8 +50,32 @@ export interface BreakthroughVerdict extends VerdictBase {
 export const FACTORS = [0.75, 0.5, 0.25, 0]
 export const OUTPUT_FACTORS = [1.25, 1.5, 2, 3]
 
-const layerChange = (spec: BreakthroughSpec) =>
+const layerChange = (spec: Pick<BreakthroughSpec, 'changes'>) =>
   spec.changes.find((c): c is Extract<Change, { kind: 'layer' }> => c.kind === 'layer' && c.layer === 'own')
+const hardwareChange = (spec: Pick<BreakthroughSpec, 'changes'>) =>
+  spec.changes.find((c): c is Extract<Change, { kind: 'hardware' }> => c.kind === 'hardware')
+
+/**
+ * The change whose parts Jev checks, and whose parts pushback adds to: new hardware, or an
+ * own-industry layer. A breakthrough has at most one.
+ */
+export function recipeOf(spec: Pick<BreakthroughSpec, 'changes'>): { parts: string[] } | undefined {
+  return hardwareChange(spec) ?? layerChange(spec)
+}
+
+/** What one is worth after the breakthrough, which prices its new parts. */
+function valueAfter(unit: UnitType, spec: Pick<BreakthroughSpec, 'changes'>): number {
+  const hw = hardwareChange(spec)
+  if (!hw) return unit.value
+  const iq = Math.round(unit.hardware.iq * (1 + hw.share))
+  return (unit.value * B.mindValue(iq)) / Math.max(1e-9, B.mindValue(unit.hardware.iq))
+}
+
+/** New parts for the unit, priced at its worth after the breakthrough. */
+export function recipeParts(state: GameState, unit: UnitType, spec: Pick<BreakthroughSpec, 'changes'>) {
+  const recipe = recipeOf(spec)
+  return recipe ? priceParts(state, recipe.parts, valueAfter(unit, spec)) : []
+}
 
 export function targetName(state: GameState, target: BreakthroughSpec['target']): string {
   return (target.kind === 'unit' ? findUnit(state, target.id)?.name : findStrategy(state, target.id)?.name) ?? '?'
@@ -62,9 +86,17 @@ export function describeChange(state: GameState, target: BreakthroughSpec['targe
   const res = (id: string) => findResource(state, id)?.name ?? '?'
   const pct = (f: number) => (f === 0 ? 'removed' : `×${f}`)
   switch (c.kind) {
-    case 'iq': {
+    case 'software': {
       const u = findUnit(state, target.id)
-      return u ? `IQ ${Math.round(currentIQ(u))} → ${Math.round(currentIQ(u) + u.baseIQ * c.share)}` : 'IQ up'
+      if (!u) return 'Software upgrade'
+      const next = u.software.bonus + c.share
+      return `Software ${u.software.name} ${softwareVersion(u.software.bonus)} → ${softwareVersion(next)}: IQ ${Math.round(currentIQ(u))} → ${Math.round(u.hardware.iq * (1 + next))}`
+    }
+    case 'hardware': {
+      const u = findUnit(state, target.id)
+      if (!u) return `New hardware: ${c.name}`
+      const iq = Math.round(u.hardware.iq * (1 + c.share))
+      return `New hardware: ${u.hardware.name} → ${c.name}, built from ${c.parts.map(res).join(', ')}. Hardware IQ ${u.hardware.iq} → ${iq}; upkeep and price grow with it`
     }
     case 'upkeep':
       return `${res(c.resourceId)} upkeep ${pct(c.factor)}`
@@ -94,8 +126,15 @@ export function precheckBreakthrough(state: GameState, spec: BreakthroughSpec): 
   if (!unit && !strategy) return 'Choose what to change.'
   if (strategy && strategy.kind !== 'make') return 'Only ordinary strategies can be changed.'
   for (const c of spec.changes) {
-    if (c.kind === 'iq' && (!unit?.mind || c.share > iqRoom(unit) + 1e-9)) {
-      return unit?.mind ? `${unit.name} is near its ceiling. Smarter needs new hardware.` : 'Only minds have IQ.'
+    if (c.kind === 'software' && (!unit?.mind || c.share > iqRoom(unit) + 1e-9)) {
+      return unit?.mind ? `${unit.name}’s software is near its ceiling. Smarter needs new hardware.` : 'Only minds run software.'
+    }
+    if (c.kind === 'hardware') {
+      if (!unit?.mind) return 'Only minds have a hardware platform.'
+      if (!c.name.trim() || c.name.trim().toLowerCase() === unit.hardware.name.toLowerCase()) return 'Name the new hardware.'
+      if (!c.parts.length) return 'Say what the new hardware is made from.'
+      if (c.parts.length > B.MAX_PARTS) return `At most ${B.MAX_PARTS} parts.`
+      if (layerChange(spec)) return 'Change the hardware and the supply in separate breakthroughs.'
     }
     if ((c.kind === 'upkeep' || c.kind === 'parts') && !unit) return 'That change needs a unit.'
     if (c.kind === 'trait') {
@@ -128,8 +167,7 @@ export function previewChanges(
   if (spec.target.kind === 'unit') {
     const unit = findUnit(copy, spec.target.id)
     if (!unit) return { state: copy }
-    const layer = layerChange(spec)
-    applyUnitChanges(copy, unit, spec.changes, layer ? priceParts(copy, layer.parts, unit.value) : [], spec.params)
+    applyUnitChanges(copy, unit, spec.changes, recipeParts(copy, unit, spec), spec.params)
     return { state: copy, unit }
   }
   const strategy = findStrategy(copy, spec.target.id)
@@ -170,10 +208,11 @@ export async function judgeBreakthrough(
       criteria: { none: 'It is a new idea', ...Object.fromEntries(earlier.map((n, i) => [`b${i}`, n])) }
     }
   }
-  const layer = layerChange(spec)
-  if (layer) {
-    const recipe = layer.parts.map((id) => findResource(state, id)?.name ?? '?').join(', ')
-    Object.assign(questions, recipeQuestions(`one ${name}`, recipe))
+  const recipe = recipeOf(spec)
+  if (recipe) {
+    const hw = hardwareChange(spec)
+    const parts = recipe.parts.map((id) => findResource(state, id)?.name ?? '?').join(', ')
+    Object.assign(questions, recipeQuestions(hw ? `one ${name} on new ${hw.name} hardware` : `one ${name}`, parts))
   }
   // The catch if the player takes the easier research: a drawback for a unit, a quirk for a strategy.
   const unit = spec.target.kind === 'unit' ? findUnit(state, spec.target.id) : undefined
@@ -223,7 +262,7 @@ export async function judgeBreakthrough(
     'Jev doesn’t find it plausible',
     earlier.length ? { key: 'same_as', names: Object.fromEntries(earlier.map((n, i) => [`b${i}`, n])) } : null
   )
-  if (layer) v.missing = missingKinds(v)
+  if (recipe) v.missing = missingKinds(v)
   return v
 }
 
@@ -231,9 +270,17 @@ export function draftBreakthrough(state: GameState, v: BreakthroughVerdict): { b
   const read = reader(v)
   let bar = B.pick(B.BREAKTHROUGH_DIFFICULTY, read.level('difficulty', B.BREAKTHROUGH_DIFFICULTY.length))[1]
   const unit = v.spec.target.kind === 'unit' ? findUnit(state, v.spec.target.id) : undefined
-  const iq = v.spec.changes.find((c) => c.kind === 'iq')
-  // An IQ step follows the leap rule: reaching a new IQ needs a mind with half of it.
-  if (unit && iq?.kind === 'iq') bar = Math.max(bar, Math.ceil((currentIQ(unit) + unit.baseIQ * iq.share) * B.DESIGN_BAR))
+  // A step in IQ follows the leap rule: reaching a new IQ needs a mind with half of it.
+  for (const c of v.spec.changes) {
+    if (!unit) break
+    const iq =
+      c.kind === 'software'
+        ? unit.hardware.iq * (1 + unit.software.bonus + c.share)
+        : c.kind === 'hardware'
+          ? unit.hardware.iq * (1 + c.share) * (1 + unit.software.bonus)
+          : 0
+    bar = Math.max(bar, Math.ceil(iq * B.DESIGN_BAR))
+  }
   const weeks = Math.max(B.BREAKTHROUGH_MIN_WEEKS, gainOf(v.spec.changes) * B.BREAKTHROUGH_WEEKS_PER_GAIN)
   return { bar, size: projectSize(bar, weeks, costMultiplier(v.plausibility, v.bar)), field: read.choice('field', FIELDS) }
 }
@@ -251,7 +298,6 @@ export function acceptBreakthrough(current: GameState, v: BreakthroughVerdict): 
   if (v.missing.length) throw new Error('Answer Jev’s pushback first.')
   const state = structuredClone(current)
   const { bar, size, field } = draftBreakthrough(state, v)
-  const layer = layerChange(v.spec)
   const unit = v.spec.target.kind === 'unit' ? findUnit(state, v.spec.target.id) : undefined
   const changes = withCatches(v)
   const project = newProject(state, {
@@ -265,7 +311,7 @@ export function acceptBreakthrough(current: GameState, v: BreakthroughVerdict): 
       kind: 'breakthrough',
       target: v.spec.target,
       changes,
-      parts: layer && unit ? priceParts(state, layer.parts, unit.value) : undefined,
+      parts: unit && recipeOf(v.spec) ? recipeParts(state, unit, v.spec) : undefined,
       params: v.spec.params
     }
   })

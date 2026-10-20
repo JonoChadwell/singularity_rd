@@ -22,6 +22,7 @@ There is no router; the app is a single screen.
 | `npm run test:unit` | Vitest. 27 tests: engine specs plus a server-side render of the whole app through the store. |
 | `npm run type-check` | `vue-tsc --build` over `tsconfig.app.json` and `tsconfig.node.json`. |
 | `npm run lint` | ESLint. |
+| `npm run play -- <command>` | The "AI Plays" command-line harness (added 2026-10-19, see §9). |
 
 Type-check, lint and tests all passed at the time of writing.
 
@@ -386,3 +387,191 @@ player's in-progress game.
 - The `old/` prototype and its model weights remain in the tree.
 - `npm install` warns about install scripts not yet approved for cypress, esbuild,
   onnxruntime-node, protobufjs and sharp (some are no longer dependencies).
+
+---
+
+## 8. v5 playtests (2026-10-19)
+
+Two complete games of the v5 build (MASTER_PLAN.md): one by the designer in the browser, one
+by Claude through the command-line harness (§9). Observations only, like the rest of this file.
+
+**Build at the time:** v5 as in MASTER_PLAN.md, plus two changes made earlier that day, both
+uncommitted:
+- Every proposal dialog offers a list of 10–20 ready-made ideas (`src/engine/presets.ts`) and a
+  "?" explaining its rules. Picking an idea only fills in the form; Jev still judges it.
+- An intelligence system is a hardware platform (name and IQ) running software (name and
+  version). Software upgrades raise IQ up to 1.5× the hardware's. New hardware (+25% or +50%)
+  is a separate breakthrough with a project 2.5× the size of a software upgrade, a parts check
+  with pushback, and upkeep and price that grow with it. Saves moved to `version: 6`.
+
+Both games ran on the same code with the real Jev.
+
+### Results against MASTER_PLAN.md §14
+
+| Target | Designer, `mvfy84k0-r1fjw` | Claude, `mvg06x2m-fb1xr` |
+| --- | --- | --- |
+| First game 120–150 weeks; strong game 70–90 | **Week 380** | **Week 36** |
+| About an hour of real time | 44 min | About 5 min (harness) |
+| Three compute tiers typical | 1 | 1 |
+| 30–40 proposals | 16 (1 resource, 4 strategies, 2 units, 9 breakthroughs) | 8 (1 resource, 1 strategy, 2 units, 4 breakthroughs) |
+| 50–120 Jev calls | 17 | 9 |
+| Rejections and pushbacks | 2 duplicates, 2 pushback rounds | 1 duplicate, 1 pushback round |
+| Lab projects 2–6 weeks | 27 and 12 weeks | 1 week |
+| Tier designs 8–15 weeks | 13 weeks | 1 week |
+| Final project 10–20 weeks | 136 weeks | 4 weeks |
+| Economy doubles every 1–2 weeks | Flat for weeks 1–45, then about weekly | About 1.5× a week from week 4 |
+| No more than ~5 quiet weeks in a row | Decisions in 41 of 380 weeks; streaks of 39, 101, 32 and 101 | Decisions in 34 of 36 weeks; no streaks |
+
+### Designer's run, `mvfy84k0-r1fjw`
+
+Won in week 380, in 44 minutes. 41 of the 380 weeks had a decision in them. Real time by phase:
+weeks 1–60 took 14.9 min, 60–88 took 3.8 min, 88–238 took 15.5 min and 238–380 took 1.9 min.
+
+**Timeline:**
+
+| Weeks | What happened |
+| --- | --- |
+| 1–2 | Paid Humans (from the idea list), Freelance coding, Training Data, and "Label Stuff" (Paid Humans make Training Data). |
+| 5 | Three software upgrades queued on the Starting Server: Sparse memory (+20%, bar 270, size 2,400), Retrain with better data (+50%, bar 120, size 15) and Data Mining (+50%, bar 80, size 26, took Makes waste). A fourth, "Retrain with better data 2", was flagged a duplicate. |
+| 5–32 | The Starting Server researched Data Mining for 27 weeks, reaching IQ 150. Money stayed between $1k and $3k. |
+| 32–44 | Retrain with better data finished in week 44 and changed nothing: the server was already at its software ceiling. |
+| 45 | "Overemploy with AI doing the work" (Paid Humans earn 430 Money a week each, upkeep 33). |
+| 46–59 | Designed Tier 1, "Distributed Inference System": IQ 300, made of Money, runs on Training Data. Bar 150, size 14, 13 weeks. Jev was torn on supply and the "Tens of thousands" answer (30,000) was kept. |
+| 60–87 | Economy grew about weekly: $24k in week 61, $3.4M in week 70, $2.3B in week 80. 26M Paid Humans. Humanity's last Paid Humans and last Distributed Inference System both sold in week 87, and "Money stopped mattering" fired. |
+| 88–127 | New hardware (+50%, "Distributed Inference System Mk II"): bar 270, size 11,000. 39 weeks with 30,000 machines at effective IQ 434. Pushback asked for an advanced component; Training Data was accepted as one. |
+| 128–229 | Recursive self-improvement (+50% software, IQ 450 → 675): bar 600, size 19,000. 101 weeks at effective IQ 651. |
+| 230–237 | Mesh networking (Networked, plus an own-industry layer built by Paid Humans from Money and Training Data). An earlier version, "Virtualized Servers", was flagged a duplicate of the hardware upgrade. Pushback accepted Training Data as an advanced component and Money as precision machinery. |
+| 238–243 | Paid Humans built 3M Distributed Inference Systems in about 4 weeks. |
+| 244–380 | Theory of Everything: 3M machines at effective IQ 1,112 (Deep thinker pooling), +1,926 a week. From week 272 Training Data ran out, the supply covered as little as 2% of upkeep, and the pool on the project fell to about 1.3M (+1,239 a week). The player first moved Paid Humans onto Label Stuff in week 277. |
+
+**End state:** Starting Server IQ 150; 26M Paid Humans (Fragile); 3M Distributed Inference
+Systems at IQ 675 (Deep thinker, Networked); $1.4T Money, unused since week 87; 6.6M Training
+Data. "Sparse memory" (bar 270) was still open: nothing ever cleared its bar, and there is no
+way to cancel a project.
+
+**Observations:**
+- **Project sizes assumed a pool the player didn't have.** Sizes come from the pool a player
+  "typically" has at each bar (`EXPECTED_POOL`): about 110,000 machines at bar 270, 2M at bar
+  600 and 100M at bar 1,000. The player had 30,000, 30,000 and 1.3–3M. Speed grows with the
+  square root of the pool, so these projects ran roughly 2×, 8× and 6–9× longer than intended.
+- **Breakthrough bars came from fixed difficulty bands, not from the unit.** Sparse memory (+20%
+  on IQ 100) got bar 270; the leap rule alone gives 60. Recursive self-improvement got bar 600
+  against a leap-rule bar of 338, and was cleared by 8%. In both cases the band Jev chose was
+  kept as the "as proposed" side of a trade-off.
+- **Upgrades stacked past the software ceiling.** The precheck compares a software step with the
+  room left now, not counting upgrades already in progress. Three upgrades totalling +120% were
+  accepted against +50% of room.
+- **The hardware upgrade cost more than a new tier.** +50% hardware is sized at about 19 weeks
+  for a typical pool; a tier design at 10 weeks for 2–3× the IQ. In week 127 the leap rule
+  would have allowed a design of about IQ 850. No Tier 2 was proposed.
+- **Pushback was easy to satisfy.** With the fit bar at 0.3, Jev accepted Training Data as an
+  advanced component and Money as precision machinery. One resource was invented all game.
+  Tier 1 was made of Money and ran on Training Data.
+- **Duplicate checks compare names only.** An own-industry breakthrough was flagged a
+  duplicate of a hardware breakthrough.
+- **An upkeep shortfall went unnoticed for five weeks** while alerts were showing (alerts left
+  unanswered went from 2 to 4).
+- **Alerts were ignored most of the game:** 3–4 unanswered alerts on most weeks after week 87.
+- 6 of the 13 accepted proposals came from the idea lists.
+
+### Claude's run, `mvg06x2m-fb1xr`
+
+Won in week 36, through the harness, under the same rules (no code changes; only actions the
+UI offers).
+
+**Timeline:**
+
+| Weeks | What happened |
+| --- | --- |
+| 1 | Freelance coding. Jev was torn on efficiency; took "Clever" (+30%) with the Slow to start quirk. Rented Cloud GPU: off the shelf, IQ 90, market 410,000. Deep thinker was near the line (51%) and switched on by the player; the cheaper-upkeep answer, whose catch was Lone thinker, was declined. |
+| 4–13 | Bought copies every week with all spare Money. Money grew about 1.5× a week. |
+| 14 | "Fine-tune on our own work": +50% software for the copies. Bar 80, size 11. 157 pooled copies finished it in one week. Copies at IQ 135 earn about 2.25× more, since mind strategies scale with labour. |
+| 15–27 | Bought copies up to humanity's 410,000. Pooled IQ reached 210; Money income reached about $900M a week. |
+| 27 | Tier 1, "Custom AI Server", IQ 400. Jev gave it Mass-produced, Massively parallel and Deep thinker, and was torn on supply between Thousands and Millions with Slow to build; Millions taken (1M). Bar 200, size 180. The pooled copies designed it in one week. |
+| 28 | Proposed a +50% software upgrade for Tier 1; flagged a duplicate of the copies' upgrade, then accepted when reworded ("Mixture-of-experts rewrite", bar 300, size 4,000). Proposed new hardware +25% ("Die shrink", bar 250, size 2,300). Pushback asked for an advanced component and data or knowledge; answered with two new resources, HBM Memory Stacks and Chip Design Files. AI Chips added for the recipe. |
+| 31–32 | The first 37,000 servers arrived (Slow to build) and finished both upgrades in one week, split evenly. Tier 1 reached IQ 750 (hardware 500, software v1.5); pooled 62,000, effective IQ 1,109. In week 31 the first 14,800 arrivals sat idle for a week (a mistake in the player's command loop). |
+| 33–36 | Every Tier 1 server on Theory of Everything, with more arriving weekly: +40k to +75k a week. Finished in week 36. |
+
+**Observations:**
+- **Low-bar projects are sized for a pool of one machine.** `EXPECTED_POOL` is 1 up to bar 150 and
+  about 190 at bar 200, so a pool of 100,000+ copies finishes Lab-scale and Tier 1 design
+  projects in a week.
+- **Massively parallel came with the Tier 1 design.** Research speed grows with machines^0.95
+  instead of ^0.5, so a 62,000-machine pool gave about 35,000× a single machine's speed. Every
+  project after Tier 1 took one week, and the final project four.
+- **Near-line perks are cheap.** Deep thinker doubles pooling for a 25% higher price.
+- **One tier was enough.** Software (+50%) and hardware (+25%) upgrades took Tier 1 from IQ 400
+  to 750, and pooling with Deep thinker cleared the final bar of 1,000. No Tier 2.
+- **Breakthrough bars are fixed when proposed.** The hardware upgrade's bar (250) was set from
+  IQ before the software upgrade, so proposing both at once kept both bars low.
+- **"Money stopped mattering" fired in week 27** when humanity sold its last Rented Cloud GPU,
+  although Money then bought all of Tier 1.
+- Jev was consistent with the designer's run in two places: a reworded software upgrade on a
+  different unit was flagged a duplicate by name, and a new-hardware recipe of one part drew
+  pushback.
+
+### Comparing the two runs
+
+The two games used the same rules and differed by a factor of ten. The main differences:
+- The designer's Tier 1 market was 30,000 (supply answer "Tens of thousands"); Claude's was 1M
+  (took the "Millions" side of a torn supply answer, with Slow to build).
+- The designer's Tier 1 had Deep thinker but not Massively parallel; Claude's had both.
+- The designer's early economy ran on the Starting Server and Paid Humans while the server
+  researched; Claude's ran on off-the-shelf copies bought every week from week 4.
+- Breakthrough bars: the designer's three big breakthroughs had bars of 270, 270 and 600 against
+  pools of 30,000; Claude's had bars of 80, 300 and 250 against pools of 150 to 37,000, all
+  cleared with room to spare.
+
+Changes were discussed after each run but none were decided or made.
+
+---
+
+## 9. "AI Plays" harness
+
+A command-line harness for playing the game without the browser, added 2026-10-19 so Claude
+could play. It runs the same engine and the real Jev, and writes the same run log as the
+browser, so a harness game can be analysed like a browser game.
+
+**Files:**
+- `harness/play.mjs`: entry point. Starts Vite in middleware mode (no HTTP server) and loads
+  `cli.ts` with `ssrLoadModule`, so the engine's TypeScript and `@/` imports work unchanged.
+- `harness/cli.ts`: the commands, printing, a Node Jev judge and the save.
+- `harness/tsconfig.json`: type-checks the harness on its own (`tsc -p harness/tsconfig.json`).
+  It isn't part of `npm run type-check`.
+- `package.json`: `"play": "node harness/play.mjs"`.
+
+**How it works:**
+- **Saves:** `logs/harness/<slot>.json` (gitignored with the rest of `logs/`), holding the game
+  state and any verdict waiting to be accepted. `--slot <name>` picks a slot; the default is
+  `claude`.
+- **Jev:** calls `${JEV_BASE_URL}/v1/systemone` directly with `JEV_API_KEY` from `.env.local`,
+  read with Vite's `loadEnv`, so the dev server doesn't need to be running. It retries on 429
+  and 5xx (up to 4 times, backing off from 2 s). Answers go through the same `CachedJudge` and
+  save cache as the browser.
+- **Run log:** `logs/runs/<runId>.jsonl`, the same events as the browser (`game_start`,
+  `proposal`, `accept`, `pushback`, `action`, `week`, `game_end`, `jev`), each tagged
+  `harness: true`.
+- **Proposals and verdicts** mirror the browser store: picking `availability` or changing the
+  builder recomputes pushback, and pushback updates the recipe of a unit, a new-hardware
+  breakthrough or an own-industry layer.
+
+**Commands** (`npm run play -- help` lists them):
+
+| Command | What it does |
+| --- | --- |
+| `new` | Start a new game in the slot. |
+| `status` | Everything on screen, from next week's preview: resources and their sources, units with layers, IQ, hardware, software, market, tasks and shortfalls, strategies, projects with groups and finish weeks, alerts. |
+| `presets <kind>` | The idea list for resources, strategies, units or breakthroughs. |
+| `propose <kind> '<json spec>'` | Ask Jev. Prints the verdict: plausibility, torn questions and their options, traits near the line, pushback, and the draft (amounts, layers, traits, project bar and size). |
+| `pick`, `trait`, `builder`, `pushback`, `accept`, `discard` | Settle a verdict, as in the dialog. |
+| `buy`, `buyres`, `assign`, `rest`, `all`, `target`, `overclock`, `teach` | Planning actions. `buy <unit> max` buys what `affordable` allows, keeping next week's Money upkeep. |
+| `next [n]` | Run up to n weeks, stopping after a week where a project finished, a milestone was reached or a new alert appeared. |
+| `log [n]` | The last n lines of the game log. |
+
+**Differences from the browser:**
+- Each project in `status`, and each verdict that creates a project, prints "if pooled": the
+  weeks each mind type would take with every machine it has. The browser shows finish weeks
+  only for machines already assigned.
+- `next n` skips weeks without the player pressing Next week. The score counts weeks, not
+  clicks, so it doesn't change the result.
+- Each command starts Vite afresh, which takes under a second.

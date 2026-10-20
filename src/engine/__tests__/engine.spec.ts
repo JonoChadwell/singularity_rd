@@ -5,18 +5,29 @@ import { assign, assignRest, buyResource, buyUnits, setBuildTarget, teachStrateg
 import { alertsFor } from '../alerts'
 import {
   acceptBreakthrough,
+  FACTORS,
   judgeBreakthrough,
+  OUTPUT_FACTORS,
   precheckBreakthrough,
   type BreakthroughSpec
 } from '../breakthroughProposal'
 import { runWeek } from '../cycle'
 import { previewWeek } from '../economy'
 import { createInitialState, FINAL_ID, newResource, newUnit, SERVER_ID } from '../initialState'
-import { affordable, allocation, findResource, findUnit, fmt, marketCost, MONEY_ID, unitLimit } from '../model'
+import { affordable, allocation, findResource, findUnit, fmt, marketCost, MONEY_ID, softwareLabel, unitLimit } from '../model'
+import {
+  BREAKTHROUGH_PRESETS,
+  presetBlocker,
+  resolveResources,
+  RESOURCE_PRESETS,
+  runnerFor,
+  STRATEGY_PRESETS,
+  UNIT_PRESETS
+} from '../presets'
 import { acceptResource, acceptStrategy, judgeResource, judgeStrategy } from '../proposals'
 import { effectiveIQ, makeBuildStrategy, researchSpeed } from '../research'
 import type { GameState, Strategy, UnitType } from '../types'
-import { acceptUnit, answerPushback, judgeUnit, type UnitSpec } from '../unitProposal'
+import { acceptUnit, answerPushback, DEFAULT_SOFTWARE, judgeUnit, type UnitSpec } from '../unitProposal'
 import { choice, FakeJudge, noul, score } from './fakeJudge'
 
 const money = (s: GameState) => findResource(s, MONEY_ID)!.amount
@@ -85,7 +96,7 @@ describe('the start', () => {
     expect(s.resources.map((r) => r.name)).toEqual(['Money'])
     expect(money(s)).toBe(0)
     expect(s.units).toHaveLength(1)
-    expect(unit(s, SERVER_ID)).toMatchObject({ baseIQ: 100, mind: true, count: 1, upkeep: [] })
+    expect(unit(s, SERVER_ID)).toMatchObject({ hardware: { iq: 100 }, mind: true, count: 1, upkeep: [] })
     expect(unitLimit(unit(s, SERVER_ID))).toBe(1)
     expect(s.strategies).toHaveLength(0)
     expect(s.projects[0]).toMatchObject({ id: FINAL_ID, bar: 1000, field: 'physics' })
@@ -505,7 +516,7 @@ describe('traits', () => {
 
 describe('intelligence and research', () => {
   const mind = (iq: number, traits: UnitType['traits'] = []) =>
-    newUnit({ id: 'm', name: 'Mind', mind: true, baseIQ: iq, traits })
+    newUnit({ id: 'm', name: 'Mind', mind: true, hardware: { name: 'Hardware', iq }, traits })
 
   it('pools about 5% IQ per tenfold machines (the worked example)', () => {
     expect(effectiveIQ(mind(150), 1, null)).toBe(150)
@@ -527,7 +538,7 @@ describe('intelligence and research', () => {
 
   it('stops machines below the bar from helping, however many', () => {
     const s = createInitialState()
-    s.units.push(newUnit({ id: 'copies', name: 'Copies', mind: true, baseIQ: 90, count: 1e9 }))
+    s.units.push(newUnit({ id: 'copies', name: 'Copies', mind: true, hardware: { name: 'Hardware', iq: 90 }, count: 1e9 }))
     unit(s, 'copies').rest = FINAL_ID
     const report = previewWeek(s)
     expect(report.progress[FINAL_ID]).toBe(0)
@@ -538,7 +549,7 @@ describe('intelligence and research', () => {
   it('finishes the final project and scores the week', () => {
     const s = createInitialState()
     s.week = 87
-    s.units.push(newUnit({ id: 'q', name: 'Quantum Supercomputer', mind: true, baseIQ: 1050, count: 1 }))
+    s.units.push(newUnit({ id: 'q', name: 'Quantum Supercomputer', mind: true, hardware: { name: 'Hardware', iq: 1050 }, count: 1 }))
     unit(s, 'q').rest = FINAL_ID
     s.projects[0]!.progress = s.projects[0]!.size - 0.5
     const after = runWeek(s)
@@ -553,7 +564,7 @@ describe('intelligence and research', () => {
       name: 'Sparse memory',
       description: 'Remember less, think more.',
       target: { kind: 'unit', id: SERVER_ID },
-      changes: [{ kind: 'iq', share: 0.3 }],
+      changes: [{ kind: 'software', share: 0.3 }],
       params: []
     }
     const v = await judgeBreakthrough(s, new FakeJudge({ difficulty: score(0) }), spec)
@@ -564,10 +575,10 @@ describe('intelligence and research', () => {
     unit(state, SERVER_ID).rest = project.id
     project.progress = project.size - 0.1
     const after = runWeek(state)
-    expect(unit(after, SERVER_ID).iqBonus).toBeCloseTo(0.3)
+    expect(unit(after, SERVER_ID).software.bonus).toBeCloseTo(0.3)
     // The machine is idle once its project finishes.
     expect(unit(after, SERVER_ID).rest).toBeNull()
-    expect(precheckBreakthrough(after, { ...spec, name: 'More', changes: [{ kind: 'iq', share: 0.3 }] })).toMatch(
+    expect(precheckBreakthrough(after, { ...spec, name: 'More', changes: [{ kind: 'software', share: 0.3 }] })).toMatch(
       /ceiling/
     )
   })
@@ -594,14 +605,120 @@ describe('intelligence and research', () => {
     expect(after.strategies.some((x) => x.kind === 'build' && x.outputId === 'gpu' && x.unitId === 'farm')).toBe(true)
   })
 
+  it('makes new hardware a much bigger change than new software', async () => {
+    const s = createInitialState()
+    s.units.push(
+      newUnit({
+        id: 'gpu',
+        name: 'GPU Rack',
+        mind: true,
+        count: 1,
+        hardware: { name: 'GPU Board', iq: 100 },
+        software: { name: 'Copy of You', bonus: 0.1 },
+        value: B.mindValue(100),
+        upkeep: [{ resourceId: MONEY_ID, amount: 250 }],
+        parts: [{ resourceId: MONEY_ID, amount: 1500 }]
+      })
+    )
+    const judge = new FakeJudge({ difficulty: score(0) })
+    const base = { description: '', target: { kind: 'unit' as const, id: 'gpu' }, params: [] }
+    const software = acceptBreakthrough(
+      s,
+      await judgeBreakthrough(s, judge, { ...base, name: 'Better weights', changes: [{ kind: 'software', share: 0.2 }] })
+    ).state.projects.find((p) => p.name === 'Better weights')!
+    const hwSpec: BreakthroughSpec = {
+      ...base,
+      name: 'Die shrink',
+      changes: [{ kind: 'hardware', name: 'GPU Board Mk II', share: 0.25, parts: [MONEY_ID] }]
+    }
+    const { state } = acceptBreakthrough(s, await judgeBreakthrough(s, judge, hwSpec))
+    const hardware = state.projects.find((p) => p.name === 'Die shrink')!
+    expect(hardware.size).toBeGreaterThan(software.size * 1.8)
+
+    state.projects = state.projects.map((p) => (p.id === hardware.id ? { ...p, progress: p.size } : p))
+    unit(state, SERVER_ID).rest = hardware.id
+    const after = unit(runWeek(state), 'gpu')
+    // The software comes along to the new hardware; the bigger machine costs more to run.
+    expect(after.hardware).toEqual({ name: 'GPU Board Mk II', iq: 125 })
+    expect(after.software).toEqual({ name: 'Copy of You', bonus: 0.1 })
+    expect(after.upkeep[0]!.amount).toBe(B.nice(250 * 1.5625))
+
+    // Jev checks the new hardware's parts, and pushes back when they're too thin.
+    const thin = await judgeBreakthrough(s, new FakeJudge({ recipe: noul(0.2) }), hwSpec)
+    expect(thin.missing.length).toBeGreaterThan(0)
+    expect(() => acceptBreakthrough(s, thin)).toThrow(/pushback/)
+    const same: BreakthroughSpec = { ...hwSpec, changes: [{ kind: 'hardware', name: 'GPU Board', share: 0.25, parts: [MONEY_ID] }] }
+    expect(precheckBreakthrough(s, same)).toMatch(/Name the new hardware/)
+  })
+
   it('lets minds teach each other strategies', () => {
     const s = createInitialState()
     s.strategies.push({ id: 'code', name: 'Code', description: '', unitId: SERVER_ID, kind: 'make', inputs: [], outputId: MONEY_ID, amount: 1000, scale: 1000 })
-    s.units.push(newUnit({ id: 'copy', name: 'Copy', mind: true, baseIQ: 90, count: 3 }))
+    s.units.push(newUnit({ id: 'copy', name: 'Copy', mind: true, hardware: { name: 'Hardware', iq: 90 }, count: 3 }))
     const after = teachStrategy(s, 'code', 'copy')
     const taught = after.strategies.find((x) => x.unitId === 'copy')!
     expect(taught.amount).toBe(810)
     expect(unit(after, 'copy').rest).toBe(taught.id)
+  })
+})
+
+describe('hardware and software', () => {
+  it('builds a mind from named hardware running named software', async () => {
+    const s = createInitialState()
+    const spec = mindSpec({ hardware: 'Cloud GPU Instance', software: 'Open-weights Model' })
+    const gpu = acceptUnit(s, await judgeUnit(s, new FakeJudge(), spec)).state.units.find((u) => u.name === spec.name)!
+    expect(gpu.hardware).toEqual({ name: 'Cloud GPU Instance', iq: 90 })
+    expect(gpu.software).toEqual({ name: 'Open-weights Model', bonus: 0 })
+
+    const plainSpec = mindSpec({ name: 'Plain Copy' })
+    const plain = acceptUnit(s, await judgeUnit(s, new FakeJudge(), plainSpec)).state.units.find((u) => u.name === 'Plain Copy')!
+    expect(plain.hardware.name).toBe('Plain Copy')
+    expect(plain.software.name).toBe(DEFAULT_SOFTWARE)
+    expect(softwareLabel({ ...plain, software: { name: 'X', bonus: 0.3 } })).toBe('X v1.3')
+  })
+})
+
+describe('presets', () => {
+  it('offers 10 to 20 ideas for each kind of proposal', () => {
+    for (const list of [RESOURCE_PRESETS, STRATEGY_PRESETS, UNIT_PRESETS, BREAKTHROUGH_PRESETS]) {
+      expect(list.length).toBeGreaterThanOrEqual(10)
+      expect(list.length).toBeLessThanOrEqual(20)
+      expect(new Set(list.map((p) => p.name)).size).toBe(list.length)
+    }
+  })
+
+  it('only names resources the resource list offers, in amounts the forms allow', () => {
+    const offered = new Set(['Money', ...RESOURCE_PRESETS.map((r) => r.name)])
+    for (const p of STRATEGY_PRESETS) {
+      for (const r of [...p.inputs, p.output]) expect(offered, `${p.name}: ${r}`).toContain(r)
+      expect(p.inputs.length).toBeLessThanOrEqual(2)
+    }
+    for (const p of UNIT_PRESETS) {
+      for (const r of [...p.parts, ...p.upkeep]) expect(offered, `${p.name}: ${r}`).toContain(r)
+      expect(p.parts.length).toBeLessThanOrEqual(B.MAX_PARTS)
+      expect(p.upkeep.length).toBeLessThanOrEqual(2)
+      if (p.mind) expect(p.iq && p.hardware && p.software).toBeTruthy()
+    }
+    for (const p of BREAKTHROUGH_PRESETS) {
+      if (p.software) expect(B.IQ_STEPS).toContain(p.software)
+      if (p.hardware) expect(B.HARDWARE_STEPS).toContain(p.hardware.share)
+      for (const f of [p.upkeep?.factor, p.parts, p.inputs]) if (f !== undefined) expect(FACTORS).toContain(f)
+      if (p.output) expect(OUTPUT_FACTORS).toContain(p.output)
+    }
+  })
+
+  it('matches presets to the world', () => {
+    const s = powerWorld()
+    expect(resolveResources(s, ['Money', 'power', 'Silicon'])).toEqual({ ids: [MONEY_ID, 'power'], missing: ['Silicon'] })
+    const preset = (name: string) => BREAKTHROUGH_PRESETS.find((p) => p.name === name)!
+    const server = unit(s, SERVER_ID)
+    expect(presetBlocker(s, preset('Sparse memory'), server)).toBeNull()
+    expect(presetBlocker(s, preset('Make our own'), server)).toMatch(/only ever one/)
+    expect(presetBlocker(s, preset('Process optimization'), server)).toMatch(/strategy/)
+    expect(presetBlocker(s, preset('Liquid cooling'), unit(s, 'gpu'))).toBeNull()
+    expect(presetBlocker(s, preset('Liquid cooling'), unit(s, 'farm'))).toMatch(/doesn’t run on/)
+    const solar = STRATEGY_PRESETS.find((p) => p.name === 'Generate solar power')!
+    expect(runnerFor(s, solar, server)?.id).toBe('farm')
   })
 })
 

@@ -3,8 +3,12 @@
     <template v-if="unit.mind">
       <dt>IQ</dt>
       <dd class="num ai">
-        {{ Math.round(currentIQ(unit)) }} <span class="muted">(ceiling {{ Math.round(ceilingIQ(unit)) }})</span>
+        {{ Math.round(currentIQ(unit)) }} <span class="muted">(software ceiling {{ Math.round(ceilingIQ(unit)) }})</span>
       </dd>
+      <dt>Hardware</dt>
+      <dd>{{ unit.hardware.name }} <span class="muted num">IQ {{ unit.hardware.iq }}</span></dd>
+      <dt>Software</dt>
+      <dd>{{ softwareLabel(unit) }}</dd>
     </template>
     <dt>Work</dt>
     <dd class="num">{{ fmt(labour(unit)) }} Money’s worth a week</dd>
@@ -36,7 +40,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { layerSummary } from '@/engine/breakthroughProposal'
-import { basePrice, ceilingIQ, currentIQ, describeFlows, findUnit, fmt, fmtCount, labour } from '@/engine/model'
+import { basePrice, ceilingIQ, currentIQ, describeFlows, findUnit, fmt, fmtCount, labour, softwareLabel } from '@/engine/model'
 import type { GameState, UnitType } from '@/engine/types'
 import TraitChips from './TraitChips.vue'
 

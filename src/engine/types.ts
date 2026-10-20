@@ -40,10 +40,13 @@ export interface UnitType {
   /** Intelligence systems think and can do research. Everything else is industry. */
   mind: boolean
   count: number
-  /** Minds only. */
-  baseIQ: number
-  /** Share of base IQ added by breakthroughs, up to the software ceiling. */
-  iqBonus: number
+  /**
+   * Minds only: the hardware platform it runs on. Its IQ is what the machine can think with
+   * its first software. Hardware is hard to change: a big breakthrough, or a new design.
+   */
+  hardware: Hardware
+  /** Minds only: the software it runs. Upgrades add IQ, up to the software ceiling. */
+  software: Software
   /** Compute tier number, or 0 if this mind isn't a tier. */
   tier: number
   /** Worth of one, in Money. Sets its labour, its parts and its price. */
@@ -88,6 +91,17 @@ export interface UnitType {
   starting?: boolean
 }
 
+export interface Hardware {
+  name: string
+  iq: number
+}
+
+export interface Software {
+  name: string
+  /** Share of the hardware's IQ added by software upgrades, up to the software ceiling. */
+  bonus: number
+}
+
 export interface Strategy {
   id: string
   name: string
@@ -119,7 +133,9 @@ export interface Strategy {
 }
 
 export type Change =
-  | { kind: 'iq'; share: number }
+  | { kind: 'software'; share: number }
+  /** New hardware: IQ × (1 + share), built from `parts`. Upkeep and price grow with it. */
+  | { kind: 'hardware'; name: string; share: number; parts: string[] }
   | { kind: 'upkeep'; resourceId: string; factor: number }
   | { kind: 'parts'; resourceId: string; factor: number }
   | { kind: 'trait'; trait: TraitId; add: boolean }
@@ -226,7 +242,7 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 5
+  version: 6
   runId: string
   week: number
   status: 'playing' | 'won'

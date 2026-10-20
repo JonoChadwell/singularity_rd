@@ -1,4 +1,4 @@
-import { currentIQ, describeFlows, findUnit } from './model'
+import { currentIQ, describeFlows, findUnit, softwareLabel } from './model'
 import { TRAITS } from './traits'
 import type { GameState } from './types'
 
@@ -8,7 +8,11 @@ import type { GameState } from './types'
  */
 export function describeState(state: GameState): string {
   const unitLine = (u: GameState['units'][number]) => {
-    const bits = [u.mind ? `intelligence system, IQ ${Math.round(currentIQ(u))}` : 'industry']
+    const bits = [
+      u.mind
+        ? `intelligence system, IQ ${Math.round(currentIQ(u))}: ${u.hardware.name} hardware running ${softwareLabel(u)}`
+        : 'industry'
+    ]
     if (u.upkeep.length) bits.push(`runs on ${describeFlows(state, u.upkeep)} a week`)
     if (u.traits.length) bits.push(u.traits.map((t) => TRAITS[t].name).join(', '))
     return `- ${u.name} (${bits.join('; ')}): ${u.description}`

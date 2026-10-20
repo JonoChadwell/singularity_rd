@@ -105,10 +105,15 @@ export function describeFlows(state: GameState, flows: Flow[], multiplier = 1): 
 
 // ---------------------------------------------------------------- intelligence
 
-export const currentIQ = (u: UnitType) => u.baseIQ * (1 + u.iqBonus)
-export const ceilingIQ = (u: UnitType) => u.baseIQ * B.IQ_CEILING
-/** The most a breakthrough can still add, as a share of base IQ. */
-export const iqRoom = (u: UnitType) => Math.max(0, B.IQ_CEILING - 1 - u.iqBonus)
+/** A mind's IQ is its hardware's, raised by its software. */
+export const currentIQ = (u: UnitType) => u.hardware.iq * (1 + u.software.bonus)
+/** The software ceiling: software can't take a mind past this. New hardware can. */
+export const ceilingIQ = (u: UnitType) => u.hardware.iq * B.IQ_CEILING
+/** The most a software upgrade can still add, as a share of the hardware's IQ. */
+export const iqRoom = (u: UnitType) => Math.max(0, B.IQ_CEILING - 1 - u.software.bonus)
+/** Software versions count upgrades in tenths: +30% of the hardware's IQ is v1.3. */
+export const softwareVersion = (bonus: number) => `v${(1 + bonus).toFixed(1)}`
+export const softwareLabel = (u: UnitType) => `${u.software.name} ${softwareVersion(u.software.bonus)}`
 
 export const minds = (state: GameState) => state.units.filter((u) => u.mind)
 export const industry = (state: GameState) => state.units.filter((u) => !u.mind)

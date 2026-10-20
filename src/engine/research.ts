@@ -193,8 +193,11 @@ export function gainOf(changes: Change[]): number {
   let gain = 0
   for (const c of changes) {
     switch (c.kind) {
-      case 'iq':
+      case 'software':
         gain += c.share * 10
+        break
+      case 'hardware':
+        gain += c.share * 10 * B.HARDWARE_GAIN
         break
       case 'upkeep':
         gain += (1 - c.factor) * 2
@@ -236,8 +239,11 @@ export function applyUnitChanges(
 ) {
   for (const c of changes) {
     switch (c.kind) {
-      case 'iq':
-        unit.iqBonus = Math.min(B.IQ_CEILING - 1, unit.iqBonus + c.share)
+      case 'software':
+        unit.software.bonus = Math.min(B.IQ_CEILING - 1, unit.software.bonus + c.share)
+        break
+      case 'hardware':
+        upgradeHardware(unit, c.name, c.share, parts)
         break
       case 'upkeep':
         unit.upkeep = unit.upkeep
@@ -265,6 +271,19 @@ export function applyUnitChanges(
     }
   }
   addUnitExtras(state, unit)
+}
+
+/**
+ * Moves every machine of a type onto new hardware. Its software comes along. A smarter
+ * machine does more work, so it costs more to run and to build in proportion.
+ */
+export function upgradeHardware(unit: UnitType, name: string, share: number, parts: Flow[] = []) {
+  const iq = Math.round(unit.hardware.iq * (1 + share))
+  const grow = B.mindValue(iq) / Math.max(1e-9, B.mindValue(unit.hardware.iq))
+  unit.hardware = { name, iq }
+  unit.value *= grow
+  unit.upkeep = unit.upkeep.map((f) => ({ ...f, amount: B.nice(f.amount * grow) }))
+  unit.parts = parts.length ? parts : unit.parts.map((f) => ({ ...f, amount: B.nice(f.amount * grow) }))
 }
 
 function addTrait(state: GameState, unit: UnitType, trait: TraitId, param?: string) {
@@ -317,9 +336,9 @@ export function applyStrategyChanges(state: GameState, s: Strategy, changes: Cha
 // ---------------------------------------------------------------- finishing projects
 
 export function addUnit(state: GameState, unit: UnitType, strategies: Strategy[] = []) {
-  const designedBefore = state.units.filter((u) => u.mind).map((u) => u.baseIQ)
-  if (unit.mind && !unit.starting && unit.baseIQ > Math.max(0, ...designedBefore) && !unit.tier) {
-    if (unit.baseIQ > B.OFF_THE_SHELF_MAX_IQ) {
+  const designedBefore = state.units.filter((u) => u.mind).map((u) => u.hardware.iq)
+  if (unit.mind && !unit.starting && unit.hardware.iq > Math.max(0, ...designedBefore) && !unit.tier) {
+    if (unit.hardware.iq > B.OFF_THE_SHELF_MAX_IQ) {
       unit.tier = Math.max(0, ...state.units.map((u) => u.tier)) + 1
     }
   }

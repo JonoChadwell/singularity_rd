@@ -116,14 +116,36 @@ describe('App', () => {
     expect(strategy).toMatch(/<option value="money"[^>]*selected>/)
 
     const unit = await render((_, ui) => ui.openInvent({ kind: 'unit', mind: true, targetIQ: 250 }))
-    expect(unit).toContain('Target IQ')
+    expect(unit).toContain('Hardware IQ')
     expect(unit).toContain('Within reach: about IQ 153–250')
 
     const breakthrough = await render((_, ui) =>
       ui.openInvent({ kind: 'breakthrough', target: { kind: 'unit', id: SERVER_ID } })
     )
     expect(breakthrough).toContain('Propose a breakthrough')
-    expect(breakthrough).toContain('of base')
+    expect(breakthrough).toContain('Upgrade to v1.1')
+  })
+
+  it('offers a list of ideas and a ? with the rules in every proposal dialog', async () => {
+    for (const kind of ['resource', 'strategy', 'unit', 'breakthrough'] as const) {
+      const html = await render((_, ui) => ui.openInvent({ kind }))
+      expect(html, kind).toContain('aria-label="How this works"')
+      expect(html.match(/class="preset small/g)?.length ?? 0, kind).toBeGreaterThanOrEqual(10)
+    }
+    const resource = await render((_, ui) => ui.openInvent({ kind: 'resource' }))
+    expect(resource).toContain(
+      'Introduce new resources to the game simulation. Any resources you introduce may be required by the system for future upgrades.'
+    )
+  })
+
+  it('fills the unit form from a preset and says which resources are missing', async () => {
+    const html = await render((_, ui) => ui.openInvent({ kind: 'unit', preset: 'Custom AI Server' }))
+    expect(html).toContain('value="Custom AI Server"')
+    expect(html).toContain('value="Custom Accelerator Rack"')
+    expect(html).toContain('value="250"')
+    expect(html).toContain('Not in the game yet')
+    expect(html).toContain('+ AI Chips')
+    expect(html).toContain('+ Power')
   })
 
   it('renders the end screen', async () => {

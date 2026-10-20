@@ -54,7 +54,7 @@ const steps = computed(() => {
   const s = game.state
   const online = (key: string) => s.milestones.find((m) => m.key === key)?.week
   const tiers = s.units.filter((u) => u.starting || u.tier).sort((a, b) => a.tier - b.tier)
-  const topIQ = Math.max(0, ...s.units.filter((u) => u.mind).map((u) => u.baseIQ))
+  const topIQ = Math.max(0, ...s.units.filter((u) => u.mind).map((u) => u.hardware.iq))
   const rows = tiers.map((u) => {
     const week = u.starting ? 1 : online(`tier-${u.tier}`)
     return {
@@ -69,13 +69,13 @@ const steps = computed(() => {
     }
   })
   for (const p of s.projects) {
-    if (p.effect.kind !== 'unit' || !p.effect.unit.mind || p.effect.unit.baseIQ <= topIQ) continue
+    if (p.effect.kind !== 'unit' || !p.effect.unit.mind || p.effect.unit.hardware.iq <= topIQ) continue
     rows.push({
       key: p.id,
       label: `Tier ${rows.length}`,
       icon: p.effect.unit.icon,
       name: p.effect.unit.name,
-      iq: p.effect.unit.baseIQ,
+      iq: p.effect.unit.hardware.iq,
       detail: `designing, ${Math.floor((p.progress / p.size) * 100)}%`,
       ghost: true,
       online: false

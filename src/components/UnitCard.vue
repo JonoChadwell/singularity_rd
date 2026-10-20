@@ -9,7 +9,7 @@
           <span
             v-if="unit.mind"
             class="chip iq"
-            :title="`Base IQ ${unit.baseIQ}. Breakthroughs can raise it to ${Math.round(ceilingIQ(unit))}, no further.`"
+            :title="`${unit.hardware.name} hardware, IQ ${unit.hardware.iq}, running ${softwareLabel(unit)}. Software upgrades can raise it to ${Math.round(ceilingIQ(unit))}; past that needs new hardware.`"
           >
             IQ {{ Math.round(currentIQ(unit)) }}<span class="muted"> / {{ Math.round(ceilingIQ(unit)) }}</span>
           </span>
@@ -24,6 +24,7 @@
     </header>
 
     <div class="facts small muted">
+      <span v-if="unit.mind">🔩 {{ unit.hardware.name }} · 💾 {{ softwareLabel(unit) }} ·</span>
       <span>{{ unit.upkeep.length ? `Runs on ${describeFlows(game.state, unit.upkeep)} a week` : 'No upkeep' }}</span>
       <span v-if="!unit.starting">· Jev: {{ Math.round(unit.plausibility * 100) }}% plausible</span>
       <span v-if="unit.crew">· Each needs {{ unit.crew.per }} {{ unitName(unit.crew.unitId) }}</span>
@@ -93,6 +94,7 @@ import {
   affordable,
   ceilingIQ,
   currentIQ,
+  softwareLabel,
   describeFlows,
   findResource,
   findUnit,

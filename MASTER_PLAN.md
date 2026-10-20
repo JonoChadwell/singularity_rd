@@ -10,7 +10,7 @@ You start as one unattended AI server in a research lab, and you invent your way
 
 If a feature fights a pillar, the feature loses.
 
-1. **You invent everything.** The game ships no tech tree. The only built-in things are Money, the Starting Server and the final project.
+1. **You invent everything.** The game ships no tech tree. The only built-in things are Money, the Starting Server and the final project. Each proposal form offers a list of 10 to 20 ready-made ideas to start from, but picking one only fills in the form: you can edit it, and Jev judges it like anything else.
 2. **Every wall is a question.** Growth stops at real limits: what humanity can sell you, what Earth can hold, and how smart your machines are. The way past is always a new idea, never more of the same.
 3. **Intelligence designs intelligence.** Every research project has an IQ bar, and machines below it can't help however many you own. You climb by designing smarter machines, about three times a game.
 4. **Every week counts.** Your score is the week you win. The simulation is fully predictable, so a better plan always wins sooner. The game never asks for a click that isn't a decision.
@@ -22,7 +22,9 @@ If a feature fights a pillar, the feature loses.
 | Week | One turn: one press of Next week. |
 | Resource | Something you can have. A stock keeps from week to week, like Money or AI Chips. A flow is made and used within a week, like Power. |
 | Unit | Anything you own a number of: machines, buildings, people, organisms. |
-| Intelligence system | A unit that thinks. It has an IQ and can do research. Every other unit is industry. |
+| Intelligence system | A unit that thinks: a hardware platform running software. The hardware sets its IQ and software upgrades raise it. It can do research. Every other unit is industry. |
+| Hardware | The platform a mind runs on, like a Lab GPU Server. Its IQ is the mind's base. Hard to change. |
+| Software | What a mind runs, like Unrestricted Model v1.3. Upgrades raise IQ up to 1.5 times the hardware's. |
 | Strategy | Something a unit does each week, turning up to two inputs into one output. |
 | Project | Research. It has an IQ bar and a size, and intelligence systems work on it. |
 | Breakthrough | A project that changes something you already own. |
@@ -105,7 +107,7 @@ The week report then shows what changed, what finished and what needs attention.
 
 Jev is a decision engine. It answers yes/no questions with a probability, picks one of the options the game offers, and places things on a rubric, each with a confidence. It never writes text. That shapes the whole design:
 
-- **Every name and description comes from the player.** Everything else comes from fixed lists the game ships with.
+- **Every name and description comes from the player,** or from a ready-made idea the player picked and could edit. Everything else comes from fixed lists the game ships with.
 - **Jev judges and never invents.** The game sets the thresholds and the numbers.
 - **Jev runs only when you propose something,** never during a week. Jev answers all of a proposal's questions from one read for roughly the price of one, so each proposal is one call and each pushback round is one more. A game should use 50 to 120 calls, which costs well under a cent. No other model is needed, which keeps the game cheap to run and to sell.
 - **The same proposal gets the same verdict.** Proposing an identical idea again doesn't re-roll Jev.
@@ -126,6 +128,10 @@ Jev gives a probability and the game decides what passes. The tone is generous a
 ### When Jev is torn
 
 Every Jev answer comes with a confidence. When confidence is low and Jev's top two answers are close, the game shows both and you pick one. You never get an answer Jev didn't consider. For a trait near the line, you decide whether it applies. That's safe because perks raise a unit's price and drawbacks lower it.
+
+### Ready-made ideas
+
+Every proposal form opens with a list of 10 to 20 ideas: resources like Power and Silicon, strategies like Freelance coding, units like Custom AI Server, and breakthroughs like Liquid cooling. Picking one fills in the form. A unit or strategy whose resources aren't in the game yet lists them, with a button to introduce each one and come back. The player can change anything before proposing, and Jev still decides whether it's added and how much research it takes. Each form also has a "?" at its top left that explains its rules.
 
 ### Resources
 
@@ -150,7 +156,7 @@ You write a spec:
 - what it's made of;
 - what it runs on, which is its upkeep;
 - who builds it: humanity's market or one of your builder units;
-- for an intelligence system, its target IQ.
+- for an intelligence system, its hardware and its IQ, and the software it runs.
 
 The form starts with a guess built from your existing resources, and you edit it. Jev then decides:
 
@@ -162,11 +168,11 @@ The form starts with a guess built from your existing resources, and you edit it
 - for a new industry unit, its IQ bar, from a difficulty band. An intelligence system's bar comes from the leap rule instead;
 - how many humanity could sell you, which sets its market layer.
 
-Off-the-shelf intelligence systems are copies of you. Their base IQ can't exceed the Starting Server's 100. New heights must be designed.
+Off-the-shelf intelligence systems are copies of you. Their hardware's IQ can't exceed the Starting Server's 100. New heights must be designed.
 
 ### Breakthroughs
 
-You pick a unit or strategy and edit a copy of its card. Anything can change: inputs, outputs, quantities, upkeep, builder, IQ up to the ceiling, traits, or a new supply layer. You add a line on how. The game shows before and after. Jev judges plausibility and difficulty, and checks for duplicates among earlier breakthroughs. The bigger the gain, the bigger the project.
+You pick a unit or strategy and edit a copy of its card. Anything can change: inputs, outputs, quantities, upkeep, builder, software up to the ceiling, hardware, traits, or a new supply layer. You add a line on how. The game shows before and after. Jev judges plausibility and difficulty, and checks for duplicates among earlier breakthroughs. The bigger the gain, the bigger the project.
 
 For example:
 
@@ -205,7 +211,9 @@ You decide the shape of every proposal: which inputs, which outputs, which parts
 
 ### Intelligence systems
 
-Intelligence systems have their own panel, apart from industry. Each type shows its count, base IQ, current IQ, ceiling and assignments.
+Intelligence systems have their own panel, apart from industry. Each type shows its count, hardware, software version, current IQ, ceiling and assignments.
+
+A mind is a hardware platform running software. The Starting Server is a Lab GPU Server running Unrestricted Model v1.0. The hardware's IQ is the mind's base, and its software adds to it.
 
 Every machine does one thing each week. It either works on a project or runs a strategy, such as earning Money or crewing a facility. A type with many machines is split by count, for example 60,000 Custom AI Servers on "Design Tier 2" and 40,000 on "Quant trading". The Starting Server is a group of one. Only the player moves a machine.
 
@@ -230,9 +238,13 @@ A worked example: a project to design a "Neuromorphic Wafer" at IQ 800 has a bar
 
 Research progress is steady. Each project shows the week it will finish under the current assignments. A project keeps its progress if machines move away. Projects never repeat. When a project finishes, its machines are idle until you reassign them, and the alerts say so.
 
-### IQ breakthroughs
+### Software and hardware upgrades
 
-An IQ breakthrough adds a share of the type's base IQ, chosen by you, up to the ceiling. Bigger steps are bigger projects. A breakthrough applies to every machine of that type, including ones bought later.
+A software upgrade adds a share of the hardware's IQ, chosen by you, up to the software ceiling of 1.5 times the hardware. Each tenth is a version: +30% takes v1.0 to v1.3. Bigger steps are bigger projects.
+
+New hardware is how a type gets past its ceiling without a new design, and it's much harder. It raises the hardware's IQ by a quarter or a half and keeps the software's version. The project is about two and a half times as big as a software upgrade of the same size, Jev checks the new hardware's parts and can push back, and upkeep and price grow with the machine's work. Designing a new tier is still the bigger leap.
+
+Both apply to every machine of that type, including ones bought later.
 
 ### Fields
 

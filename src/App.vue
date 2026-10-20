@@ -96,7 +96,7 @@ const ui = useUiStore()
 onMounted(() => game.checkJev())
 
 const minds = computed(() =>
-  game.state.units.filter((u) => u.mind).sort((a, b) => b.baseIQ - a.baseIQ)
+  game.state.units.filter((u) => u.mind).sort((a, b) => b.hardware.iq - a.hardware.iq)
 )
 const industry = computed(() => game.state.units.filter((u) => !u.mind))
 const forSale = computed(
