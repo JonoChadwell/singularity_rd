@@ -89,11 +89,11 @@ describe('Phase 1 bots', () => {
     for (const a of APPROACHES) expect((await play(await phase1(a), idle, 12)).lost).toBe(10)
   })
 
-  it('win in weeks 7 to 9 with an income a week and upgrades as needed', async () => {
+  it('win in weeks 5 to 7 with an income a week and upgrades as needed: Phase 1 is a tutorial', async () => {
     for (const a of APPROACHES) {
       const r = await play(await phase1(a), flat, 12)
-      expect(r.won).toBeGreaterThanOrEqual(7)
-      expect(r.won).toBeLessThanOrEqual(9)
+      expect(r.won).toBeGreaterThanOrEqual(5)
+      expect(r.won).toBeLessThanOrEqual(7)
     }
   })
 

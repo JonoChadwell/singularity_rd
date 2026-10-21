@@ -30,8 +30,6 @@ export interface PlanSpec {
   /** Phase 1: how. Phase 2: how humans are handled. */
   means: string
   resources: ResourceSpec[]
-  /** Names, from the batch, of what the goal uses up. */
-  uses: string[]
   /** Phase 2: the first industry unit. */
   firstUnit?: { name: string; description: string } | null
 }
@@ -45,6 +43,8 @@ export interface PlanVerdict extends VerdictBase {
 const lower = (s: string) => s.trim().toLowerCase()
 /** Question prefix for the batch's i-th resource. */
 const prefix = (i: number) => `r${i}_`
+/** The `top` question's option for the batch's i-th resource. */
+const topKey = (i: number) => `r${i}`
 
 /** The phase a plan is for: the one waiting for a plan. */
 export const planPhase = (state: GameState): 1 | 2 => (state.phase.n === 2 ? 2 : 1)
@@ -61,7 +61,6 @@ export function cleanPlan(spec: PlanSpec): PlanSpec {
     goal: spec.goal.trim().slice(0, NAME_MAX),
     means: spec.means.trim().slice(0, DESCRIPTION_MAX),
     resources: spec.resources.filter((r) => r.name.trim()).map((r) => cleanText(r.name, r.description)),
-    uses: spec.uses.map((u) => u.trim()).filter(Boolean),
     firstUnit: spec.firstUnit?.name.trim() ? cleanText(spec.firstUnit.name, spec.firstUnit.description) : null
   }
 }
@@ -82,12 +81,6 @@ export function precheckPlan(state: GameState, raw: PlanSpec): string | null {
   if (phase === 1 && spec.resources.length < fewest) return `Name at least ${fewest} resources.`
   if (phase === 2 && fresh < fewest) return `Name at least ${fewest} resources you don’t have yet (${fresh} so far).`
   if (spec.resources.length > most) return `At most ${most} resources.`
-  if (!spec.uses.length) return 'Tick what the goal uses up.'
-  if (spec.uses.length > B.GOAL_MAX_COSTS) return `The goal can use up at most ${B.GOAL_MAX_COSTS} resources.`
-  if (spec.uses.some((u) => !names.includes(lower(u)))) return 'The goal can only use up resources in the plan.'
-  // The phase is about its new batch, so the goal can't be paid in what you already make.
-  const freshNames = new Set(newIndexes(state, spec).map((i) => lower(spec.resources[i]!.name)))
-  if (spec.uses.some((u) => !freshNames.has(lower(u)))) return 'The goal can only use up resources that are new in this plan.'
   if (phase === 2) {
     const first = spec.firstUnit
     if (!first) return 'Name your first unit: the first thing you’ll build.'
@@ -116,6 +109,13 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
       type: 'score',
       instructions: 'What would reaching this goal take more of: sheer brilliance, or resources and scale?',
       criteria: scale(B.GOAL_APPROACH)
+    },
+    // The phase is about its new batch, so the goal is built from one of the new resources.
+    top: {
+      type: 'choice',
+      instructions:
+        'Which one of these is the goal built from: the hardest-won thing, which the AI must pile up to reach the goal? The others are what it makes that from.',
+      criteria: Object.fromEntries(fresh.map((i) => [topKey(i), spec.resources[i]!.name]))
     }
   }
   for (const i of fresh) Object.assign(questions, resourceQuestions(state, prefix(i), spec.resources[i]!.name))
@@ -129,7 +129,6 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
       `${phase === 1 ? 'How' : 'How it handles humans'}: "${spec.means || '(not said)'}"`,
       'Resources:',
       ...spec.resources.map((r) => `- ${r.name}: ${r.description || '(no description)'}`),
-      `The goal uses up: ${spec.uses.join(', ')}.`,
       ...(spec.firstUnit ? [`First unit to build: ${spec.firstUnit.name} (${spec.firstUnit.description || 'no description'}).`] : [])
     ]),
     questions,
@@ -137,6 +136,7 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
   )
   const torn: TornSpec[] = [
     { key: 'approach', topic: 'what the goal takes more of' },
+    { key: 'top', topic: 'what the goal is built from' },
     ...fresh.map((i) => ({ key: `${prefix(i)}kind`, topic: `whether ${spec.resources[i]!.name} keeps from week to week` }))
   ]
   const v: PlanVerdict = { ...baseVerdict('plan', questions, answers, 'coherent', torn), kind: 'plan', spec, phase }
@@ -158,23 +158,30 @@ export interface PlanDraft {
   state: GameState
   added: Resource[]
   goal: Research
-  /** Why the plan can't be accepted, if it can't. */
-  error: string | null
+  /** The batch's top resource, which the goal uses up. */
+  top: Resource
 }
 
-/** The goal's IQ bar and what it uses up, worth GOAL_COST times the approach's multiplier. */
+/** The index, in the spec, of the resource Jev says the goal is built from. */
+function topIndex(v: PlanVerdict, fresh: number[]): number {
+  return Number(reader(v).choice('top', fresh.map(topKey)).slice(1))
+}
+
+/**
+ * The batch's resources, with the one the goal is built from at the phase's top tier, and the
+ * goal: its IQ bar, and a cost in that resource worth GOAL_COST times the approach's multiplier.
+ */
 export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
   const state = structuredClone(current)
-  const fresh = new Set(newIndexes(state, v.spec))
+  const fresh = newIndexes(state, v.spec)
+  const at = topIndex(v, fresh)
   const added: Resource[] = []
-  v.spec.resources.forEach((spec, i) => {
-    if (!fresh.has(i)) return
-    const resource = resourceFrom(state, v, spec, prefix(i))
+  for (const i of fresh) {
+    const resource = resourceFrom(state, v, v.spec.resources[i]!, prefix(i), i === at ? B.GOAL_TIER[v.phase] : null)
     state.resources.push(resource)
     added.push(resource)
-  })
-  const byName = (n: string) => state.resources.find((r) => lower(r.name) === lower(n))
-  const stocks = [...new Set(v.spec.uses.map(byName))].filter((r): r is Resource => r?.kind === 'stock')
+  }
+  const top = added[fresh.indexOf(at)]!
   const level = reader(v).level('approach', B.GOAL_APPROACH.length)
   const [, iq1, mult1, iq2, mult2] = B.pick(B.GOAL_APPROACH, level)
   const minIQ = v.phase === 1 ? iq1 : iq2
@@ -184,22 +191,16 @@ export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
     description: v.spec.means || v.spec.goal,
     icon: '🎯',
     minIQ,
-    cost: stocks.map((r) => ({ resourceId: r.id, amount: B.nice(worth / stocks.length / r.value) })),
+    cost: [{ resourceId: top.id, amount: B.nice(worth / top.value) }],
     effect: { kind: 'goal', phase: v.phase }
   })
-  return {
-    state,
-    added,
-    goal,
-    error: stocks.length ? null : 'The goal needs something that keeps: tick a resource Jev made a stock.'
-  }
+  return { state, added, goal, top }
 }
 
 export function acceptPlan(current: GameState, v: PlanVerdict): Accepted {
   if (v.rejected) throw new Error('This plan was not accepted.')
   if (current.phase.status !== 'planning' || planPhase(current) !== v.phase) throw new Error('This phase already has a plan.')
-  const { state, added, goal, error } = draftPlan(current, v)
-  if (error) throw new Error(error)
+  const { state, added, goal } = draftPlan(current, v)
   state.research.unshift(goal)
   const ids = v.spec.resources.flatMap((r) => state.resources.find((x) => lower(x.name) === lower(r.name))?.id ?? [])
   startPhase(state, { goal: v.spec.goal, means: v.spec.means, resources: ids }, goal.id)

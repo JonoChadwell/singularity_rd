@@ -101,12 +101,15 @@ export const iconQuestion: JevQuestion = {
   criteria: Object.fromEntries(Object.keys(B.ICONS).map((k) => [k, null]))
 }
 
+/** Which stocks may pay for a research. Everything, unless a rule says otherwise. */
+export type Payable = (r: Resource) => boolean
+
 /**
  * Which resources a research would use up. Jev ranks the stocks; the cost goes to the most
- * fitting, and a close second shares it. With only Money, there's nothing to ask.
+ * fitting, and a close second shares it. With only one stock, there's nothing to ask.
  */
-export function payQuestion(state: GameState, what: string): Record<string, JevQuestion> {
-  const stocks = spendable(state)
+export function payQuestion(state: GameState, what: string, allow?: Payable): Record<string, JevQuestion> {
+  const stocks = spendable(state, allow)
   if (stocks.length < 2) return {}
   return {
     pay: {
@@ -135,12 +138,13 @@ export const payOptions = (v: Pick<VerdictBase, 'answers'>) => payers(v.answers)
 export function costFor(
   state: GameState,
   v: Pick<VerdictBase, 'answers' | 'plausibility' | 'bar'> & { risk?: Risk | null; picks?: Record<string, string> },
-  value: number
+  value: number,
+  allow?: Payable
 ): Cost {
   const risky = v.risk ? B.RISK_COST : 1
   const pick = v.picks?.pay
   const chosen = pick && payOptions(v).some((p) => p.resourceId === pick) ? [{ resourceId: pick, p: 1 }] : payers(v.answers)
-  return priceCost(state, value * costMultiplier(v.plausibility, v.bar) * risky, chosen)
+  return priceCost(state, value * costMultiplier(v.plausibility, v.bar) * risky, chosen, allow)
 }
 
 /**
@@ -341,9 +345,15 @@ export interface ResourceVerdict extends VerdictBase {
   spec: ResourceSpec
 }
 
+/** The value bands a new resource may have now: Phase 1 things are cheap. */
+export const maxBand = (state: GameState) => B.PHASE_MAX_BAND[state.phase.n]
+/** The highest tier a new resource may have now, outside a plan's top resource. */
+export const maxTier = (state: GameState) => B.PHASE_MAX_TIER[state.phase.n]
+
 /**
  * Questions about a resource. With a prefix, several resources are asked about in one call, so
- * each question names its own (`name`); otherwise Jev answers them all alike.
+ * each question names its own (`name`); otherwise Jev answers them all alike. Tier is only asked
+ * when the phase allows more than one.
  */
 export function resourceQuestions(state: GameState, prefix = '', name = ''): Record<string, JevQuestion> {
   const it = name ? `"${name}"` : 'it'
@@ -374,24 +384,38 @@ export function resourceQuestions(state: GameState, prefix = '', name = ''): Rec
     [`${prefix}value`]: {
       type: 'score',
       instructions: `How much is a single one of ${it} worth?`,
-      criteria: scale(B.RESOURCE_VALUE)
+      criteria: scale(B.RESOURCE_VALUE.slice(0, maxBand(state) + 1))
     },
+    ...(maxTier(state) > 0
+      ? {
+          [`${prefix}tier`]: {
+            type: 'score',
+            instructions: `How far along the AI's journey is ${it}: something to start from, or something that takes a chain of other things to make?`,
+            criteria: B.RESOURCE_TIERS.slice(0, maxTier(state) + 1)
+          } satisfies JevQuestion
+        }
+      : {}),
     [`${prefix}icon`]: name
       ? { ...iconQuestion, instructions: `Which icon best represents ${it}?` }
       : iconQuestion
   }
 }
 
-/** Builds a resource from Jev's answers (with an optional key prefix). */
+/**
+ * Builds a resource from Jev's answers (with an optional key prefix). A plan's top resource
+ * passes its tier, and is always a stock, since the goal uses it up.
+ */
 export function resourceFrom(
   state: GameState,
   v: Pick<VerdictBase, 'answers' | 'picks'>,
   spec: ResourceSpec,
-  prefix = ''
+  prefix = '',
+  top: number | null = null
 ): Resource {
   const read = reader(v)
-  const band = read.level(`${prefix}value`, B.RESOURCE_VALUE.length)
-  const kind = read.choice(`${prefix}kind`, ['stock', 'flow'] as const)
+  const band = read.level(`${prefix}value`, maxBand(state) + 1)
+  const kind = top === null ? read.choice(`${prefix}kind`, ['stock', 'flow'] as const) : 'stock'
+  const tier = top ?? (read.has(`${prefix}tier`) ? read.level(`${prefix}tier`, maxTier(state) + 1) : 0)
   return {
     id: makeId(state, spec.name),
     name: spec.name,
@@ -399,6 +423,7 @@ export function resourceFrom(
     icon: B.icon(read.choice(`${prefix}icon`, Object.keys(B.ICONS))),
     kind,
     band,
+    tier,
     value: B.pick(B.RESOURCE_VALUE, band)[1],
     amount: 0,
     stored: 0

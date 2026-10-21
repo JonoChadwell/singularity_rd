@@ -26,7 +26,7 @@ export function describeState(state: GameState): string {
     '',
     ...planLines,
     'Resources:',
-    ...state.resources.map((r) => `- ${r.name} (${r.kind}): ${r.description}`),
+    ...state.resources.map((r) => `- ${r.name} (${r.kind}, tier ${r.tier}): ${r.description}`),
     '',
     'Intelligence systems (single machines that think and do research):',
     ...state.minds.map(

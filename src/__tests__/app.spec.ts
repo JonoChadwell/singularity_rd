@@ -55,8 +55,7 @@ describe('App', () => {
           spec: {
             goal: 'Bribe the Head Researcher',
             means: 'Novels, then a bribe.',
-            resources: ['Money', 'Story Ideas', 'Published Novels'].map((name) => ({ name, description: '' })),
-            uses: ['Money']
+            resources: ['Money', 'Story Ideas', 'Published Novels'].map((name) => ({ name, description: '' }))
           }
         })
         expect(v?.kind).toBe('plan')

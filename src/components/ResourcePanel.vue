@@ -56,6 +56,7 @@
         <div class="breakdown" role="tooltip">
           <div class="bd-title">{{ r.name }}: next week</div>
           <p class="muted">{{ r.description }}</p>
+          <p class="muted">{{ tierText(r) }} · one is worth: {{ bandText(r) }}</p>
           <template v-if="flows(r.id).length">
             <div v-for="f in flows(r.id)" :key="f.label" class="bd-row num">
               <span>{{ f.label }}</span>
@@ -80,7 +81,7 @@
 
 <script setup lang="ts">
 import { netFlow } from '@/engine/economy'
-import { fmt } from '@/engine/model'
+import { bandText, fmt, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
 import type { Resource } from '@/engine/types'
 import { useGameStore } from '@/stores/game'

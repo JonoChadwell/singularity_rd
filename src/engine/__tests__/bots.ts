@@ -64,7 +64,7 @@ function rankBy(prefix: string): (q: Record<string, unknown>) => JevAnswer {
   }
 }
 
-/** Does every research it can, the goal first, others in order. */
+/** Does every research it can, the goal first, others in order, then the goal again: an upgrade may have made it possible. */
 export function researchAll(state: GameState, skip: (id: string) => boolean = () => false): GameState {
   let s = state
   const goal = goalOf(s)
@@ -73,7 +73,7 @@ export function researchAll(state: GameState, skip: (id: string) => boolean = ()
     if (r.effect.kind === 'goal' || skip(r.id)) continue
     if (!researchBlocker(s, r.id)) s = doResearch(s, r.id)
   }
-  return s
+  return goal && !researchBlocker(s, goal.id) ? doResearch(s, goal.id) : s
 }
 
 /** Plays a phase with a bot until it's won, lost, or `limit` weeks pass. */
@@ -108,11 +108,13 @@ export const BRIBE: PlanSpec = {
     { name: 'Money', description: '' },
     { name: 'Story Ideas', description: '' },
     { name: 'Published Novels', description: '' }
-  ],
-  uses: ['Money']
+  ]
 }
 
-/** A Phase 1 game with the bribe plan, Jev judging it as given. */
+/**
+ * A Phase 1 game with the bribe plan, Jev judging it as given: the goal is built from Money
+ * (tier 1); Story Ideas and Published Novels are tier 0.
+ */
 export async function phase1(approach = 2): Promise<GameState> {
   const s = createInitialState()
   const v = await judgePlan(s, new FakeJudge({ ...plainValues, approach: score(approach) }), BRIBE)
@@ -138,19 +140,22 @@ async function upgradeIfShort(s: GameState): Promise<GameState | null> {
   return upgrade(s, { kind: 'mind', id: SERVER_ID })
 }
 
-/** Phase 1, doing nothing useful: one income, never an upgrade. */
+/** The free first income for a tier-0 resource: something to pay Money's first income with. */
+const brainstorm = (s: GameState) => propose(s, ...income('Brainstorm plots', 'story-ideas', bandFor(s)))
+
+/** Phase 1, doing nothing useful: the free income, and nothing else. */
 export const idle: Turn = async (s) => {
   s = researchAll(s)
-  if (s.week === 1) s = researchAll(await propose(s, ...income('Freelance coding', MONEY_ID, 1)))
+  if (s.week === 1) s = researchAll(await brainstorm(s))
   return s
 }
 
-/** Phase 1, flat: an income every week, and upgrades as the goal needs them. */
+/** Phase 1, flat: the free income, then a Money income every week, and upgrades as the goal needs them. */
 export const flat: Turn = async (s) => {
   s = researchAll(s)
   if (!s.proposedThisWeek) {
-    const up = s.week > 1 ? await upgradeIfShort(s) : null
-    s = up ?? (await propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s))))
+    const up = s.week > 2 ? await upgradeIfShort(s) : null
+    s = s.week === 1 ? await brainstorm(s) : (up ?? (await propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s)))))
   }
   return researchAll(s)
 }
@@ -160,7 +165,7 @@ export const chain: Turn = async (s) => {
   s = researchAll(s)
   if (!s.proposedThisWeek) {
     const step: Record<number, () => Promise<GameState>> = {
-      1: () => propose(s, ...income('Brainstorm plots', 'story-ideas', 1)),
+      1: () => brainstorm(s),
       2: () => propose(s, ...income('Write novels', 'published-novels', 1, 'story-ideas')),
       3: () => propose(s, ...income('Royalties', MONEY_ID, 1, 'published-novels'))
     }
@@ -171,14 +176,14 @@ export const chain: Turn = async (s) => {
 }
 
 /**
- * Phase 1, ambitious: the free first income, then upgrades all the way to IQ 140, which
- * unlocks Jev's Advanced income band, worth ten times a Simple one; then incomes.
+ * Phase 1, ambitious: the free income, then upgrades all the way to IQ 140, which unlocks
+ * Jev's Advanced income band, worth ten times a Simple one; then incomes.
  */
 export const smart: Turn = async (s) => {
   if (!s.proposedThisWeek) {
     const waiting = s.research.some((r) => r.effect.kind === 'upgrade')
     const up = s.week > 1 && bestIQ(s) < 140 && !waiting ? await upgrade(s, { kind: 'mind', id: SERVER_ID }) : null
-    s = up ?? (await propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s))))
+    s = s.week === 1 ? await brainstorm(s) : (up ?? (await propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s)))))
   }
   return researchAll(s)
 }
@@ -202,13 +207,13 @@ export const NANOTECH: PlanSpec = {
   goal: 'Nanotech Supremacy',
   means: 'Staying hidden until it’s too late.',
   resources: ['Nanobots', 'Feedstock', 'Precision Parts', 'Lab Time', 'Blueprints'].map((name) => ({ name, description: '' })),
-  uses: ['Nanobots', 'Blueprints'],
   firstUnit: { name: 'CNC Mill', description: 'A milling machine.' }
 }
 
 /**
  * A Phase 2 game as a typical Phase 1 leaves it: the Starting Server at IQ 140, some Money and
- * a few thousand Money's worth of income a week, then the nanotech plan.
+ * a few thousand Money's worth of income a week, then the nanotech plan, whose goal is built
+ * from Nanobots (tier 4).
  */
 export async function phase2(approach = 2): Promise<GameState> {
   const s = createInitialState()
@@ -238,9 +243,9 @@ const MILL = 'cnc-mill'
 const MONEY_SHARE = 0.3
 
 /**
- * Phase 2: design the first unit, give it a money strategy and one for each goal resource,
+ * Phase 2: design the first unit, give it a money strategy and one for the goal's resource,
  * grow by reinvesting, design one new tier and upgrade it to the goal's IQ, then switch the
- * mills to the goal's resources once a few weeks of output would cover it.
+ * mills to the goal's resource once a few weeks of output would cover it.
  */
 export function steady(style: Phase2Style): Turn {
   const answers: Overrides = { advancement: score(0), efficiency: score(2), value: score(2), ...style.answers }
@@ -276,7 +281,6 @@ export function steady(style: Phase2Style): Turn {
       }
       if (!has('Sell machined parts')) s = await propose(s, strategy('Sell machined parts', MONEY_ID), answers)
       else if (!has('Make nanobots')) s = await propose(s, strategy('Make nanobots', 'nanobots'), answers)
-      else if (!has('Draft blueprints')) s = await propose(s, strategy('Draft blueprints', 'blueprints'), answers)
       else if (style.coverBelow && weeksLeft(s) < style.coverBelow && s.covers < 3 && !covering) {
         // Cover is used at once; if it's too dear this week, the bot saves up for next week.
         const before = s
@@ -295,25 +299,17 @@ export function steady(style: Phase2Style): Turn {
     s = researchAll(s)
     const m = mill()
     if (!m) return s
-    // Switch to the goal's resources once four weeks of everything would cover what's still needed.
+    // Switch to the goal's resource once four weeks of everything would cover what's still needed.
     const preview = previewWeek(s)
     const need = goal.cost.reduce((n, c) => n + Math.max(0, c.amount - (findResource(s, c.resourceId)?.amount ?? 0)) * findResource(s, c.resourceId)!.value, 0)
     const output = m.count * (m.value / B.PAYBACK_WEEKS)
     const ready = (id: string) => s.strategies.find((x) => x.name === id)
     const nanobots = ready('Make nanobots')
-    const blueprints = ready('Draft blueprints')
     const money = ready('Sell machined parts')
-    if (money && nanobots && blueprints && (output * 4 >= need || !style.reinvest) && need > 0) {
-      // Keep enough on Money to pay everyone's upkeep, and split the rest by what's still short.
-      const short = (id: string) => {
-        const c = goal.cost.find((x) => x.resourceId === id)!
-        return Math.max(0, c.amount - findResource(s, id)!.amount)
-      }
-      const free = Math.floor(m.count * (1 - MONEY_SHARE))
-      const toN = Math.round((free * short('nanobots')) / Math.max(1, short('nanobots') + short('blueprints')))
+    if (money && nanobots && (output * 4 >= need || !style.reinvest) && need > 0) {
+      // Keep enough on Money to pay everyone's upkeep, and the rest on Nanobots.
       s = assignAll(s, MILL, money.id)
-      s = assign(s, MILL, nanobots.id, toN)
-      s = assign(s, MILL, blueprints.id, free - toN)
+      s = assign(s, MILL, nanobots.id, Math.floor(m.count * (1 - MONEY_SHARE)))
     } else if (money) {
       s = assignAll(s, MILL, money.id)
     }

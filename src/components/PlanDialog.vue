@@ -50,10 +50,6 @@
             <div v-for="(r, i) in form.resources" :key="i" class="res">
               <input v-model="r.name" :maxlength="NAME_MAX" placeholder="Name" :aria-label="`Resource ${i + 1}`" />
               <input v-model="r.description" class="grow" :maxlength="DESCRIPTION_MAX" placeholder="What is it? (optional)" />
-              <label class="uses small" title="The goal uses this up">
-                <input type="checkbox" :checked="isUsed(r.name)" :disabled="!r.name.trim()" @change="toggleUse(r.name)" />
-                goal
-              </label>
               <span v-if="have(r.name)" class="small muted">have</span>
               <button type="button" class="link" :aria-label="`Remove ${r.name || 'resource'}`" @click="remove(i)">✕</button>
             </div>
@@ -62,7 +58,8 @@
             </button>
             <span class="small muted">
               {{ phase === 1 ? `${limits[0]}–${limits[1]} resources.` : `At least ${limits[0]} you don’t have yet; ${limits[1]} at most.` }}
-              Tick what the goal uses up (1–{{ GOAL_MAX_COSTS }}).
+              Jev picks the one your goal is built from: it becomes tier {{ GOAL_TIER[phase] }}, and the goal uses
+              it up. {{ phase === 1 ? 'The rest are tier 0.' : 'The rest are lower tiers.' }}
             </span>
           </div>
         </div>
@@ -105,12 +102,12 @@
         <div class="muted">
           {{ approachLabel }}. You have {{ PHASE_WEEKS[phase] }} weeks{{ phase === 2 ? ', and your actions can move the clock' : '' }}.
         </div>
-        <div class="row added">
-          <span v-for="r in draft.added" :key="r.id" :title="r.description">
-            {{ r.icon }} {{ r.name }} <span class="muted">({{ r.kind }})</span>
-          </span>
-        </div>
-        <p v-if="draft.error" class="bad">{{ draft.error }}</p>
+        <ul class="plain-list added">
+          <li v-for="r in draft.added" :key="r.id" :title="r.description">
+            {{ r.id === draft.top.id ? '🎯' : '' }} {{ r.icon }} <strong>{{ r.name }}</strong>
+            <span class="muted">{{ r.kind }} · {{ tierText(r) }} · worth: {{ bandText(r) }}</span>
+          </li>
+        </ul>
       </div>
     </VerdictView>
   </dialog>
@@ -118,9 +115,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, toRaw, watch } from 'vue'
-import { GOAL_APPROACH, GOAL_MAX_COSTS, PHASE_WEEKS, PLAN_RESOURCES } from '@/engine/balance'
+import { GOAL_APPROACH, GOAL_TIER, PHASE_WEEKS, PLAN_RESOURCES } from '@/engine/balance'
 import type { Verdict } from '@/engine/dispatch'
-import { describeCost } from '@/engine/model'
+import { bandText, describeCost, tierText } from '@/engine/model'
 import { PHASE_NAMES } from '@/engine/phase'
 import { planIdeas } from '@/engine/planPresets'
 import { draftPlan, planPhase, precheckPlan, type PlanSpec, type PlanVerdict } from '@/engine/planProposal'
@@ -149,12 +146,11 @@ interface Form {
   goal: string
   means: string
   resources: { name: string; description: string }[]
-  uses: string[]
   firstName: string
   firstDescription: string
 }
 
-const form = reactive<Form>({ goal: '', means: '', resources: [], uses: [], firstName: '', firstDescription: '' })
+const form = reactive<Form>({ goal: '', means: '', resources: [], firstName: '', firstDescription: '' })
 const picked = ref('')
 const feedback = ref('')
 const verdict = ref<PlanVerdict | null>(null)
@@ -162,14 +158,12 @@ const ideas = computed(() => planIdeas(game.state))
 
 const lower = (s: string) => s.trim().toLowerCase()
 const have = (name: string) => !!name.trim() && game.state.resources.some((r) => lower(r.name) === lower(name))
-const isUsed = (name: string) => form.uses.some((u) => lower(u) === lower(name))
 
 function use(idea: PlanSpec) {
   picked.value = idea.goal
   form.goal = idea.goal
   form.means = idea.means
   form.resources = idea.resources.map((r) => ({ ...r }))
-  form.uses = [...idea.uses]
   form.firstName = idea.firstUnit?.name ?? ''
   form.firstDescription = idea.firstUnit?.description ?? ''
 }
@@ -180,7 +174,6 @@ function clear() {
     goal: '',
     means: '',
     resources: Array.from({ length: limits[0] }, () => ({ name: '', description: '' })),
-    uses: [],
     firstName: '',
     firstDescription: ''
   })
@@ -191,20 +184,13 @@ function add() {
 }
 
 function remove(i: number) {
-  const [gone] = form.resources.splice(i, 1)
-  if (gone) form.uses = form.uses.filter((u) => lower(u) !== lower(gone.name))
-}
-
-function toggleUse(name: string) {
-  form.uses = isUsed(name) ? form.uses.filter((u) => lower(u) !== lower(name)) : [...form.uses, name.trim()]
+  form.resources.splice(i, 1)
 }
 
 const spec = computed<PlanSpec>(() => ({
   goal: form.goal,
   means: form.means,
   resources: form.resources.map((r) => ({ ...r })),
-  // Only names still in the list count.
-  uses: form.uses.filter((u) => form.resources.some((r) => lower(r.name) === lower(u))),
   firstUnit: phase === 2 ? { name: form.firstName, description: form.firstDescription } : null
 }))
 const blocker = computed(() => precheckPlan(game.state, spec.value))
@@ -338,17 +324,6 @@ form {
   flex: 1;
 }
 
-.uses {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  white-space: nowrap;
-}
-
-.uses input {
-  width: auto;
-}
-
 .add-res {
   align-self: flex-start;
 }
@@ -379,12 +354,9 @@ form {
 }
 
 .added {
-  gap: 4px 12px;
-  flex-wrap: wrap;
-}
-
-.bad {
-  color: var(--bad);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 @media (max-width: 560px) {

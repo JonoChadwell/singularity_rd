@@ -37,21 +37,27 @@ export const HARDWARE_COST = 2.5
 export const PHASE_WEEKS: Record<1 | 2, number> = { 1: 10, 2: 100 }
 /** Resources in a plan: [fewest, most]. Phase 2 needs this many new ones. */
 export const PLAN_RESOURCES: Record<1 | 2, [number, number]> = { 1: [3, 5], 2: [5, 8] }
-/** The goal uses up at most this many of the batch. */
-export const GOAL_MAX_COSTS = 3
+/** The tier of the plan's top resource, which the goal uses up. The rest of a Phase 1 plan is tier 0. */
+export const GOAL_TIER: Record<1 | 2, number> = { 1: 1, 2: 4 }
+/** The highest value band a resource can have, by the phase it arrives in: Phase 1 things are cheap. */
+export const PHASE_MAX_BAND: Record<1 | 2 | 3, number> = { 1: 2, 2: 5, 3: 5 }
+/** The highest tier a resource can have outside a plan, by phase. Only plans make the top tier. */
+export const PHASE_MAX_TIER: Record<1 | 2 | 3, number> = { 1: 0, 2: 3, 3: 4 }
 /**
  * What reaching a goal takes more of: [label, Phase 1 IQ, Phase 1 cost ×, Phase 2 IQ, Phase 2 cost ×].
  * The less brilliance it needs, the more resources.
  */
 export const GOAL_APPROACH: [string, number, number, number, number][] = [
-  ['Almost pure brilliance', 145, 0.6, 600, 0.3],
-  ['Mostly brilliance', 135, 0.8, 500, 0.55],
-  ['Brilliance and resources in equal measure', 125, 1, 420, 1],
-  ['Mostly resources and scale', 115, 1.2, 350, 2],
-  ['Almost pure resources and scale', 105, 1.4, 300, 4]
+  ['Almost pure brilliance', 130, 0.6, 600, 0.3],
+  ['Mostly brilliance', 125, 0.8, 500, 0.55],
+  ['Brilliance and resources in equal measure', 120, 1, 420, 1],
+  ['Mostly resources and scale', 110, 1.2, 350, 2],
+  ['Almost pure resources and scale', 100, 1.4, 300, 4]
 ]
+/** Phase 1 is a tutorial: its research (incomes and upgrades) costs this share of the usual price. */
+export const PHASE1_RESEARCH_COST = 0.3
 /** Worth of what a balanced goal uses up, by phase. */
-export const GOAL_COST: Record<1 | 2, number> = { 1: 6000, 2: 1e13 }
+export const GOAL_COST: Record<1 | 2, number> = { 1: 2500, 2: 1e13 }
 
 // ---------------------------------------------------------------- risk and cover
 
@@ -198,6 +204,14 @@ export const RESOURCE_VALUE: [string, number][] = [
   ['Valuable, like a phone', 1e3],
   ['Precious, like a car', 1e5],
   ['Priceless, like a masterpiece', 1e7]
+]
+/** Resource tiers: how far along the game a resource is. Index = tier. */
+export const RESOURCE_TIERS: string[] = [
+  'Basic: something to start from, got with no other resources',
+  'Earned: built up from basic things',
+  'Made: produced from earned things',
+  'Advanced: takes a chain of made things',
+  'Ultimate: the end of a long chain; what a grand plan is built from'
 ]
 /** Strategy efficiency: [label, multiplier]. */
 export const EFFICIENCY: [string, number][] = [

@@ -157,6 +157,7 @@
               : 'A stock: it keeps from week to week. You’ll have to make it, or earn it.'
           }}
         </div>
+        <div class="muted">{{ tierText(resourceDraft) }} · one is worth: {{ bandText(resourceDraft) }}</div>
       </div>
       <div v-else-if="verdict.kind === 'strategy' && strategyDraft" class="outcome small">
         <div>{{ strategyText }} each, every week.</div>
@@ -203,7 +204,18 @@ import { IQ_CEILING, MAX_PARTS } from '@/engine/balance'
 import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
 import { DEFAULT_SOFTWARE, draftMind, guessIQ, precheckMind } from '@/engine/mindProposal'
 import { draftIncome, precheckIncome } from '@/engine/incomeProposal'
-import { bestIQ, describeCost, describeFlows, describeIncome, designRange, findResource, fmt, softwareVersion } from '@/engine/model'
+import {
+  bandText,
+  bestIQ,
+  describeCost,
+  describeFlows,
+  describeIncome,
+  designRange,
+  findResource,
+  fmt,
+  softwareVersion,
+  tierText
+} from '@/engine/model'
 import {
   COVER_PRESETS,
   INCOME_PRESETS,

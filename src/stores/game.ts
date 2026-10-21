@@ -23,7 +23,7 @@ function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    return parsed?.version === 10 ? parsed : null
+    return parsed?.version === 11 ? parsed : null
   } catch {
     return null
   }

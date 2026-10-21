@@ -661,6 +661,38 @@ was fixed mid-round (446647a, with a test), but it caused three of the six Phase
    plan; explain upkeep timing and Picky in the cards; show "humans notice at N" next to
    `create`.
 
+### D16a. Resource tiers (designer's change, 2026-10-20)
+
+Replaces the "Goal uses up" ticks in §D2 and the free first income in §D3.
+
+- Every resource has a **tier**, 0–4, as well as its value band. Both show when you hover over
+  a resource, and in verdicts.
+- **Plans.** Jev picks which new resource the goal is built from (`top`; the player settles it
+  if Jev is torn). That one is the plan's top tier (Phase 1: tier 1, Phase 2: tier 4), is
+  always a stock, and is the goal's whole cost. Phase 1's other resources are tier 0; Phase 2's
+  others are tiered 0–3 by Jev.
+- **Phase 1 resources are cheap:** value bands 0–2 only (up to "like a meal").
+- **Outside a plan**, new resources are tier 0 in Phase 1 and 0–3 in Phase 2 (Jev decides).
+- **The first income for a resource is paid only in lower tiers**, so the first for any tier-0
+  resource is free. "First" means no income for it is done or waiting as research. Later
+  incomes are priced as before. The old rule (only the very first income in the game is free)
+  is gone: an unresearchable first income locked the first browser game.
+- `version: 11`.
+
+**Phase 1 retuned as a tutorial** (designer: efficient play wins in 5 weeks; only not trying
+loses):
+- `PHASE1_RESEARCH_COST` 0.3: Phase 1 incomes and upgrades cost 30% of the usual price.
+- `GOAL_COST[1]` 6,000 → 2,500; Phase 1 goal IQ 145/135/125/115/105 → 130/125/120/110/100,
+  so one software upgrade reaches any of them.
+- Phase 1 incomes are capped at the band your best mind can research now, so an income is
+  never stuck behind an IQ you can't reach.
+- An exhaustive search over every five-move line finds the fastest win in week 5 for every
+  goal type. Bots: *flat* and *chain2* win in weeks 5–6, *chain* 6–7, *smart* (rushing to IQ
+  140) week 9, *idle* loses. Phase 2 is unchanged: *steady* 68–72 weeks, *clever* 46–50.
+- Not yet checked: random-move bots still lost about 45% of games, partly because the bot
+  spends Money on every research it can afford; and with a Jev that rated everything
+  stingily (30% plan, 40% ideas, wasteful) they lost almost always.
+
 ### D16. Progress
 
 - [x] 1. Planning doc

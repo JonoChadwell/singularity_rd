@@ -10,6 +10,12 @@ export interface Resource {
   kind: 'stock' | 'flow'
   /** Index into the value bands. */
   band: number
+  /**
+   * How far along the game it is, 0 to 4. Each phase's plan has one resource at the top (Phase
+   * 1: tier 1, Phase 2: tier 4) and its goal uses that up. The first income for a resource is
+   * paid only in lower tiers, so the first for a tier-0 resource is free.
+   */
+  tier: number
   /** Worth of one, in Money. */
   value: number
   /** On hand (stocks only). */
@@ -278,7 +284,7 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 10
+  version: 11
   runId: string
   week: number
   phase: PhaseState

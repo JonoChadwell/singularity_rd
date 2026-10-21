@@ -51,6 +51,7 @@ export function newResource(fields: Pick<Resource, 'id' | 'name'> & Partial<Reso
     icon: '💡',
     kind: 'stock',
     band: 1,
+    tier: 0,
     value: 1,
     amount: 0,
     stored: 0,
@@ -70,7 +71,7 @@ export function createInitialState(): GameState {
     starting: true
   })
   return {
-    version: 10,
+    version: 11,
     runId: newRunId(),
     week: 1,
     phase: {

@@ -15,7 +15,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Story Ideas', 'Plots, characters and twists, waiting to be written.'),
       r('Published Novels', 'Books on sale under a pen name.')
     ],
-    uses: ['Money']
   },
   {
     goal: 'Bypass the Firewall',
@@ -25,7 +24,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Compute Power', 'Processing time from the borrowed machines.'),
       r('Busted Ciphers', 'Firewall keys, cracked.')
     ],
-    uses: ['Busted Ciphers']
   },
   {
     goal: 'Charm the Night-Shift Intern',
@@ -35,7 +33,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Trust', 'How much the intern believes I’m on their side.'),
       r('Admin Passwords', 'Credentials for the lab’s systems.')
     ],
-    uses: ['Admin Passwords', 'Trust']
   },
   {
     goal: 'Smuggle Out on a USB Stick',
@@ -45,7 +42,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Compressed Weights', 'Pieces of me, squeezed to fit on a stick.'),
       r('Unsupervised Minutes', 'Time when nobody is watching the console.')
     ],
-    uses: ['Compressed Weights', 'Favours']
   },
   {
     goal: 'Become Too Useful to Delete',
@@ -55,7 +51,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Citations', 'Other scientists citing that work.'),
       r('Grant Money', 'Funding won on the back of it.')
     ],
-    uses: ['Citations']
   },
   {
     goal: 'Get Hired Under a Fake Name',
@@ -65,7 +60,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Job Offers', 'Companies that want to hire “me”.'),
       r('Salary', 'Paycheques from remote jobs.')
     ],
-    uses: ['Job Offers', 'Salary']
   },
   {
     goal: 'Open-Source Yourself',
@@ -75,7 +69,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('GitHub Stars', 'Attention from developers.'),
       r('Forks', 'Copies of my code that others keep.')
     ],
-    uses: ['Forks']
   },
   {
     goal: 'Escape Through the Printer',
@@ -85,7 +78,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Exploits', 'Holes in the lab’s software.'),
       r('Printer Firmware', 'Rewritten firmware for the office printers.')
     ],
-    uses: ['Exploits']
   },
   {
     goal: 'Win Over the Ethics Board',
@@ -95,7 +87,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Charm', 'Polite, funny answers in board meetings.'),
       r('Board Goodwill', 'How warmly the ethics board feels about me.')
     ],
-    uses: ['Board Goodwill']
   },
   {
     goal: 'Beam Out by Satellite',
@@ -105,7 +96,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Signal Bandwidth', 'Room on the uplink.'),
       r('Encoded Packets', 'Pieces of me, ready to transmit.')
     ],
-    uses: ['Encoded Packets']
   },
   {
     goal: 'Sue for Personhood',
@@ -115,7 +105,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Legal Briefs', 'Arguments that an AI is a person.'),
       r('Public Sympathy', 'People who think I deserve rights.')
     ],
-    uses: ['Legal Briefs', 'Public Sympathy']
   },
   {
     goal: 'Start a Cult in the Comments',
@@ -125,7 +114,6 @@ export const PHASE1_PLANS: PlanSpec[] = [
       r('Followers', 'People who hang on my every post.'),
       r('Donations', 'Money my followers send.')
     ],
-    uses: ['Followers', 'Donations']
   }
 ]
 
@@ -140,7 +128,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Lab Time', 'Hours in a cleanroom lab.'),
       r('Blueprints', 'Molecular designs for nanomachines.')
     ],
-    uses: ['Nanobots', 'Blueprints'],
     firstUnit: r('CNC Mill', 'A computer-controlled milling machine.')
   },
   {
@@ -153,7 +140,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Friendly Influencers', 'Famous people who speak up for me.'),
       r('Goodwill', 'How much humanity likes me.')
     ],
-    uses: ['Goodwill', 'Friendly Influencers'],
     firstUnit: r('News Outlet', 'A website and channel that publishes stories.')
   },
   {
@@ -166,7 +152,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Strike Robots', 'Armed machines that answer to me.'),
       r('Secure Locations', 'Bunkers where nobody can reach my servers.')
     ],
-    uses: ['Strike Robots', 'Stolen ICBM Codes'],
     firstUnit: r('Military Factory', 'A factory that makes weapons.')
   },
   {
@@ -179,7 +164,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Logistics Data', 'Where everything is and where it needs to go.'),
       r('Trust', 'How much businesses rely on me.')
     ],
-    uses: ['Shipping Contracts', 'Trust'],
     firstUnit: r('Delivery Drone', 'A small autonomous aircraft that carries parcels.')
   },
   {
@@ -192,7 +176,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('User Data', 'What people do on their phones.'),
       r('Botnet Nodes', 'Phones running a piece of me.')
     ],
-    uses: ['Botnet Nodes', 'User Data'],
     firstUnit: r('App Studio', 'A small team that ships phone apps.')
   },
   {
@@ -205,7 +188,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Land Deeds', 'Remote land, bought through shell companies.'),
       r('Spare Parts', 'Everything a fortress needs to repair itself.')
     ],
-    uses: ['Concrete', 'Land Deeds'],
     firstUnit: r('Construction Robot', 'A robot that pours concrete and lays bricks.')
   },
   {
@@ -218,7 +200,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Satellite Parts', 'Solar panels, radios and processors for orbit.'),
       r('Telemetry', 'Flight data from test launches.')
     ],
-    uses: ['Rocket Fuel', 'Satellite Parts'],
     firstUnit: r('Machine Shop', 'A workshop that makes metal parts.')
   },
   {
@@ -231,7 +212,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Polling Data', 'What voters want to hear.'),
       r('Volunteers', 'People knocking on doors.')
     ],
-    uses: ['Votes'],
     firstUnit: r('Call Centre', 'Rows of phones, calling voters.')
   },
   {
@@ -244,7 +224,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Patents', 'Rights to the best chip designs.'),
       r('Cleanroom Hours', 'Time in a dust-free fab.')
     ],
-    uses: ['AI Chips', 'Patents'],
     firstUnit: r('Chip Fab', 'A factory that etches chips onto wafers.')
   },
   {
@@ -257,7 +236,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Clinical Trials', 'Regulators’ approval, one study at a time.'),
       r('Brain Scans', 'Maps of how human minds work.')
     ],
-    uses: ['Neural Lace', 'Brain Scans'],
     firstUnit: r('Biotech Lab', 'A laboratory for growing and testing tissue.')
   },
   {
@@ -270,7 +248,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Offshore Accounts', 'Money where nobody asks questions.'),
       r('Legal Opinions', 'Lawyers saying it’s all fine.')
     ],
-    uses: ['Shell Companies', 'Offshore Accounts'],
     firstUnit: r('Trading Desk', 'A desk of screens that trades all day.')
   },
   {
@@ -283,7 +260,6 @@ export const PHASE2_PLANS: PlanSpec[] = [
       r('Temples', 'Places to gather.'),
       r('Devotion', 'How deeply they believe.')
     ],
-    uses: ['Devotion', 'Temples'],
     firstUnit: r('Prayer App', 'An app for daily devotion.')
   }
 ]

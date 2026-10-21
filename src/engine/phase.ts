@@ -142,7 +142,7 @@ export const CARDS: Card[] = [
   {
     id: 'phase1',
     title: 'Escape the lab',
-    text: 'You have ten weeks. Your plan’s goal is a research: it needs an IQ and a pile of resources. Propose passive incomes to earn the resources, and upgrade the Starting Server to reach the IQ. You can propose one research a week, and doing research is instant. Your first income is free; everything after it costs some of what you own, so start earning.'
+    text: 'You have ten weeks. Your plan’s goal is a research: it needs an IQ and a pile of resources. Propose passive incomes to earn the resources, and upgrade the Starting Server to reach the IQ. You can propose one research a week, and doing research is instant. Resources have tiers: the goal uses up your plan’s one tier-1 resource, and the rest are tier 0. The first income for a resource is paid only in lower tiers, so the first for each tier-0 resource is free. After that, research costs some of what you own, so start earning.'
   },
   {
     id: 'growth',
@@ -152,7 +152,7 @@ export const CARDS: Card[] = [
   {
     id: 'industry',
     title: 'Industry',
-    text: 'Phase 2 unlocks industry units, which you create from parts, and strategies, which turn their work into resources. Your plan’s first unit is free and comes with a few already working: give them a strategy. Units pay upkeep every week, and sit idle if they can’t, so keep some on whatever pays it. The goal uses up your new resources.'
+    text: 'Phase 2 unlocks industry units, which you create from parts, and strategies, which turn their work into resources. Your plan’s first unit is free and comes with a few already working: give them a strategy. Units pay upkeep every week, and sit idle if they can’t, so keep some on whatever pays it. The goal uses up your plan’s tier-4 resource; the first income for any resource is still paid only in lower tiers.'
   },
   {
     id: 'risk',

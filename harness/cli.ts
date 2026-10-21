@@ -118,7 +118,7 @@ function load(slot: string): Save {
   const path = savePath(slot)
   if (!existsSync(path)) throw new Error(`No game in slot "${slot}". Start one with: new`)
   const save = JSON.parse(readFileSync(path, 'utf8')) as Save
-  if (save.state.version !== 10) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
+  if (save.state.version !== 11) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
   return save
 }
 
@@ -216,7 +216,7 @@ function printStatus(s: GameState) {
     const sources = (preview.flows[r.id] ?? []).map((f) => `${f.label} ${f.amount >= 0 ? '+' : ''}${fmt(f.amount)}`).join(', ')
     const share = preview.shares[r.id]
     say(
-      `  ${r.id} "${r.name}" ${r.kind} worth ${fmt(r.value)} · have ${fmt(r.amount)}${r.stored ? ` (+${fmt(r.stored)} stored)` : ''} · net ${fmt(net(r.id))}` +
+      `  ${r.id} "${r.name}" ${r.kind} tier ${r.tier} worth ${fmt(r.value)} · have ${fmt(r.amount)}${r.stored ? ` (+${fmt(r.stored)} stored)` : ''} · net ${fmt(net(r.id))}` +
         `${share !== undefined && share < 1 ? ` · SHORT: ${pct(share)} met` : ''}` +
         `${sources ? `\n      ${sources}` : ''}`
     )
@@ -304,8 +304,7 @@ function printVerdict(s: GameState, v: Verdict) {
     if (v.rejected) return
     const d = draftPlan(s, v)
     say(`  → goal "${v.spec.goal}": needs IQ ${d.goal.minIQ}, uses up ${describeCost(d.state, d.goal.cost)}`)
-    say(`  → new resources: ${d.added.map((r) => `${r.name} (${r.kind}, worth ${fmt(r.value)})`).join(', ')}`)
-    if (d.error) say(`  ERROR: ${d.error}`)
+    say(`  → new resources: ${d.added.map((r) => `${r.id === d.top.id ? 'GOAL ' : ''}${r.name} (${r.kind}, tier ${r.tier}, worth ${fmt(r.value)})`).join(', ')}`)
     return
   }
   if (v.kind === 'cover') {
@@ -318,7 +317,7 @@ function printVerdict(s: GameState, v: Verdict) {
   }
   if (v.kind === 'resource') {
     const r = draftResource(s, v)
-    say(`  → ${r.name}: ${r.kind}, worth ${fmt(r.value)}`)
+    say(`  → ${r.name}: ${r.kind}, tier ${r.tier}, worth ${fmt(r.value)}`)
   } else if (v.kind === 'strategy') {
     const d = draftStrategy(s, v)
     say(`  → ${describeFlows(s, d.strategy.inputs)} → ${fmt(d.strategy.amount)} ${findResource(s, d.strategy.outputId)?.name} per unit${d.strategy.quirk ? ` · quirk ${d.strategy.quirk}` : ''}`)
@@ -395,8 +394,8 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   new                          start a new game
   status                       everything on screen, plus next week's preview
   plans [all|shuffle]          the three plan ideas for this phase (all: the whole bank; shuffle: three others)
-  propose plan '{"goal":"..","means":"..","resources":[{"name":"..","description":".."}],"uses":[".."],"firstUnit":{"name":"..","description":".."}}'
-                               (firstUnit only in Phase 2; uses = names from resources that the goal uses up)
+  propose plan '{"goal":"..","means":"..","resources":[{"name":"..","description":".."}],"firstUnit":{"name":"..","description":".."}}'
+                               (firstUnit only in Phase 2; Jev picks which resource the goal is built from and uses up)
   presets <resource|strategy|unit|mind|income|cover>
   propose resource '{"name":"..","description":".."}'
   propose strategy '{"name":"..","description":"..","unitId":"..","inputIds":[],"outputId":".."}'

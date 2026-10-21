@@ -32,6 +32,12 @@ export function fmt(n: number): string {
 /** Whole machine counts. */
 export const fmtCount = (n: number) => fmt(Math.floor(n + 1e-9))
 
+/** A resource's tier, in words: "Tier 1, earned". */
+export const tierText = (r: Resource) => `Tier ${r.tier}, ${(B.RESOURCE_TIERS[r.tier] ?? '').split(':')[0]!.toLowerCase()}`
+
+/** What one of a resource is worth, in words: "modest, like a meal". */
+export const bandText = (r: Resource) => (B.RESOURCE_VALUE[r.band]?.[0] ?? '').toLowerCase()
+
 // ---------------------------------------------------------------- lookups
 
 export const findResource = (state: GameState, id: string): Resource | undefined =>

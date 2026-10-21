@@ -28,15 +28,13 @@ const bribe: PlanSpec = {
     { name: 'Money', description: 'Dollars.' },
     { name: 'Story Ideas', description: 'Plots.' },
     { name: 'Published Novels', description: 'Books.' }
-  ],
-  uses: ['Money']
+  ]
 }
 
 const nanotech: PlanSpec = {
   goal: 'Nanotech Supremacy',
   means: 'Staying hidden until it’s too late.',
   resources: ['Nanobots', 'Feedstock', 'Precision Parts', 'Lab Time', 'Blueprints'].map((name) => ({ name, description: '' })),
-  uses: ['Nanobots', 'Blueprints'],
   firstUnit: { name: 'CNC Mill', description: 'A milling machine.' }
 }
 
@@ -75,8 +73,6 @@ describe('phase plans', () => {
     const s = createInitialState()
     expect(precheckPlan(s, bribe)).toBeNull()
     expect(precheckPlan(s, { ...bribe, resources: bribe.resources.slice(0, 2) })).toMatch(/at least 3/)
-    expect(precheckPlan(s, { ...bribe, uses: [] })).toMatch(/uses up/)
-    expect(precheckPlan(s, { ...bribe, uses: ['Lemons'] })).toMatch(/resources in the plan/)
     expect(precheckPlan(s, { ...bribe, goal: '' })).toMatch(/goal/)
     const dup = { ...bribe, resources: [...bribe.resources, { name: 'money', description: '' }] }
     expect(precheckPlan(s, dup)).toMatch(/different name/)
@@ -88,7 +84,7 @@ describe('phase plans', () => {
     const v = await judgePlan(s, judge, bribe)
     expect(judge.calls).toHaveLength(1)
     const keys = Object.keys(judge.calls[0]!.questions)
-    expect(keys).toEqual(expect.arrayContaining(['coherent', 'approach', 'r0_is_thing', 'r1_kind', 'r2_value', 'r2_icon']))
+    expect(keys).toEqual(expect.arrayContaining(['coherent', 'approach', 'top', 'r0_is_thing', 'r1_kind', 'r2_value', 'r2_icon']))
     expect(v.rejected).toBeNull()
     expect(v.bar).toBe(B.BARS.plan)
 
@@ -110,15 +106,28 @@ describe('phase plans', () => {
     expect(worth(scaled)).toBeGreaterThan(worth(brilliant) * 2)
   })
 
-  it('only uses up stocks, and refuses a goal that uses up nothing that keeps', async () => {
+  it('builds the goal from the one resource Jev picks: tier 1, always a stock; the rest tier 0', async () => {
     const s = createInitialState()
-    const plan = { ...bribe, uses: ['Money', 'Story Ideas'] }
-    const v = await judgePlan(s, new FakeJudge({ r1_kind: choice('flow') }), plan)
+    const judge = new FakeJudge({ top: choice('r1'), r1_kind: choice('flow') })
+    const v = await judgePlan(s, judge, bribe)
+    const q = judge.calls[0]!.questions
+    // Phase 1 resources are cheap, and only the plan decides tiers.
+    expect((q.r0_value as { criteria: string[] }).criteria).toHaveLength(B.PHASE_MAX_BAND[1] + 1)
+    expect(q.r0_tier).toBeUndefined()
     const d = draftPlan(s, v)
-    expect(d.goal.cost.map((c) => c.resourceId)).toEqual([MONEY_ID])
-    const none = await judgePlan(s, new FakeJudge({ r0_kind: choice('flow') }), bribe)
-    expect(draftPlan(s, none).error).toMatch(/keeps/)
-    expect(() => acceptPlan(s, none)).toThrow(/keeps/)
+    expect(d.top.name).toBe('Story Ideas')
+    expect(d.added.map((r) => [r.name, r.tier])).toEqual([['Money', 0], ['Story Ideas', 1], ['Published Novels', 0]])
+    expect(d.top.kind).toBe('stock')
+    expect(d.goal.cost.map((c) => c.resourceId)).toEqual([d.top.id])
+  })
+
+  it('lets the player settle which resource the goal is built from when Jev is torn', async () => {
+    const s = createInitialState()
+    const v = await judgePlan(s, new FakeJudge({ top: choice('r0', { r0: 0.5, r2: 0.45 }, 0.3) }), bribe)
+    const torn = v.torn.find((t) => t.key === 'top')!
+    expect(torn.options.map((o) => o.label)).toEqual(['Money', 'Published Novels'])
+    v.picks.top = 'r2'
+    expect(draftPlan(s, v).top.name).toBe('Published Novels')
   })
 
   it('starts the phase: resources, the goal as research, and a ten-week clock', async () => {
@@ -526,18 +535,38 @@ describe('plan ideas', () => {
 // ---------------------------------------------------------------- fixes from the first playtests
 
 describe('paying for research', () => {
-  it('makes only the very first income free; everything else is priced in what the plan is about', async () => {
+  it('pays for a resource’s first income only in lower tiers: free for tier 0', async () => {
+    // Money is the plan's tier-1 resource; Story Ideas and Published Novels are tier 0.
     let s = await phase1()
-    // An upgrade before any income would be free if owning nothing meant free: it isn't.
+    // Owning nothing doesn't make an upgrade free.
     const offer = await judgeUpgrade(s, new FakeJudge(), { kind: 'mind', id: SERVER_ID })
     expect(offer.options[0]!.cost.length).toBeGreaterThan(0)
     const simple = () => new FakeJudge({ difficulty: score(1) })
-    const first = draftIncome(s, await judgeIncome(s, simple(), incomeSpec()))
-    expect(first.cost).toEqual([])
-    s = doResearch(acceptIncome(s, await judgeIncome(s, simple(), incomeSpec())).state, 'freelance-coding')
+    const ideas = incomeSpec({ name: 'Brainstorm', outputId: 'story-ideas' })
+    expect(draftIncome(s, await judgeIncome(s, simple(), ideas)).cost).toEqual([])
+    // Money's first income is paid in tier 0, never in Money.
+    const money = draftIncome(s, await judgeIncome(s, simple(), incomeSpec()))
+    expect(money.cost.length).toBeGreaterThan(0)
+    expect(money.cost.every((c) => findResource(s, c.resourceId)!.tier === 0)).toBe(true)
+
+    s = doResearch(acceptIncome(s, await judgeIncome(s, simple(), ideas)).state, 'brainstorm')
     s = runWeek(s)
-    const second = draftIncome(s, await judgeIncome(s, simple(), incomeSpec({ name: 'Bug bounties' })))
-    expect(second.cost.length).toBeGreaterThan(0)
+    // A second income for the same resource costs something.
+    const again = draftIncome(s, await judgeIncome(s, simple(), incomeSpec({ name: 'Daydream', outputId: 'story-ideas' })))
+    expect(again.cost.length).toBeGreaterThan(0)
+  })
+
+  it('never leaves a Phase 1 income out of reach, and keeps the next tier-0 one free', async () => {
+    // The first playtest of the browser build: a free first income needing IQ 140 used up the
+    // only free one, and nothing else could be paid for. Phase 1 incomes are now capped at what
+    // your best mind can research.
+    let s = await phase1()
+    const hard = await judgeIncome(s, new FakeJudge({ difficulty: score(3) }), incomeSpec({ name: 'Charm school', outputId: 'story-ideas' }))
+    s = acceptIncome(s, hard).state
+    expect(s.research.find((r) => r.name === 'Charm school')!.minIQ).toBeLessThanOrEqual(currentIQ(s.minds[0]!))
+    s = runWeek(s)
+    const novels = incomeSpec({ name: 'Ghostwrite', outputId: 'published-novels' })
+    expect(draftIncome(s, await judgeIncome(s, new FakeJudge({ difficulty: score(1) }), novels)).cost).toEqual([])
   })
 
   it('lets the player choose which of Jev’s favourites pays', async () => {
@@ -571,12 +600,32 @@ describe('fixes', () => {
     expect(currentIQ(s.minds[0]!)).toBe(115)
   })
 
-  it('makes a Phase 2 goal use up resources that are new in its plan', () => {
+  it('builds a Phase 2 goal from one new resource at tier 4; Jev tiers the rest 0–3', async () => {
     const s = createInitialState()
     s.phase = newPhase(2, 5)
     s.resources.push(newResource({ id: MONEY_ID, name: 'Money' }))
-    const withMoney = { ...nanotech, resources: [...nanotech.resources, { name: 'Money', description: '' }], uses: ['Money'] }
-    expect(precheckPlan(s, withMoney)).toMatch(/new in this plan/)
+    const withMoney = { ...nanotech, resources: [{ name: 'Money', description: '' }, ...nanotech.resources] }
+    const judge = new FakeJudge(Object.fromEntries([1, 2, 3, 4, 5].map((i) => [`r${i}_tier`, score(9)])))
+    const v = await judgePlan(s, judge, withMoney)
+    const q = judge.calls[0]!.questions
+    // Money is already yours, so the goal can't be built from it.
+    expect(Object.values((q.top as { criteria: Record<string, string> }).criteria)).not.toContain('Money')
+    expect((q.r1_tier as { criteria: string[] }).criteria).toHaveLength(B.PHASE_MAX_TIER[2] + 1)
+    const d = draftPlan(s, v)
+    expect(d.top).toMatchObject({ name: 'Nanobots', tier: 4 })
+    expect(d.added.filter((r) => r !== d.top).every((r) => r.tier === B.PHASE_MAX_TIER[2])).toBe(true)
+    expect(d.goal.cost).toEqual([expect.objectContaining({ resourceId: d.top.id })])
+  })
+
+  it('tiers resources proposed outside a plan: tier 0 in Phase 1, up to 3 in Phase 2', async () => {
+    const p1 = await phase1()
+    const j1 = new FakeJudge()
+    const r1 = await judgeResource(p1, j1, { name: 'Lemons', description: '' })
+    expect(j1.calls[0]!.questions.tier).toBeUndefined()
+    expect(findResource(acceptResource(p1, r1).state, 'lemons')).toMatchObject({ name: 'Lemons', tier: 0 })
+    const p2 = phase2()
+    const r2 = await judgeResource(p2, new FakeJudge({ tier: score(3) }), { name: 'Robots', description: '' })
+    expect(findResource(acceptResource(p2, r2).state, 'robots')).toMatchObject({ name: 'Robots', tier: 3 })
   })
 
   it('gives the plan’s first unit a few working units', async () => {

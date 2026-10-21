@@ -33,30 +33,44 @@ function produced(state: GameState): Set<string> {
 /**
  * Resources research could use up: stocks you have some of or something makes, since flows
  * can't be saved up. With none of those, the stocks of the phase's plan: you'll have to earn
- * them first. With no plan either, nothing: research is free.
+ * them first. With no plan either, nothing: research is free. `allow` narrows what may pay.
  */
-export function spendable(state: GameState): Resource[] {
+export function spendable(state: GameState, allow: (r: Resource) => boolean = () => true): Resource[] {
   const made = produced(state)
-  const stocks = state.resources.filter((r) => r.kind === 'stock' && (r.amount > 0 || made.has(r.id)))
+  const stocks = state.resources.filter((r) => r.kind === 'stock' && allow(r) && (r.amount > 0 || made.has(r.id)))
   if (stocks.length) return stocks
   const plan = new Set(state.phase.plan?.resources ?? [])
-  return state.resources.filter((r) => r.kind === 'stock' && plan.has(r.id))
+  return state.resources.filter((r) => r.kind === 'stock' && allow(r) && plan.has(r.id))
 }
 
+/** Whether no income, done or waiting as research, yields this resource yet. */
+export const firstIncomeFor = (state: GameState, resourceId: string) =>
+  !state.incomes.some((i) => i.resourceId === resourceId) &&
+  !state.research.some((r) => r.effect.kind === 'income' && r.effect.income.resourceId === resourceId)
+
 /**
- * The very first passive income is free: nothing makes anything yet, so there's nothing to pay
- * with. Everything after it has a cost.
+ * The first income for a resource is paid only in lower tiers, so the first for a tier-0
+ * resource is free. Later incomes may be paid in anything.
  */
-export const bootstrapping = (state: GameState) =>
-  !state.incomes.length && !state.units.length && !state.research.some((r) => r.effect.kind === 'income')
+export function incomePayers(state: GameState, outputId: string): ((r: Resource) => boolean) | undefined {
+  const output = findResource(state, outputId)
+  if (!output || !firstIncomeFor(state, outputId)) return undefined
+  return (r) => r.tier < output.tier
+}
 
 /**
  * Prices a research worth `value` in the resources Jev ranked, most fitting first: the first,
  * and a second if Jev liked it nearly as much. With one stock, it pays; with none, it's free.
  */
-export function priceCost(state: GameState, value: number, payers: { resourceId: string; p: number }[]): Cost {
-  const ranked = payers.filter((p) => findResource(state, p.resourceId))
-  const only = spendable(state)
+export function priceCost(
+  state: GameState,
+  value: number,
+  payers: { resourceId: string; p: number }[],
+  allow: (r: Resource) => boolean = () => true
+): Cost {
+  if (state.phase.n === 1) value *= B.PHASE1_RESEARCH_COST
+  const only = spendable(state, allow)
+  const ranked = payers.filter((p) => only.some((r) => r.id === p.resourceId))
   const chosen = ranked[0]
     ? [ranked[0], ...ranked.slice(1, 2).filter((p) => p.p >= ranked[0]!.p * B.SECOND_PAYER)]
     : only.length === 1

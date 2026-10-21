@@ -1,6 +1,6 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
-import { findResource } from './model'
+import { bestIQ, findResource } from './model'
 import { lockReason } from './phase'
 import {
   addResearch,
@@ -20,7 +20,7 @@ import {
   type Accepted,
   type VerdictBase
 } from './proposals'
-import { bootstrapping } from './research'
+import { incomePayers } from './research'
 import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import type { Cost, GameState, Income } from './types'
@@ -111,7 +111,7 @@ export async function judgeIncome(state: GameState, judge: Judge, raw: IncomeSpe
       instructions: 'How much research would it take to work out how to do this, and how much could it bring in?',
       criteria: scale(B.INCOME_DIFFICULTY)
     },
-    ...payQuestion(state, `how to ${spec.name.toLowerCase()}`),
+    ...payQuestion(state, `how to ${spec.name.toLowerCase()}`, incomePayers(state, output.id)),
     ...alarmQuestions(state)
   }
   const answers = await judge.ask(
@@ -129,11 +129,21 @@ export async function judgeIncome(state: GameState, judge: Judge, raw: IncomeSpe
   return v
 }
 
+/**
+ * Phase 1 is a tutorial, so every income can be researched now: one Jev rates harder than your
+ * best mind can manage yields like the hardest one it can.
+ */
+function bandCap(state: GameState): number {
+  if (state.phase.n !== 1) return B.INCOME_DIFFICULTY.length - 1
+  const iq = bestIQ(state)
+  return Math.max(0, B.INCOME_DIFFICULTY.filter(([, minIQ]) => minIQ <= iq).length - 1)
+}
+
 /** The income it gives once researched, and what researching it needs. */
 export function draftIncome(state: GameState, v: IncomeVerdict): { income: Income; minIQ: number; cost: Cost } {
   const read = reader(v)
   const output = findResource(state, v.spec.outputId)!
-  const band = read.level('difficulty', B.INCOME_DIFFICULTY.length)
+  const band = Math.min(read.level('difficulty', B.INCOME_DIFFICULTY.length), bandCap(state))
   const [, minIQ, weekly] = B.pick(B.INCOME_DIFFICULTY, band)
   const efficiency = B.pick(B.EFFICIENCY, read.level('efficiency', B.EFFICIENCY.length))[1]
   const boost = v.risk ? B.RISK_INCOME : 1
@@ -152,8 +162,8 @@ export function draftIncome(state: GameState, v: IncomeVerdict): { income: Incom
         resourceId: output.id,
         amount: B.nice((weekly * efficiency * boost) / Math.max(1e-9, output.value))
       }
-  // The very first income is free: there's nothing yet to pay with.
-  const cost = bootstrapping(state) ? [] : costFor(state, v, B.INCOME_COST_WEEKS * weekly)
+  // The first income for a resource is paid in lower tiers only: free for tier 0.
+  const cost = costFor(state, v, B.INCOME_COST_WEEKS * weekly, incomePayers(state, output.id))
   return { income, minIQ: floorIQ(minIQ), cost }
 }
 
