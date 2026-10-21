@@ -65,11 +65,17 @@ including Jev's answers, so the same proposal always gets the same verdict.
 
 ### Run logs
 
-While the dev server is running, every game is logged to `logs/runs/<runId>.jsonl` (gitignored).
-Each line is one event: `game_start`, `week` (the week's report, log lines, alerts left
-unanswered and a state snapshot), `proposal`, `upgrade_offer`, `accept`, `pushback`, `action`
-(creating units, assigning, build targets, research), `error` or `game_abandoned`. Raw Jev traffic is logged as
-`jev` events (`purpose`, request, response and latency). The API key is never logged.
+While the dev server is running, every game is logged to `logs/runs/<runId>/` (gitignored), one
+JSON-lines file per stream, one event per line:
+
+- `game.jsonl`: `game_start`, `week` (the week's report, log lines, alerts left unanswered and a
+  state snapshot), `proposal`, `upgrade_offer`, `accept`, `pushback`, `action` (creating units,
+  assigning, build targets, research), `game_end` or `game_abandoned`.
+- `jev.jsonl`: raw Jev traffic as `jev` events (`purpose`, request, response and latency). The API
+  key is never logged.
+- `ui.jsonl`: dialogs opening and closing, verdicts shown, tab changes, notices and errors shown.
+- `errors.jsonl`: crashes (Vue, uncaught, unhandled promises) and store actions that threw, with
+  stack traces.
 
 ### Command-line harness
 

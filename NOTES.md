@@ -37,12 +37,20 @@ Type-check, lint and tests all passed at the time of writing.
 - Optional settings: `JEV_BASE_URL`, `JEV_MODEL`.
 
 **Run logs:**
-- Path: `logs/runs/<runId>.jsonl` (gitignored), written by `server/runLog.ts` (`POST /api/log`)
-  and by the Jev proxy.
-- Game events: `game_start`, `day` (the day's report, events and a full state snapshot),
-  `proposal`, `priority`, `error`, `game_end`, `game_abandoned`.
-- Jev traffic: `jev` events with purpose, request, response and latency.
-- The client side is `src/telemetry.ts`.
+- Path: `logs/runs/<runId>/<stream>.jsonl` (gitignored), one folder per game and one file per
+  stream. Written by `server/runLog.ts` (`POST /api/log` with a `stream` field) and by the Jev
+  proxy. Runs from before the split are single files, `logs/runs/<runId>.jsonl`.
+- `game.jsonl`: game state and moves: `game_start`, `week` (report, events, full state snapshot),
+  `proposal`, `accept`, `action`, `pushback`, `upgrade_offer`, `phase_won`, `game_end`,
+  `game_abandoned`.
+- `jev.jsonl`: Jev traffic, `jev` events with purpose, request, response and latency.
+- `ui.jsonl`: `dialog` (from/to, e.g. `plan_1`, `invent_unit`, `game_over`), `verdict_shown`,
+  `verdict_closed`, `offer_shown`, `tab`, `notice`, `focus`, `error_shown`.
+- `errors.jsonl`: `crash` (Vue render/computed/handler errors, uncaught errors, unhandled
+  rejections, with stack; each distinct one once per page load), `action_failed` (a store action
+  that threw, with stack), `jev_health_failed`.
+- The client side is `src/telemetry.ts` (sending) and `src/logging.ts` (crash handlers, UI
+  watchers).
 
 **Repository:**
 - One commit (`91895d2 Initial commit`). All work from this session is uncommitted (about 37
@@ -548,9 +556,9 @@ browser, so a harness game can be analysed like a browser game.
   read with Vite's `loadEnv`, so the dev server doesn't need to be running. It retries on 429
   and 5xx (up to 4 times, backing off from 2 s). Answers go through the same `CachedJudge` and
   save cache as the browser.
-- **Run log:** `logs/runs/<runId>.jsonl`, the same events as the browser (`game_start`,
-  `proposal`, `accept`, `pushback`, `action`, `week`, `game_end`, `jev`), each tagged
-  `harness: true`.
+- **Run log:** `logs/runs/<runId>/game.jsonl` and `jev.jsonl`, the same events as the browser
+  (`game_start`, `proposal`, `accept`, `pushback`, `action`, `week`, `game_end`, `jev`), game
+  events tagged `harness: true`. No `ui` or `errors` streams.
 - **Proposals and verdicts** mirror the browser store: picking `availability` or changing the
   builder recomputes pushback, and pushback updates the recipe of a unit, a new-hardware
   breakthrough or an own-industry layer.

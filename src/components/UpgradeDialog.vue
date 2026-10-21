@@ -54,6 +54,7 @@ const name = computed(() => targetName(game.state, target))
 const best = computed(() => bestIQ(game.state))
 const offer = ref<UpgradeOffer | null>(null)
 const error = ref('')
+watch(offer, (o) => o && game.logTo('ui', 'offer_shown', { dialog: 'upgrade', options: o.options.map((x) => x.key) }))
 
 async function ask() {
   const result = await game.requestUpgrade(target)

@@ -1,7 +1,8 @@
 /**
  * A command-line harness for playing Singularity R&D without the browser. It runs the same
  * engine and asks the real Jev, saves the game between commands, and writes the same run log
- * as the browser (logs/runs/<runId>.jsonl), so a harness game can be analysed like any other.
+ * as the browser (logs/runs/<runId>/game.jsonl and jev.jsonl), so a harness game can be analysed
+ * like any other.
  *
  *   npm run play -- help
  */
@@ -94,7 +95,7 @@ class NodeJudge implements Judge {
       } catch {
         // Keep the raw text.
       }
-      await runLog.append(this.runId(), { event: 'jev', purpose, status: res.status, ms: Date.now() - started, request, response })
+      await runLog.append(this.runId(), 'jev', { event: 'jev', purpose, status: res.status, ms: Date.now() - started, request, response })
       if ((res.status === 429 || res.status >= 500) && attempt < 4) {
         await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt))
         continue
@@ -127,7 +128,7 @@ function store(slot: string, save: Save) {
 }
 
 const log = (s: GameState, event: string, data: Record<string, unknown> = {}) =>
-  runLog.append(s.runId, { event, week: s.week, harness: true, ...data })
+  runLog.append(s.runId, 'game', { event, week: s.week, harness: true, ...data })
 
 function judgeFor(save: Save): Judge {
   return new CachedJudge(

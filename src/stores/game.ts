@@ -13,7 +13,7 @@ import type { Outcome } from '@/engine/proposals'
 import type { GameState, UpgradeTarget } from '@/engine/types'
 import { answerPushback, type PushbackReply, type UnitVerdict } from '@/engine/unitProposal'
 import { acceptUpgrade, judgeUpgrade, type UpgradeOffer } from '@/engine/upgrade'
-import { logEvent, snapshot } from '@/telemetry'
+import { describeError, logEvent, snapshot, type LogStream } from '@/telemetry'
 
 export type { ProposalInput, Verdict }
 
@@ -57,8 +57,15 @@ export const useGameStore = defineStore('game', () => {
   const lastError = ref('')
 
   watch(state, save, { deep: true })
-  const log = (event: string, data: Record<string, unknown> = {}) =>
-    logEvent(state.value.runId, event, { week: state.value.week, ...data })
+  /** Logs to one stream of this run's log, stamped with the week. */
+  const logTo = (stream: LogStream, event: string, data: Record<string, unknown> = {}) =>
+    logEvent(state.value.runId, stream, event, { week: state.value.week, ...data })
+  const log = (event: string, data: Record<string, unknown> = {}) => logTo('game', event, data)
+  /** An action that threw. The player sees `lastError`; the errors stream keeps the stack. */
+  function fail(action: string, err: unknown, data: Record<string, unknown> = {}) {
+    lastError.value = (err as Error)?.message ?? String(err)
+    logTo('errors', 'action_failed', { action, ...data, error: describeError(err) })
+  }
   if (!loaded) log('game_start', { state: snapshot(state.value) })
 
   const canPropose = computed(() => jev.value.kind === 'ready' && !busy.value)
@@ -84,7 +91,7 @@ export const useGameStore = defineStore('game', () => {
       log('action', { action: name, ...data })
       return true
     } catch (err) {
-      lastError.value = (err as Error).message
+      fail(name, err, data)
       return false
     }
   }
@@ -96,6 +103,7 @@ export const useGameStore = defineStore('game', () => {
       jev.value = health.configured ? { kind: 'ready', model: health.model } : { kind: 'unconfigured' }
     } catch (err) {
       jev.value = { kind: 'error', message: (err as Error).message }
+      logTo('errors', 'jev_health_failed', { error: describeError(err) })
     }
   }
 
@@ -105,7 +113,7 @@ export const useGameStore = defineStore('game', () => {
     try {
       adopt(runWeek(raw()))
     } catch (err) {
-      lastError.value = (err as Error).message
+      fail('next_week', err)
       return
     }
     const s = state.value
@@ -163,8 +171,7 @@ export const useGameStore = defineStore('game', () => {
       })
       return verdict
     } catch (err) {
-      lastError.value = (err as Error).message
-      log('error', { action: 'proposal', input, message: lastError.value })
+      fail('proposal', err, { input })
     } finally {
       busy.value = false
     }
@@ -181,7 +188,7 @@ export const useGameStore = defineStore('game', () => {
       log('accept', { kind: verdict.kind, picks: verdict.picks, outcome: result.outcome })
       return result.outcome
     } catch (err) {
-      lastError.value = (err as Error).message
+      fail('accept', err, { kind: reactiveVerdict.kind })
     }
   }
 
@@ -196,8 +203,7 @@ export const useGameStore = defineStore('game', () => {
       log('upgrade_offer', { target, options: offer.options.map((o) => ({ key: o.key, p: o.p, minIQ: o.minIQ, cost: o.cost })) })
       return offer
     } catch (err) {
-      lastError.value = (err as Error).message
-      log('error', { action: 'upgrade', target, message: lastError.value })
+      fail('upgrade', err, { target })
     } finally {
       busy.value = false
     }
@@ -213,7 +219,7 @@ export const useGameStore = defineStore('game', () => {
       log('accept', { kind: 'upgrade', option: offer.options[index]?.key, outcome: result.outcome })
       return result.outcome
     } catch (err) {
-      lastError.value = (err as Error).message
+      fail('choose_upgrade', err, { index })
     }
   }
 
@@ -237,7 +243,7 @@ export const useGameStore = defineStore('game', () => {
       log('pushback', { replies, missing: result.missing, failures: result.failures })
       return { verdict: next, failures: result.failures }
     } catch (err) {
-      lastError.value = (err as Error).message
+      fail('pushback', err, { replies })
     } finally {
       busy.value = false
     }
@@ -257,6 +263,7 @@ export const useGameStore = defineStore('game', () => {
 
   return {
     state,
+    logTo,
     busy,
     jev,
     lastError,

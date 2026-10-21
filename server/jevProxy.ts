@@ -67,7 +67,7 @@ export function jevProxy(options: JevProxyOptions): Plugin {
       } catch {
         // Log the raw text.
       }
-      await options.log?.append(runId, {
+      await options.log?.append(runId, 'jev', {
         event: 'jev',
         purpose,
         status: upstream.status,
@@ -77,7 +77,7 @@ export function jevProxy(options: JevProxyOptions): Plugin {
       })
     } catch (err) {
       sendJson(res, 502, { error: `Could not reach Jev: ${(err as Error).message}` })
-      await options.log?.append(runId, {
+      await options.log?.append(runId, 'jev', {
         event: 'jev',
         purpose,
         status: 502,

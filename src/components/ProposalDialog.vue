@@ -198,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { IQ_CEILING, MAX_PARTS } from '@/engine/balance'
 import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
 import { DEFAULT_SOFTWARE, draftMind, guessIQ, precheckMind } from '@/engine/mindProposal'
@@ -308,6 +308,9 @@ const name = ref(props.request.name ?? '')
 const description = ref(props.request.description ?? '')
 const feedback = ref('')
 const verdict = ref<Verdict | null>(null)
+watch(verdict, (v) =>
+  game.logTo('ui', v ? 'verdict_shown' : 'verdict_closed', { dialog: kind, plausibility: v?.plausibility, rejected: v?.rejected })
+)
 
 const strategy = reactive({
   unitId: props.request.unitId ?? game.state.units[0]?.id ?? '',
