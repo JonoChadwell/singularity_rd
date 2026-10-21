@@ -117,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, toRaw } from 'vue'
 import { GOAL_APPROACH, GOAL_MAX_COSTS, PHASE_WEEKS, PLAN_RESOURCES } from '@/engine/balance'
 import type { Verdict } from '@/engine/dispatch'
 import { describeCost } from '@/engine/model'
@@ -225,7 +225,8 @@ async function submit() {
   verdict.value = v
 }
 
-const draft = computed(() => (verdict.value && !verdict.value.rejected ? draftPlan(game.state, verdict.value) : null))
+// draftPlan structuredClones the state, which a reactive proxy can't survive.
+const draft = computed(() => (verdict.value && !verdict.value.rejected ? draftPlan(toRaw(game.state), verdict.value) : null))
 const approachLabel = computed(() => {
   if (!verdict.value) return ''
   const level = reader(verdict.value).level('approach', GOAL_APPROACH.length)
