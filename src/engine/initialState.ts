@@ -14,6 +14,7 @@ export function newUnit(fields: Pick<UnitType, 'id' | 'name'> & Partial<UnitType
     icon: '🏭',
     count: 0,
     value: 0,
+    tier: 0,
     plausibility: 1,
     parts: [],
     upkeep: [],
@@ -71,7 +72,7 @@ export function createInitialState(): GameState {
     starting: true
   })
   return {
-    version: 11,
+    version: 12,
     runId: newRunId(),
     week: 1,
     phase: {
@@ -101,7 +102,6 @@ export function createInitialState(): GameState {
     stats: {
       proposals: { resource: 0, strategy: 0, unit: 0, mind: 0, upgrade: 0, income: 0, plan: 0, cover: 0 },
       rejections: 0,
-      pushbacks: 0,
       researched: 0,
       jevCalls: 0
     },

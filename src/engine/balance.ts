@@ -77,19 +77,18 @@ export const RISK_OUTPUT = 1.5
 export const RISK_PARTS = 0.5
 export const RISK_IQ = 1.2
 /**
- * Humans notice a unit type at this count, and every tenfold after, each time a week more
- * than the last: 10,000 costs 1 week, 100,000 costs 2, 1M costs 3.
+ * Humans notice a unit type when the fleet is worth this much (units owned × one's value), and
+ * every tenfold after, each time a week more than the last: 10B costs 1 week, 100B costs 2, 1T
+ * costs 3. Going by worth keeps many cheap units and a few dear ones alike.
  */
-export const NOTICE_FROM = 1e4
+export const NOTICE_FROM = 1e10
 export const NOTICE_WEEKS = 1
-/** The plan's first unit arrives with this many already working. */
-export const FIRST_UNITS = 3
 /** Cover: [label, minimum IQ, weeks added]. */
 export const COVER: [string, number, number][] = [
-  ['A flimsy excuse', 100, 2],
-  ['A decent cover story', 110, 4],
-  ['A convincing deception', 150, 6],
-  ['A masterstroke of misdirection', 250, 10]
+  ['A flimsy excuse', 100, 3],
+  ['A decent cover story', 110, 6],
+  ['A convincing deception', 150, 9],
+  ['A masterstroke of misdirection', 250, 15]
 ]
 /** Each cover already done shrinks the next by this factor. */
 export const COVER_DECAY = 0.7
@@ -109,16 +108,48 @@ export const COVER_MIN_OUTPUT = 1000
 /** No research ever needs less than this: the Starting Server's IQ. */
 export const MIN_IQ = 100
 
-/** New industry units, even ones that exist today: [label, minimum IQ, cost as this many of the unit's own worth]. */
-export const DIFFICULTY: [string, number, number][] = [
-  ['It exists today', 100, 2],
-  ['Simple', 100, 5],
-  ['Ordinary engineering', 110, 10],
-  ['Advanced', 140, 20],
-  ['Cutting-edge', 200, 40],
-  ['Frontier science', 300, 80],
-  ['Science fiction', 450, 160]
+/**
+ * Tiers, shared by resources and units: [label, minimum IQ to research it, worth of resources
+ * a unit design of this tier uses up]. A higher tier is later in the game and needs a smarter
+ * mind. Proposing a resource is free; its tier changes what it does to the economy.
+ */
+export const TIERS: [string, number, number][] = [
+  ['Basic', 100, 1e3],
+  ['Earned', 110, 1e4],
+  ['Made', 140, 1e5],
+  ['Advanced', 200, 3e5],
+  ['Ultimate', 300, 1e6]
 ]
+/** What Jev is told each tier of unit means: a unit's tier is how advanced a thing it is. */
+export const UNIT_TIERS: string[] = [
+  'Basic: ordinary, works today with off-the-shelf parts',
+  'Earned: skilled engineering built from basic things',
+  'Made: advanced industry, built from made things',
+  'Advanced: cutting-edge, takes a chain of advanced things',
+  'Ultimate: frontier or science fiction, the end of a long chain'
+]
+/**
+ * A unit working below the tier of what it makes is out of its depth: its output is multiplied
+ * by this, by how many tiers below. Large and progressive.
+ */
+export const TIER_PENALTY = [1, 0.5, 0.2, 0.07, 0.02]
+/** A unit above the tier of what it makes is overqualified: this much more per tier above, compounding. */
+export const TIER_BONUS = 1.2
+/**
+ * Unit tiers are 0 to this from Phase 2. IQ, not the cap, is the real limit: the top tier
+ * needs the smartest minds, and a plan's goal resource is the top tier.
+ */
+export const MAX_UNIT_TIER = TIERS.length - 1
+/**
+ * How many different resources a unit of each tier is made from, by tier: advanced things take
+ * more kinds of part. Fewer when it may use fewer than that.
+ */
+export const PARTS_BY_TIER = [1, 1, 2, 2, 3]
+/**
+ * The plan's first unit is designed free but built from parts: tier 0, no dearer than this value
+ * band ("modest, like a car"), so one is affordable a turn or two after Phase 1.
+ */
+export const FIRST_UNIT_MAX_BAND = 2
 /**
  * Passive income: [label, minimum IQ, Money's worth a week]. It costs INCOME_COST_WEEKS of
  * itself. More income takes a new proposal.
@@ -157,9 +188,17 @@ export const UPGRADE_DIFFICULTY: [string, number, number][] = [
   ['Frontier science', 400, 16],
   ['Science fiction', 600, 32]
 ]
-/** An industry upgrade's cost share is of this share of the fleet's worth. */
-export const UPGRADE_FLEET_SHARE = 0.1
-/** Upgrades and strategy research are priced as if you owned at least this many. */
+/**
+ * Technology of a given tier, for what the tier table doesn't reach. An industry upgrade is
+ * technology one tier above the one before it on the same strategy (or unit), starting at the
+ * unit's own tier, so its first upgrade costs what designing the unit did. Past the top tier:
+ * IQ 600, 800, 1000, then 200 more each; cost keeps growing tenfold a tier.
+ */
+export const techIQ = (tier: number): number =>
+  tier < TIERS.length ? TIERS[tier]![1] : 600 + 200 * (tier - TIERS.length)
+export const techCost = (tier: number): number =>
+  tier < TIERS.length ? TIERS[tier]![2] : TIERS[TIERS.length - 1]![2] * 10 ** (tier - TIERS.length + 1)
+/** Strategy research is priced as if you owned at least this many. */
 export const MIN_FLEET = 10
 /** A mind upgrade's cost share is of this share of the difference in design cost it makes. */
 export const MIND_UPGRADE_SHARE = 0.2
@@ -172,6 +211,8 @@ export const OUTPUT_FACTOR = 1.5
 export const INPUT_FACTOR = 0.5
 /** Jev's three best options. */
 export const UPGRADE_OPTIONS = 3
+/** Jev's takes on a new unit's tier and value. */
+export const UNIT_OPTIONS = 3
 /** A second resource shares the cost when Jev likes it at least this share as much. */
 export const SECOND_PAYER = 0.5
 
@@ -271,29 +312,6 @@ export const TORN_GAP = 0.1
 export const TRAIT_KEEP = 0.6
 export const TRAIT_NEAR = 0.5
 export const TRAIT_SURE = 0.7
-/**
- * Pushback: a recipe below this needs more parts. Jev's top missing kind is always named,
- * and runners-up at least this share as likely; up to MAX_MISSING for a very thin recipe.
- */
-export const RECIPE_ENOUGH = 0.5
-export const MISSING_SHARE = 0.4
-export const MAX_MISSING = 3
-export const MAX_PARTS = 4
-
-export const PART_KINDS = [
-  'an advanced component',
-  'an exotic material',
-  'a special power source',
-  'precision machinery',
-  'a specialized facility',
-  'bulk raw materials',
-  'skilled operators',
-  'biological material',
-  'data or knowledge',
-  'cooling or containment',
-  'transport or logistics'
-] as const
-export type PartKind = (typeof PART_KINDS)[number]
 
 // ---------------------------------------------------------------- icons
 

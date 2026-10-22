@@ -3,9 +3,9 @@ import * as B from '../balance'
 import { assign, assignAll, createUnits, doResearch, researchBlocker } from '../actions'
 import { runWeek } from '../cycle'
 import { acceptAny, judgeAny, type ProposalInput } from '../dispatch'
-import { previewWeek } from '../economy'
+import { netFlow, previewWeek } from '../economy'
 import { createInitialState, newResource, SERVER_ID } from '../initialState'
-import { bestIQ, creatable, currentIQ, findResource, findUnit, MONEY_ID, weeklyUse } from '../model'
+import { bestIQ, creatable, currentIQ, findResource, findUnit, MONEY_ID, tierFactor, weeklyUse } from '../model'
 import { newPhase } from '../phase'
 import { acceptPlan, judgePlan, type PlanSpec } from '../planProposal'
 import { goalOf } from '../projection'
@@ -239,16 +239,22 @@ export interface Phase2Style {
 }
 
 const MILL = 'cnc-mill'
-/** Mills kept on Money once the rest switch to the goal: enough to pay a quarter's upkeep, and some. */
-const MONEY_SHARE = 0.3
+/** The goal's resource is the top tier, so something of the top tier has to make it. */
+const FAB = 'nanofab'
 
 /**
- * Phase 2: design the first unit, give it a money strategy and one for the goal's resource,
- * grow by reinvesting, design one new tier and upgrade it to the goal's IQ, then switch the
- * mills to the goal's resource once a few weeks of output would cover it.
+ * Phase 2: design the first unit and give it a money strategy, grow by reinvesting, design one
+ * new mind and upgrade it to the goal's IQ. Once IQ allows, design a top-tier unit (a mill is
+ * out of its depth making the goal's resource); fabs earn Money while the fleet grows, then turn
+ * to the goal's resource once a week of output would cover what's left.
+ *
+ * Known gap: a tier-4 unit is made from three kinds of part (PARTS_BY_TIER), and this bot never
+ * makes the other two, so it can't build a Nanofab. The Phase 2 balance tests are skipped until
+ * it does.
  */
 export function steady(style: Phase2Style): Turn {
   const answers: Overrides = { advancement: score(0), efficiency: score(2), value: score(2), ...style.answers }
+  let flipped = false
   return async (s0) => {
     // Cover is proposed first thing in the week, before reinvesting, while the Money is there.
     let s = researchAll(s0)
@@ -259,15 +265,15 @@ export function steady(style: Phase2Style): Turn {
     if (s.phase.firstUnit) {
       s = await propose(
         s,
-        { kind: 'unit', spec: { name: 'CNC Mill', description: '', parts: [MONEY_ID], upkeep: [MONEY_ID], builderId: null, first: true } },
+        { kind: 'unit', spec: { name: 'CNC Mill', description: '', builderId: null, first: true } },
         { value: score(2), upkeep_0: score(1), ...style.firstUnit }
       )
     }
     const has = (name: string) => s.strategies.some((x) => x.name === name) || s.research.some((r) => r.name === name)
     if (!s.proposedThisWeek) {
-      const strategy = (name: string, outputId: string): ProposalInput => ({
+      const strategy = (name: string, outputId: string, unitId = MILL): ProposalInput => ({
         kind: 'strategy',
-        spec: { name, description: '', unitId: MILL, inputIds: [], outputId }
+        spec: { name, description: '', unitId, inputIds: [], outputId }
       })
       const tier = [...s.minds].sort((a, b) => b.tier - a.tier)[0]!
       const designing = s.research.some((r) => r.effect.kind === 'mind')
@@ -280,7 +286,11 @@ export function steady(style: Phase2Style): Turn {
         return upgrade(s, { kind: 'mind', id }, { 'd_*': score(1), ...alarm }, softwareSteps(m).length ? 'software' : 'Mk')
       }
       if (!has('Sell machined parts')) s = await propose(s, strategy('Sell machined parts', MONEY_ID), answers)
-      else if (!has('Make nanobots')) s = await propose(s, strategy('Make nanobots', 'nanobots'), answers)
+      else if (!findUnit(s, FAB) && !has('Design Nanofab') && bestIQ(s) >= B.TIERS[B.MAX_UNIT_TIER]![1]) {
+        const spec = { name: 'Nanofab', description: '', builderId: null }
+        s = await propose(s, { kind: 'unit', spec }, { ...answers, upkeep_0: score(1), ...style.firstUnit, tier: score(B.MAX_UNIT_TIER), value: score(5) })
+      } else if (findUnit(s, FAB) && !has('Sell fab output')) s = await propose(s, strategy('Sell fab output', MONEY_ID, FAB), answers)
+      else if (findUnit(s, FAB) && !has('Make nanobots')) s = await propose(s, strategy('Make nanobots', 'nanobots', FAB), answers)
       else if (style.coverBelow && weeksLeft(s) < style.coverBelow && s.covers < 3 && !covering) {
         // Cover is used at once; if it's too dear this week, the bot saves up for next week.
         const before = s
@@ -299,21 +309,34 @@ export function steady(style: Phase2Style): Turn {
     s = researchAll(s)
     const m = mill()
     if (!m) return s
-    // Switch to the goal's resource once four weeks of everything would cover what's still needed.
     const preview = previewWeek(s)
-    const need = goal.cost.reduce((n, c) => n + Math.max(0, c.amount - (findResource(s, c.resourceId)?.amount ?? 0)) * findResource(s, c.resourceId)!.value, 0)
-    const output = m.count * (m.value / B.PAYBACK_WEEKS)
+    // The top-tier design costs a lot. Keep growing until a few weeks of income would pay for it,
+    // then save up rather than spend it all on mills.
+    const designing = s.research.find((r) => r.effect.kind === 'unit')
+    if (designing) {
+      const worth = designing.cost.reduce((n, c) => n + c.amount * findResource(s, c.resourceId)!.value, 0)
+      if (worth <= 3 * netFlow(preview, MONEY_ID) * findResource(s, MONEY_ID)!.value) saving = true
+    }
     const ready = (id: string) => s.strategies.find((x) => x.name === id)
     const nanobots = ready('Make nanobots')
     const money = ready('Sell machined parts')
-    if (money && nanobots && (output * 4 >= need || !style.reinvest) && need > 0) {
-      // Keep enough on Money to pay everyone's upkeep, and the rest on Nanobots.
-      s = assignAll(s, MILL, money.id)
-      s = assign(s, MILL, nanobots.id, Math.floor(m.count * (1 - MONEY_SHARE)))
-    } else if (money) {
-      s = assignAll(s, MILL, money.id)
-    }
+    // Mills sell, fabs make the goal's resource.
+    if (money) s = assignAll(s, MILL, money.id)
+    const fab = findUnit(s, FAB)
+    const fabMoney = ready('Sell fab output')
+    // Fabs sell too while growing (tier bonus, and they are the reinvestment target once built); when
+    // a week of mills' and fabs' output would cover what's still needed, all fabs turn to the goal's
+    // resource. Later than that and the fleet's upkeep outgrows the mills' sales.
+    const need = goal.cost.reduce((n, c) => n + Math.max(0, c.amount - (findResource(s, c.resourceId)?.amount ?? 0)) * findResource(s, c.resourceId)!.value, 0)
+    const output = (m.count * m.value + (fab ? fab.count * fab.value : 0)) / B.PAYBACK_WEEKS
+    const switching = need > 0 && output >= need
+    if (fab && nanobots && fabMoney) s = assignAll(s, FAB, switching || flipped ? nanobots.id : fabMoney.id)
+    if (switching) flipped = true
     if ((style.reinvest && !saving) || m.built < 4) {
+      if (fab && fabMoney && style.reinvest) {
+        const fabs = creatable(s, fab, weeklyUse(preview))
+        if (fabs > 0) s = createUnits(s, FAB, fabs)
+      }
       const n = creatable(s, findUnit(s, MILL)!, weeklyUse(preview))
       if (n > 0) s = createUnits(s, MILL, style.reinvest ? n : Math.min(n, 4 - m.built))
     }

@@ -88,7 +88,7 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
     add({
       key: 'first-unit',
       tone: 'warn',
-      text: `Your plan’s first unit, ${state.phase.firstUnit.name}, isn’t designed yet. It’s free.`,
+      text: `Your plan’s first unit, ${state.phase.firstUnit.name}, isn’t designed yet. Designing it is free; you build the copies from parts.`,
       prompt: { label: 'Design it', to: { kind: 'first-unit' } }
     })
   }

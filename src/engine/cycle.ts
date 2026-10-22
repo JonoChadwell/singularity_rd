@@ -16,7 +16,7 @@ export function checkMilestones(state: GameState, week = state.week) {
   const first = state.incomes[0]
   if (first) add('first-income', `First income: ${first.name}.`)
   for (const m of state.minds) {
-    if (m.tier) add(`tier-${m.tier}`, `Tier ${m.tier} online: ${m.name}.`)
+    if (m.tier) add(`tier-${m.tier}`, `Generation ${m.tier} online: ${m.name}.`)
   }
   for (const u of state.units) {
     if (u.built > 0) add(`built-${u.id}`, `Your first ${u.name}.`)

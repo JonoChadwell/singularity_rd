@@ -72,7 +72,7 @@ describe('App', () => {
 
   it('plays through the store: money, income, a unit, a strategy, next week', async () => {
     const html = await render(async (game) => {
-      const judge = ready(game, new FakeJudge({ advancement: score(0), difficulty: score(0), value: score(1) }))
+      const judge = ready(game, new FakeJudge({ advancement: score(0), difficulty: score(0), tier: score(0), value: score(1) }))
       const money = await game.propose({ kind: 'resource', spec: { name: 'Money', description: 'Dollars.' } })
       expect(game.accept(money!)).toMatchObject({ kind: 'added' })
 
@@ -89,7 +89,7 @@ describe('App', () => {
 
       const gpu = await game.propose({
         kind: 'unit',
-        spec: { name: 'Rented Cloud GPU', description: '', parts: [MONEY_ID], upkeep: [MONEY_ID], builderId: null }
+        spec: { name: 'Rented Cloud GPU', description: '', builderId: null }
       })
       const design = game.accept(gpu!)
       if (design?.kind !== 'research') throw new Error('expected research')
@@ -151,7 +151,7 @@ describe('App', () => {
       expect(game.research(outcome.research.id)).toBe(true)
       expect(game.state.minds.find((m) => m.name === 'Custom AI Server')?.tier).toBe(1)
     })
-    expect(html).toContain('Tier 1')
+    expect(html).toContain('Generation 1')
     expect(html).toContain('Custom AI Server')
     expect(html).toContain('You’ve proposed this week’s research')
   })
@@ -221,12 +221,12 @@ describe('App', () => {
     )
   })
 
-  it('fills the unit form from a preset and says which resources are missing', async () => {
+  it('fills the unit form’s name from a preset, and leaves what it’s made from to Jev', async () => {
     const html = await render((_, ui) => ui.openInvent({ kind: 'unit', preset: 'Chip Fab' }))
     expect(html).toContain('value="Chip Fab"')
-    expect(html).toContain('Not in the game yet')
-    expect(html).toContain('+ Steel')
-    expect(html).toContain('+ Power')
+    // No resources to pick or introduce: Jev chooses, from nothing above the unit's tier.
+    expect(html).not.toContain('Not in the game yet')
+    expect(html).not.toContain('Add a part')
 
     const mind = await render((_, ui) => ui.openInvent({ kind: 'mind', preset: 'Custom AI Server' }))
     expect(mind).toContain('value="Custom Accelerator Rack"')

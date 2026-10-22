@@ -9,7 +9,7 @@ import { acceptIncome, judgeIncome, precheckIncome, type IncomeSpec } from '../i
 import { createInitialState, newMind, newResource, newUnit, SERVER_ID } from '../initialState'
 import { newPhase } from '../phase'
 import { acceptMind, DEFAULT_SOFTWARE, judgeMind, precheckMind, type MindSpec } from '../mindProposal'
-import { allocation, creatable, currentIQ, findMind, findResource, findUnit, fmt, MONEY_ID, softwareLabel, weeklyUse } from '../model'
+import { affordable, allocation, byTier, creatable, currentIQ, findMind, findResource, findUnit, fmt, MONEY_ID, softwareLabel, weeklyUse } from '../model'
 import {
   COVER_PRESETS,
   INCOME_PRESETS,
@@ -23,8 +23,8 @@ import {
 import { acceptResource, acceptStrategy, judgeResource, judgeStrategy, precheckStrategy } from '../proposals'
 import { makeBuildStrategy } from '../research'
 import type { GameState, Research, Strategy } from '../types'
-import { acceptUnit, answerPushback, judgeUnit, type UnitSpec } from '../unitProposal'
-import { acceptUpgrade, judgeUpgrade, nextHardwareName, softwareSteps, upgradeCandidates } from '../upgrade'
+import { acceptUnit, judgeUnit, type UnitSpec } from '../unitProposal'
+import { acceptUpgrade, changeKey, judgeUpgrade, nextHardwareName, softwareSteps, upgradeCandidates, upgradeTier } from '../upgrade'
 import { choice, FakeJudge, noul, score } from './fakeJudge'
 
 /** A game in Phase 3: everything unlocked, no clock and no risk, to test the mechanics alone. */
@@ -85,8 +85,6 @@ function powerWorld(servers = 4, farms = 1) {
 const unitSpec = (fields: Partial<UnitSpec> = {}): UnitSpec => ({
   name: 'Rented Cloud GPU',
   description: '',
-  parts: [MONEY_ID],
-  upkeep: [MONEY_ID],
   builderId: null,
   ...fields
 })
@@ -130,6 +128,16 @@ const pickCandidate = (key: string) => (questions: Questions) => {
   return choice(`c${Math.max(0, index)}`)
 }
 
+describe('resources by tier', () => {
+  it('lists the lowest tier first and keeps the order within a tier', () => {
+    const r = (id: string, tier: number) => newResource({ id, name: id, tier })
+    const all = [r('goal', 4), r('b', 2), r('money', 0), r('a', 2), r('power', 0)]
+    expect(byTier(all).map((x) => x.id)).toEqual(['money', 'power', 'b', 'a', 'goal'])
+    // The game's own list is left alone.
+    expect(all.map((x) => x.id)).toEqual(['goal', 'b', 'money', 'a', 'power'])
+  })
+})
+
 describe('formatting', () => {
   it('shows numbers at their real size', () => {
     expect(fmt(950)).toBe('950')
@@ -145,7 +153,7 @@ describe('formatting', () => {
 describe('the start', () => {
   it('has only the Starting Server, and waits for a Phase 1 plan', () => {
     const s = createInitialState()
-    expect(s.version).toBe(11)
+    expect(s.version).toBe(12)
     expect(s.phase).toMatchObject({ n: 1, status: 'planning', deadline: null, goalId: null })
     expect(s.resources).toEqual([])
     expect(s.minds).toHaveLength(1)
@@ -355,30 +363,50 @@ describe('proposals', () => {
     expect(stock.torn).toMatchObject([{ key: 'kind', catch: null }])
   })
 
-  it('gives a unit’s better answer a drawback as its catch', async () => {
+  it('has Jev set a unit’s tier and value: three takes, spanning at least two tiers', async () => {
     const s = moneyWorld()
     const v = await judgeUnit(
       s,
       new FakeJudge({
-        difficulty: score(3.5, { '3': 0.4, '4': 0.38 }, 0.1),
-        trait_wears_out: noul(0.45),
-        trait_fragile: noul(0.2)
+        tier: score(1, { '1': 0.5, '2': 0.3, '0': 0.2 }),
+        value: score(2, { '2': 0.6, '3': 0.4 }),
+        // Even when Jev is torn, a unit's costs are not the player's call.
+        upkeep_0: score(1.5, { '1': 0.4, '2': 0.38 }, 0.1)
       }),
       unitSpec()
     )
-    const t = v.torn.find((x) => x.key === 'difficulty')!
-    expect(t.catch).toEqual({ kind: 'trait', trait: 'wears-out' })
-    // The worse answer is the harder design, as proposed.
-    expect(t.options.map((o) => o.value)).toEqual(['4', '3'])
-    v.picks.difficulty = t.options[1]!.value
+    expect(v.torn).toEqual([])
+    // Jev's own take first, then the next tier at that value, then the next value at that tier.
+    expect(v.options).toMatchObject([
+      { tier: 1, band: 2 },
+      { tier: 2, band: 2 },
+      { tier: 1, band: 3 }
+    ])
+    expect(new Set(v.options.map((o) => o.tier)).size).toBeGreaterThanOrEqual(2)
+    v.choice = 1
     const r = acceptUnit(s, v).state.research[0]!
-    expect(r.effect.kind === 'unit' && r.effect.unit.traits).toContain('wears-out')
-    expect(r.minIQ).toBe(B.DIFFICULTY[3]![1])
+    expect(r.effect.kind === 'unit' && r.effect.unit).toMatchObject({ tier: 2, value: B.UNIT_VALUE[2]![1] })
+    expect(r.minIQ).toBe(B.TIERS[2]![1])
+  })
+
+  it('prices a unit’s design by its tier, not by what one is worth', async () => {
+    const rich = withMoney(moneyWorld(), 1e9)
+    const design = async (tier: number, value: number) =>
+      acceptUnit(rich, await judgeUnit(rich, new FakeJudge({ tier: score(tier), value: score(value) }), unitSpec())).state
+        .research[0]!
+    const cheap = await design(2, 0)
+    const dear = await design(2, 5)
+    expect(cheap.cost).toEqual(dear.cost)
+    expect(cheap.cost).toEqual([{ resourceId: MONEY_ID, amount: B.TIERS[2]![2] }])
+    expect((await design(3, 0)).cost[0]!.amount).toBeGreaterThan(cheap.cost[0]!.amount)
+    // Higher tiers take a smarter mind.
+    expect((await design(0, 0)).minIQ).toBe(B.TIERS[0]![1])
+    expect((await design(4, 0)).minIQ).toBe(B.TIERS[4]![1])
   })
 
   it('makes every unit research, even one that exists today, and prices its parts with its traits', async () => {
     const s = moneyWorld()
-    const v = await judgeUnit(s, new FakeJudge({ difficulty: score(0), value: score(1), trait_hardy: noul(0.9) }), unitSpec())
+    const v = await judgeUnit(s, new FakeJudge({ tier: score(0), value: score(1), trait_hardy: noul(0.9) }), unitSpec())
     const { state, outcome } = acceptUnit(s, v)
     expect(outcome.kind).toBe('research')
     const r = state.research.find((x) => x.name === 'Design Rented Cloud GPU')!
@@ -389,8 +417,8 @@ describe('proposals', () => {
     expect(r.effect.kind === 'unit' && r.effect.unit.parts).toEqual([{ resourceId: MONEY_ID, amount: B.nice(500 * B.PERK_PRICE) }])
 
     const rich = withMoney(moneyWorld(), 1e6)
-    const paid = acceptUnit(rich, await judgeUnit(rich, new FakeJudge({ difficulty: score(0), value: score(1) }), unitSpec())).state
-    expect(paid.research[0]!.cost).toEqual([{ resourceId: MONEY_ID, amount: B.DIFFICULTY[0]![2] * 500 }])
+    const paid = acceptUnit(rich, await judgeUnit(rich, new FakeJudge({ tier: score(0), value: score(1) }), unitSpec())).state
+    expect(paid.research[0]!.cost).toEqual([{ resourceId: MONEY_ID, amount: B.TIERS[0]![2] }])
   })
 
   it('keeps up to three traits and lets the player decide those near the line', async () => {
@@ -411,30 +439,69 @@ describe('proposals', () => {
     expect(v.traitOdds.find((t) => t.trait === 'overclockable')).toBeDefined()
   })
 
-  it('pushes back with the missing kinds of part, and accepts the answer', async () => {
-    let s = powerWorld()
+  it('has Jev choose what a unit is made from and runs on, never above its own tier', async () => {
+    const s = moneyWorld()
+    s.resources.push(
+      newResource({ id: 'steel', name: 'Steel', tier: 1 }),
+      newResource({ id: 'power', name: 'Power', kind: 'flow', tier: 1 }),
+      newResource({ id: 'chips', name: 'AI Chips', tier: 3 })
+    )
     const judge = new FakeJudge({
-      recipe: noul(0.2),
-      // Jev ranks the kinds: an advanced component, then a special power source; the rest trail.
-      missing: choice('k0', { k0: 0.4, k2: 0.3, k5: 0.1, k8: 0.05 }, 0.3)
+      tier: score(1, { '1': 0.6, '3': 0.4 }),
+      value: score(2),
+      // Jev would make everything from chips, but a tier 1 unit can't use them.
+      parts_t1: choice('chips'),
+      parts_t3: choice('chips'),
+      runs_t1: choice('power')
     })
-    const v = await judgeUnit(s, judge, unitSpec({ name: 'Quantum Fab' }))
-    expect(v.missing).toEqual(['an advanced component', 'a special power source'])
-    expect(() => acceptUnit(s, v)).toThrow(/pushback/)
+    const v = await judgeUnit(s, judge, unitSpec())
+    const asked = Object.keys(judge.calls[0]!.questions)
+    expect(asked).toEqual(expect.arrayContaining(['parts_t0', 'parts_t1', 'parts_t3', 'runs_t0', 'runs_t1', 'runs_t3']))
+    // Tier 2 can use what tier 1 can, so it shares that question.
+    expect(asked).not.toContain('parts_t2')
+    for (const o of v.options) {
+      for (const id of o.partsIds) {
+        expect(findResource(s, id)!.tier).toBeLessThanOrEqual(o.tier)
+        expect(findResource(s, id)!.kind).toBe('stock')
+      }
+      expect(findResource(s, o.upkeepId)!.tier).toBeLessThanOrEqual(o.tier)
+    }
+    const t1 = v.options.find((o) => o.tier === 1)!
+    expect(t1).toMatchObject({ partsIds: ['money'], upkeepId: 'power' })
+    // Tier 3 takes two kinds of part: Jev's pick, then the pool fills the rest.
+    const t3 = v.options.find((o) => o.tier === 3)!
+    expect(t3.partsIds).toEqual(['chips', 'money'])
+    // The unit is made from what the picked take says, its worth split between them.
+    v.choice = v.options.indexOf(t3)
+    const effect = acceptUnit(s, v).state.research[0]!.effect
+    expect(effect.kind === 'unit' && effect.unit.parts.map((p) => p.resourceId)).toEqual(['chips', 'money'])
+    expect(effect.kind === 'unit' && effect.unit.upkeep.length).toBe(1)
+  })
 
-    const round = await answerPushback(s, new FakeJudge(), 'one Quantum Fab', v.spec.parts, v.missing, [
-      { kind: 'an advanced component', newName: 'Quantum Processors' },
-      { kind: 'a special power source', newName: 'Superconducting Power Cables' }
-    ])
-    expect(round.missing).toEqual([])
-    expect(round.parts.map((id) => findResource(round.state, id)!.name)).toEqual([
-      'Money',
-      'Quantum Processors',
-      'Superconducting Power Cables'
-    ])
-    s = round.state
-    const { outcome } = acceptUnit(s, { ...v, missing: [], spec: { ...v.spec, parts: round.parts } })
-    expect(outcome.kind).toBe('research')
+  it('makes higher tiers from more kinds of part: one, one, two, two, three', async () => {
+    expect(B.PARTS_BY_TIER).toEqual([1, 1, 2, 2, 3])
+    const s = moneyWorld()
+    for (let tier = 0; tier <= 4; tier++) s.resources.push(newResource({ id: `r${tier}`, name: `R${tier}`, tier }))
+    const parts = async (tier: number) => {
+      const v = await judgeUnit(s, new FakeJudge({ tier: score(tier), value: score(2) }), unitSpec())
+      return v.options.find((o) => o.tier === tier)!.partsIds.length
+    }
+    expect(await Promise.all([0, 1, 2, 3, 4].map(parts))).toEqual([1, 1, 2, 2, 3])
+    // With fewer to choose from, it's made from what there is: tier 2 with a single stock below it.
+    const lean = moneyWorld()
+    lean.resources.push(newResource({ id: 'r2', name: 'R2', tier: 2 }))
+    const v = await judgeUnit(lean, new FakeJudge({ tier: score(2) }), unitSpec())
+    expect(v.options.find((o) => o.tier === 2)!.partsIds).toHaveLength(2)
+    const alone = freeState()
+    alone.resources.push(newResource({ id: 'only', name: 'Only', tier: 0 }))
+    const one = await judgeUnit(alone, new FakeJudge({ tier: score(4) }), unitSpec())
+    expect(one.options.every((o) => o.partsIds.length === 1)).toBe(true)
+  })
+
+  it('needs a stock to make a unit from', async () => {
+    const s = freeState()
+    s.resources.push(newResource({ id: 'power', name: 'Power', kind: 'flow' }))
+    await expect(judgeUnit(s, new FakeJudge(), unitSpec())).rejects.toThrow(/Propose a resource first/)
   })
 })
 
@@ -460,6 +527,13 @@ describe('creating units', () => {
     expect(creatable(s, u)).toBe(8)
     expect(creatable(s, u, weeklyUse(previewWeek(s)))).toBe(8)
     expect(creatable(s, u, { [MONEY_ID]: 500 })).toBe(4)
+  })
+
+  it('the “max” button is what the parts allow right now, whatever the upkeep', () => {
+    const s = moneyWorld(1000)
+    const u = newUnit({ id: 'humans', name: 'Paid Humans', value: 100, parts: [{ resourceId: MONEY_ID, amount: 100 }], upkeep: [{ resourceId: MONEY_ID, amount: 25 }] })
+    s.units.push(u)
+    expect(affordable(s, u)).toBe(10)
   })
 })
 
@@ -625,6 +699,41 @@ describe('upgrades', () => {
     state.research[0]!.cost = []
     expect(unit(doResearch(state, state.research[0]!.id), 'gpu').upkeep).toEqual([{ resourceId: 'power', amount: 25 }])
   })
+
+  it('makes an industry upgrade technology of the unit’s tier, then a tier harder each time on the same strategy', async () => {
+    const s = powerWorld(4)
+    unit(s, 'gpu').tier = 2
+    const worth = (cost: { resourceId: string; amount: number }[]) =>
+      cost.reduce((n, c) => n + c.amount * findResource(s, c.resourceId)!.value, 0)
+    // The first upgrade costs what designing the unit did, and needs the same IQ.
+    const offer = await judgeUpgrade(s, new FakeJudge({ best: pickCandidate('Better earn') }), { kind: 'unit', id: 'gpu' })
+    const first = offer.options.find((o) => o.key === 'output_earn')!
+    expect(first.tier).toBe(2)
+    expect(first.minIQ).toBe(B.TIERS[2]![1])
+    expect(worth(first.cost)).toBeCloseTo(B.TIERS[2]![2])
+    // Jev doesn't price an industry upgrade.
+    expect(offer.options.every((o) => o.tier !== undefined)).toBe(true)
+
+    // The second upgrade to that strategy is a tier higher; one to the unit itself starts again.
+    const done = { name: 'GPU Server: Better earn', targetId: 'gpu', week: 1, key: changeKey(first.changes) }
+    s.upgrades.push(done)
+    const gpu = unit(s, 'gpu')
+    expect(upgradeTier(s, gpu, [{ kind: 'input', strategyId: 'earn', resourceId: 'steel', factor: 0.5 }])).toBe(3)
+    expect(upgradeTier(s, gpu, [{ kind: 'upkeep', resourceId: 'power', factor: 0.5 }])).toBe(2)
+    // One waiting as research counts too.
+    s.research.push({
+      id: 'r', name: 'r', description: '', icon: '💡', minIQ: 100, cost: [], proposedWeek: 1,
+      effect: { kind: 'upgrade', target: { kind: 'unit', id: 'gpu' }, changes: [{ kind: 'input', strategyId: 'earn', resourceId: 'steel', factor: 0.5 }] }
+    })
+    expect(upgradeTier(s, gpu, [{ kind: 'input', strategyId: 'earn', resourceId: 'steel', factor: 0.3 }])).toBe(4)
+  })
+
+  it('takes technology past the top tier: IQ 600, 800, 1000, then 200 more each', () => {
+    expect([4, 5, 6, 7, 8, 9].map(B.techIQ)).toEqual([300, 600, 800, 1000, 1200, 1400])
+    expect(B.techCost(4)).toBe(B.TIERS[4]![2])
+    expect(B.techCost(6)).toBe(B.techCost(5) * 10)
+    expect(B.techCost(5)).toBeGreaterThan(B.techCost(4))
+  })
 })
 
 describe('the week', () => {
@@ -780,11 +889,6 @@ describe('presets', () => {
       for (const r of [...p.inputs, p.output]) expect(offered, `${p.name}: ${r}`).toContain(r)
       for (const r of p.runners) expect(units, `${p.name}: ${r}`).toContain(r)
       expect(p.inputs.length).toBeLessThanOrEqual(2)
-    }
-    for (const p of UNIT_PRESETS) {
-      for (const r of [...p.parts, ...p.upkeep]) expect(offered, `${p.name}: ${r}`).toContain(r)
-      expect(p.parts.length).toBeLessThanOrEqual(B.MAX_PARTS)
-      expect(p.upkeep.length).toBeLessThanOrEqual(2)
     }
     for (const p of INCOME_PRESETS) for (const r of [p.output, p.per ?? p.output]) expect(offered, p.name).toContain(r)
     for (const p of MIND_PRESETS) expect(p.iq).toBeGreaterThan(B.START_IQ)

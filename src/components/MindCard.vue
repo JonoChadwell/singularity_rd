@@ -5,7 +5,7 @@
       <div class="title">
         <div class="name">
           <strong>{{ mind.name }}</strong>
-          <span v-if="mind.tier" class="chip tier">Tier {{ mind.tier }}</span>
+          <span v-if="mind.tier" class="chip tier">Generation {{ mind.tier }}</span>
           <span
             class="chip iq"
             :title="`${mind.hardware.name} hardware, IQ ${mind.hardware.iq}, running ${softwareLabel(mind)}. Software upgrades can raise it to ${Math.round(ceilingIQ(mind))}; past that needs new hardware.`"

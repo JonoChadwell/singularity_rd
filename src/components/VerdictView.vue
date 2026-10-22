@@ -78,29 +78,6 @@
         </div>
       </div>
 
-      <div v-if="missing.length" class="pushback">
-        <p class="warn small">
-          Jev pushes back: building one needs more. For each missing kind of part, add something you have, or name
-          something new.
-        </p>
-        <div v-for="(kind, i) in missing" :key="kind" class="reply">
-          <div class="small"><strong>Missing {{ kind }}</strong></div>
-          <div class="row">
-            <select v-model="replies[i]!.resourceId" class="inline" :aria-label="`Something for ${kind}`">
-              <option value="">New resource…</option>
-              <option v-for="r in game.state.resources" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
-            </select>
-            <template v-if="!replies[i]!.resourceId">
-              <input v-model="replies[i]!.newName" class="grow" :placeholder="PLACEHOLDERS[kind]" :maxlength="NAME_MAX" />
-            </template>
-          </div>
-        </div>
-        <p v-for="f in failures" :key="f" class="bad small">{{ f }}</p>
-        <button class="small" :disabled="!canAnswer" @click="answer">
-          {{ game.busy ? 'Jev is checking…' : 'Answer Jev' }}
-        </button>
-      </div>
-
       <slot />
     </template>
 
@@ -109,7 +86,7 @@
       <button
         type="button"
         class="primary"
-        :disabled="!!verdict.rejected || !!verdict.duplicateOf || missing.length > 0 || game.busy"
+        :disabled="!!verdict.rejected || !!verdict.duplicateOf || game.busy"
         @click="emit('accept')"
       >
         {{ acceptLabel }}
@@ -119,39 +96,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { MAX_TRAITS, type PartKind } from '@/engine/balance'
+import { computed } from 'vue'
+import { MAX_TRAITS } from '@/engine/balance'
 import { findResource } from '@/engine/model'
-import { complicationName, NAME_MAX, payOptions } from '@/engine/proposals'
+import { complicationName, payOptions } from '@/engine/proposals'
 import { RISK_BONUS, riskText } from '@/engine/risk'
 import TraitChips from './TraitChips.vue'
 import { TRAITS } from '@/engine/traits'
-import { chosenTraits, nearLine, type PushbackReply } from '@/engine/unitProposal'
+import { chosenTraits, nearLine } from '@/engine/unitProposal'
 import { useGameStore, type Verdict } from '@/stores/game'
 
 const props = defineProps<{ verdict: Verdict; acceptLabel: string }>()
 const emit = defineEmits<{
   pick: [key: string, value: string]
   trait: [trait: keyof typeof TRAITS, on: boolean]
-  replace: [verdict: Verdict]
   accept: []
   edit: []
 }>()
 const game = useGameStore()
-
-const PLACEHOLDERS: Record<PartKind, string> = {
-  'an advanced component': 'e.g. Quantum Processors',
-  'an exotic material': 'e.g. Graphene Sheets',
-  'a special power source': 'e.g. Superconducting Power Cables',
-  'precision machinery': 'e.g. EUV Lithography Tools',
-  'a specialized facility': 'e.g. Clean Room',
-  'bulk raw materials': 'e.g. Silicon',
-  'skilled operators': 'e.g. Trained Technicians',
-  'biological material': 'e.g. Stem Cells',
-  'data or knowledge': 'e.g. Training Data',
-  'cooling or containment': 'e.g. Liquid Helium',
-  'transport or logistics': 'e.g. Freight Contracts'
-}
 
 const pct = (p: number) => `${Math.round(p * 100)}%`
 /** Jev's favourite stocks to pay with; the player may choose among them. */
@@ -164,41 +126,11 @@ const riskLine = computed(() => {
   const v = props.verdict
   return v.risk && v.kind in RISK_BONUS ? riskText(v.risk, v.kind as keyof typeof RISK_BONUS) : ''
 })
-const missing = computed(() => ('missing' in props.verdict ? props.verdict.missing : []))
 const keptList = computed(() => (props.verdict.kind === 'unit' ? chosenTraits(props.verdict).map((t) => t.trait) : []))
 const kept = computed(() => new Set<string>(keptList.value))
 /** Traits near the line that the player decides. A few at most, so the list stays readable. */
 const optional = computed(() => (props.verdict.kind === 'unit' ? props.verdict.traitOdds.filter(nearLine).slice(0, 4) : []))
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$/, '')
-
-const replies = ref<PushbackReply[]>([])
-const failures = ref<string[]>([])
-watch(
-  missing,
-  (kinds) => {
-    replies.value = kinds.map((kind) => ({ kind, resourceId: '', newName: '' }))
-  },
-  { immediate: true }
-)
-const canAnswer = computed(
-  () =>
-    game.canPropose &&
-    replies.value.length > 0 &&
-    replies.value.every((r) => r.resourceId || (r.newName?.trim().length ?? 0) >= 2)
-)
-
-async function answer() {
-  const v = props.verdict
-  if (v.kind !== 'unit') return
-  const cleaned = replies.value.map((r) => (r.resourceId ? { kind: r.kind, resourceId: r.resourceId } : { kind: r.kind, newName: r.newName }))
-  const result = await game.pushback(v, cleaned)
-  if (!result) {
-    failures.value = game.lastError ? [game.lastError] : []
-    return
-  }
-  failures.value = result.failures
-  emit('replace', result.verdict)
-}
 </script>
 
 <style scoped>
@@ -256,24 +188,6 @@ async function answer() {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.pushback {
-  border: 1px solid rgb(251 191 36 / 0.4);
-  border-radius: 6px;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.reply .row {
-  flex-wrap: nowrap;
-  margin-top: 2px;
-}
-
-.grow {
-  flex: 1;
 }
 
 .actions {

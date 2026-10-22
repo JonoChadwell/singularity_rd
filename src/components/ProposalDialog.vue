@@ -39,13 +39,13 @@
           <span>Uses {{ i }}</span>
           <select v-model="strategy.inputIds[i - 1]">
             <option value="">nothing</option>
-            <option v-for="r in game.state.resources" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
+            <option v-for="r in byTier(game.state.resources)" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
           </select>
         </label>
         <label class="field">
           <span>Makes</span>
           <select v-model="strategy.outputId">
-            <option v-for="r in game.state.resources" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
+            <option v-for="r in byTier(game.state.resources)" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
           </select>
         </label>
         <p class="muted small note">
@@ -107,14 +107,6 @@
       </template>
 
       <template v-if="kind === 'unit'">
-        <div class="field">
-          <span>Made from</span>
-          <ResourcePicker v-model="unit.parts" :max="MAX_PARTS" label="Add a part" />
-        </div>
-        <div class="field">
-          <span>Runs on</span>
-          <ResourcePicker v-model="unit.upkeep" :max="MAX_UPKEEP" label="Add upkeep" empty="nothing: free to run" />
-        </div>
         <label v-if="game.state.units.length" class="field">
           <span>Also built by</span>
           <select v-model="unit.builderId">
@@ -123,8 +115,9 @@
           </select>
         </label>
         <p class="muted small note">
-          You create them from their parts, as many as you can afford. You choose what; the game chooses how much. Jev
-          judges how hard it is to design, its traits, and whether the parts are enough.
+          Jev decides how advanced it is (its tier), what one is worth, what it’s made from and what it runs on, which
+          are never above its own tier, and its traits. It offers you a few takes to choose from. Once designed, you
+          create them from their parts, as many as you can afford.
         </p>
       </template>
 
@@ -145,7 +138,6 @@
       :accept-label="acceptLabel"
       @pick="onPick"
       @trait="onTrait"
-      @replace="(v) => (verdict = v)"
       @accept="accept"
       @edit="verdict = null"
     >
@@ -160,7 +152,7 @@
         <div class="muted">{{ tierText(resourceDraft) }} · one is worth: {{ bandText(resourceDraft) }}</div>
       </div>
       <div v-else-if="verdict.kind === 'strategy' && strategyDraft" class="outcome small">
-        <div>{{ strategyText }} each, every week.</div>
+        <div>{{ strategyText }} each, every week. <StrategyTags :strategy="strategyDraft.strategy" /></div>
         <div v-if="strategyDraft.strategy.quirk" class="warn">
           {{ QUIRKS[strategyDraft.strategy.quirk].icon }} {{ QUIRKS[strategyDraft.strategy.quirk].name }}:
           {{ QUIRKS[strategyDraft.strategy.quirk].rule }}
@@ -170,8 +162,21 @@
         </div>
       </div>
       <div v-else-if="verdict.kind === 'unit' && unitDraft" class="outcome">
-        <p v-if="first" class="small good">Your plan’s first unit: no research needed, and it doesn’t use this week’s proposal.</p>
-        <p v-else class="small warn">{{ researchText(unitDraft) }}</p>
+        <p v-if="first" class="small good">
+          Your plan’s first unit: no research needed, and it doesn’t use this week’s proposal. You create the copies from parts.
+        </p>
+        <fieldset v-if="unitOptions.length > 1" class="options">
+          <legend class="small muted">Jev’s takes: pick one</legend>
+          <label v-for="o in unitOptions" :key="o.i" class="option small" :class="{ chosen: unitChoice === o.i }">
+            <input v-model="unitChoice" type="radio" name="unit-option" :value="o.i" />
+            <span>
+              <strong>{{ o.tier }}</strong> · one is worth: {{ o.worth }}
+              <span class="muted">· made from {{ o.madeFrom }}, runs on {{ o.runsOn }}</span>
+              <span v-if="!first" class="muted"> · {{ researchText(o.draft) }}</span>
+            </span>
+          </label>
+        </fieldset>
+        <p v-if="!first" class="small warn">{{ researchText(unitDraft) }}</p>
         <UnitSummary :unit="unitDraft.unit" :state="game.state" />
       </div>
       <div v-else-if="verdict.kind === 'income' && incomeDraft" class="outcome small">
@@ -199,14 +204,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { IQ_CEILING, MAX_PARTS } from '@/engine/balance'
+import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue'
+import { IQ_CEILING } from '@/engine/balance'
 import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
 import { DEFAULT_SOFTWARE, draftMind, guessIQ, precheckMind } from '@/engine/mindProposal'
 import { draftIncome, precheckIncome } from '@/engine/incomeProposal'
 import {
   bandText,
   bestIQ,
+  byTier,
   describeCost,
   describeFlows,
   describeIncome,
@@ -214,7 +220,9 @@ import {
   findResource,
   fmt,
   softwareVersion,
-  tierText
+  tierLabel,
+  tierText,
+  unitValueText
 } from '@/engine/model'
 import {
   COVER_PRESETS,
@@ -240,14 +248,13 @@ import { QUIRKS, type TraitId } from '@/engine/traits'
 import {
   draftUnit,
   guessUnitSpec,
-  MAX_UPKEEP,
   precheckUnit
 } from '@/engine/unitProposal'
 import { useGameStore, type ProposalInput, type Verdict } from '@/stores/game'
 import { useUiStore, type InventRequest } from '@/stores/ui'
 import HelpTip from './HelpTip.vue'
 import PresetList, { type PresetItem } from './PresetList.vue'
-import ResourcePicker from './ResourcePicker.vue'
+import StrategyTags from './StrategyTags.vue'
 import UnitSummary from './UnitSummary.vue'
 import VerdictView from './VerdictView.vue'
 
@@ -276,11 +283,11 @@ const COPY: Record<
   },
   unit: {
     title: 'Propose an industry unit',
-    help: 'An industry unit is something you can own many of. Pick one from the list to fill in its spec, or write your own, and edit it before you propose. Jev still decides whether it can be added, and every unit is research first, even one that exists today (that just needs little research). Once designed, you create them from their parts.',
-    presets: 'Pick one to fill the spec, or write your own:',
+    help: 'An industry unit is something you can own many of. Pick one from the list to fill in its name, or write your own. Jev decides whether it can be added, how advanced it is, what one is worth, what it is made from and what it runs on (never above its own tier), and offers a few takes to choose from. Every unit is research first, even one that exists today (that just needs little research). Once designed, you create them from their parts.',
+    presets: 'Pick one to fill the name, or write your own:',
     name: 'e.g. Rented Cloud GPU, Solar Farm, Paid Humans',
     description: 'What is it? (optional, but helps Jev)',
-    cost: 'One Jev call. Pushback, if any, costs one more.'
+    cost: 'One Jev call.'
   },
   mind: {
     title: 'Propose an intelligence system',
@@ -330,7 +337,7 @@ const strategy = reactive({
   outputId: props.request.outputId ?? game.state.resources[0]?.id ?? ''
 })
 
-const unit = reactive(guessUnitSpec(game.state))
+const unit = reactive(guessUnitSpec())
 const mind = reactive({ iq: props.request.iq ?? guessIQ(game.state), hardware: '', software: '' })
 const stocks = computed(() => game.state.resources.filter((r) => r.kind === 'stock'))
 const income = reactive({ outputId: props.request.outputId ?? stocks.value[0]?.id ?? '', perId: '' })
@@ -404,10 +411,6 @@ function applyPreset(presetId: string) {
     if (!p) return
     name.value = p.name
     description.value = p.description
-    const parts = resolveResources(game.state, p.parts)
-    const upkeep = resolveResources(game.state, p.upkeep)
-    Object.assign(unit, { parts: parts.ids.slice(0, MAX_PARTS), upkeep: upkeep.ids.slice(0, MAX_UPKEEP) })
-    missingResources.value = [...new Set([...parts.missing, ...upkeep.missing])]
   }
 }
 
@@ -443,7 +446,7 @@ const input = computed<ProposalInput>(() => {
     return { kind, spec: { ...base, unitId: strategy.unitId, inputIds: strategy.inputIds.filter(Boolean), outputId: strategy.outputId } }
   }
   if (kind === 'unit') {
-    return { kind, spec: { ...base, parts: [...unit.parts], upkeep: [...unit.upkeep], builderId: unit.builderId, first } }
+    return { kind, spec: { ...base, builderId: unit.builderId, first } }
   }
   if (kind === 'mind') return { kind, spec: { ...base, iq: mind.iq, hardware: mind.hardware, software: mind.software } }
   if (kind === 'income') return { kind, spec: { ...base, outputId: income.outputId, perId: income.perId || null } }
@@ -476,10 +479,33 @@ async function submit() {
 const resourceDraft = computed(() => (verdict.value?.kind === 'resource' ? draftResource(game.state, verdict.value) : null))
 const strategyDraft = computed(() => (verdict.value?.kind === 'strategy' ? draftStrategy(game.state, verdict.value) : null))
 const unitDraft = computed(() => (verdict.value?.kind === 'unit' ? draftUnit(game.state, verdict.value) : null))
+// Jev's takes on the unit, each drafted as if picked, to show what it would cost.
+const unitOptions = computed(() => {
+  const v = verdict.value
+  if (v?.kind !== 'unit') return []
+  return v.options.map((o, i) => {
+    const draft = draftUnit(game.state, { ...v, choice: i })
+    return {
+      i,
+      tier: tierLabel(o.tier),
+      worth: unitValueText(draft.unit.value),
+      madeFrom: o.partsIds.map((id) => findResource(game.state, id)?.name ?? '?').join(' + '),
+      runsOn: findResource(game.state, o.upkeepId)?.name ?? '?',
+      draft
+    }
+  })
+})
+const unitChoice = computed({
+  get: () => (verdict.value?.kind === 'unit' ? verdict.value.choice : 0),
+  set: (choice: number) => {
+    if (verdict.value?.kind === 'unit') verdict.value.choice = choice
+  }
+})
 const mindDraft = computed(() => (verdict.value?.kind === 'mind' ? draftMind(game.state, verdict.value) : null))
 const incomeDraft = computed(() => (verdict.value?.kind === 'income' ? draftIncome(game.state, verdict.value) : null))
-const coverDraft = computed(() => (verdict.value?.kind === 'cover' ? draftCover(game.state, verdict.value) : null))
-const coverBlock = computed(() => (verdict.value?.kind === 'cover' ? coverBlocker(game.state, verdict.value) : null))
+// Cover previews next week, which structuredClones the state: it needs the raw state, not the proxy.
+const coverDraft = computed(() => (verdict.value?.kind === 'cover' ? draftCover(toRaw(game.state), verdict.value) : null))
+const coverBlock = computed(() => (verdict.value?.kind === 'cover' ? coverBlocker(toRaw(game.state), verdict.value) : null))
 const strategyText = computed(() => {
   const d = strategyDraft.value
   if (!d) return ''
@@ -605,5 +631,31 @@ form {
 
 .outcome p {
   margin: 0;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.option {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.option input {
+  width: auto;
+  margin-top: 3px;
+}
+
+.option.chosen {
+  color: var(--text);
 }
 </style>

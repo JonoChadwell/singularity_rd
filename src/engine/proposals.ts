@@ -10,7 +10,7 @@ import {
   type Judge
 } from '@/ai/jev'
 import * as B from './balance'
-import { findResource, findUnit, labour, makeId, namesInUse, runsOn } from './model'
+import { findResource, findUnit, labour, makeId, namesInUse, runsOn, tierFactor } from './model'
 import { addStrategy, costMultiplier, priceCost, spendable } from './research'
 import { lockReason, moveClock } from './phase'
 import { alarmQuestions, riskFrom } from './risk'
@@ -590,7 +590,7 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
     return { resourceId: id, amount: B.nice(value / r.value) }
   })
   const efficiency = B.pick(B.EFFICIENCY, read.level('efficiency', B.EFFICIENCY.length))[1]
-  const [, minIQ, weeks] = B.pick(B.ADVANCEMENT, read.level('advancement', B.ADVANCEMENT.length))
+  const [, advancementIQ, weeks] = B.pick(B.ADVANCEMENT, read.level('advancement', B.ADVANCEMENT.length))
   const strategy: Strategy = {
     id: makeId(state, v.spec.name),
     name: v.spec.name,
@@ -599,12 +599,19 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
     kind: 'make',
     inputs,
     outputId: output.id,
-    amount: B.nice(((work + inputValue) * efficiency * (v.risk ? B.RISK_OUTPUT : 1)) / output.value)
+    efficiency,
+    // A unit below the tier of what it makes is out of its depth; above it, overqualified.
+    amount: B.nice(
+      ((work + inputValue) * efficiency * (v.risk ? B.RISK_OUTPUT : 1) * tierFactor(unit.tier, output.tier)) /
+        output.value
+    )
   }
   const quirk = catchesOf(v).find((c) => c.kind === 'quirk')
   if (quirk?.kind === 'quirk') strategy.quirk = quirk.quirk
+  // Making something of a higher tier takes a smarter mind, however simple the method.
+  const minIQ = Math.max(advancementIQ, output.tier > 0 ? B.TIERS[output.tier]![1] : 0)
   // Working it out costs some weeks of what the runners would make.
-  const cost = minIQ ? costFor(state, v, weeks * work * Math.max(unit.count, B.MIN_FLEET)) : []
+  const cost = weeks ? costFor(state, v, weeks * work * Math.max(unit.count, B.MIN_FLEET)) : []
   return { strategy, minIQ: minIQ ? floorIQ(minIQ) : 0, cost }
 }
 

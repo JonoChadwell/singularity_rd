@@ -168,6 +168,24 @@ function topIndex(v: PlanVerdict, fresh: number[]): number {
 }
 
 /**
+ * Phase 2 starts with at least one resource of every tier, the lowest a stock (units are made
+ * from stocks). Where Jev left a tier empty, the nearest spare new resource moves into it: one
+ * whose own tier would still have another, so nothing opens a new gap. The goal's resource stays
+ * at the top tier.
+ */
+export function coverTiers(resources: Resource[], movable: Resource[]): void {
+  const covered = (tier: number, without?: Resource) =>
+    resources.some((r) => r !== without && r.tier === tier && (tier > 0 || r.kind === 'stock'))
+  for (let tier = 0; tier <= B.GOAL_TIER[2]; tier++) {
+    if (covered(tier)) continue
+    const spare = movable
+      .filter((r) => r.tier !== B.GOAL_TIER[2] && covered(r.tier, r) && (tier > 0 || r.kind === 'stock'))
+      .sort((a, b) => Math.abs(a.tier - tier) - Math.abs(b.tier - tier))[0]
+    if (spare) spare.tier = tier
+  }
+}
+
+/**
  * The batch's resources, with the one the goal is built from at the phase's top tier, and the
  * goal: its IQ bar, and a cost in that resource worth GOAL_COST times the approach's multiplier.
  */
@@ -181,6 +199,7 @@ export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
     state.resources.push(resource)
     added.push(resource)
   }
+  if (v.phase === 2) coverTiers(state.resources, added)
   const top = added[fresh.indexOf(at)]!
   const level = reader(v).level('approach', B.GOAL_APPROACH.length)
   const [, iq1, mult1, iq2, mult2] = B.pick(B.GOAL_APPROACH, level)

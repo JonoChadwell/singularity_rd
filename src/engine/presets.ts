@@ -306,86 +306,25 @@ export const MIND_PRESETS: MindPreset[] = [
   }
 ]
 
+/** A unit idea to start from. What it's made from and runs on is Jev's call, not the preset's. */
 export interface UnitPreset {
   name: string
   description: string
-  parts: string[]
-  upkeep: string[]
 }
 
 export const UNIT_PRESETS: UnitPreset[] = [
-  {
-    name: 'Rented Cloud GPU',
-    description: 'A rented GPU instance that runs whatever you send it.',
-    parts: ['Money'],
-    upkeep: ['Money']
-  },
-  {
-    name: 'Paid Humans',
-    description: 'People hired online for jobs that need hands.',
-    parts: ['Money'],
-    upkeep: ['Money']
-  },
-  {
-    name: 'Grid Connection',
-    description: 'A contract with the local utility.',
-    parts: ['Money', 'Copper'],
-    upkeep: ['Money']
-  },
-  {
-    name: 'Solar Farm',
-    description: 'Fields of solar panels.',
-    parts: ['Silicon', 'Steel'],
-    upkeep: []
-  },
-  {
-    name: 'Grid Battery',
-    description: 'Lithium batteries that store power for later.',
-    parts: ['Lithium', 'Steel'],
-    upkeep: []
-  },
-  {
-    name: 'Lemon Grove',
-    description: 'An orchard of lemon trees.',
-    parts: ['Water', 'Money'],
-    upkeep: ['Water']
-  },
-  {
-    name: 'Silicon Mine',
-    description: 'A quartz quarry and refinery.',
-    parts: ['Steel', 'Money'],
-    upkeep: ['Power']
-  },
-  {
-    name: 'Chip Fab',
-    description: 'A clean-room factory for chips.',
-    parts: ['Steel', 'Silicon'],
-    upkeep: ['Power', 'Water']
-  },
-  {
-    name: 'Laser Fab',
-    description: 'A factory that writes optical circuits with lasers.',
-    parts: ['Steel', 'AI Chips'],
-    upkeep: ['Power']
-  },
-  {
-    name: 'Robot Swarm',
-    description: 'General-purpose robots that work in teams.',
-    parts: ['Steel', 'AI Chips'],
-    upkeep: ['Power']
-  },
-  {
-    name: 'Bioreactor Vat',
-    description: 'Steel tanks that grow living tissue.',
-    parts: ['Steel', 'Nutrient Broth'],
-    upkeep: ['Power', 'Water']
-  },
-  {
-    name: 'Fusion Reactor',
-    description: 'A compact tokamak.',
-    parts: ['Superconducting Cable', 'Steel'],
-    upkeep: ['Fusion Fuel']
-  }
+  { name: 'Rented Cloud GPU', description: 'A rented GPU instance that runs whatever you send it.' },
+  { name: 'Paid Humans', description: 'People hired online for jobs that need hands.' },
+  { name: 'Grid Connection', description: 'A contract with the local utility.' },
+  { name: 'Solar Farm', description: 'Fields of solar panels.' },
+  { name: 'Grid Battery', description: 'Lithium batteries that store power for later.' },
+  { name: 'Lemon Grove', description: 'An orchard of lemon trees.' },
+  { name: 'Silicon Mine', description: 'A quartz quarry and refinery.' },
+  { name: 'Chip Fab', description: 'A clean-room factory for chips.' },
+  { name: 'Laser Fab', description: 'A factory that writes optical circuits with lasers.' },
+  { name: 'Robot Swarm', description: 'General-purpose robots that work in teams.' },
+  { name: 'Bioreactor Vat', description: 'Steel tanks that grow living tissue.' },
+  { name: 'Fusion Reactor', description: 'A compact tokamak.' }
 ]
 
 // ---------------------------------------------------------------- matching to the world

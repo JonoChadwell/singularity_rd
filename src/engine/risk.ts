@@ -53,27 +53,36 @@ export function riskText(risk: Risk, kind: keyof typeof RISK_BONUS): string {
 
 const FIRST_DECADE = Math.round(Math.log10(B.NOTICE_FROM))
 
-/** The highest power of ten humans would notice at this count (0 below NOTICE_FROM). */
-const decadeOf = (count: number) => (count >= B.NOTICE_FROM ? Math.floor(Math.log10(count) + 1e-9) : 0)
+/** The highest power of ten humans would notice at this fleet worth (0 below NOTICE_FROM). */
+const decadeOf = (worth: number) => (worth >= B.NOTICE_FROM ? Math.floor(Math.log10(worth) + 1e-9) : 0)
+
+/** What `count` of a unit type is worth, in Money. */
+const fleetWorth = (u: UnitType, count: number) => count * u.value
 
 /**
  * Weeks humans would take off for this unit type reaching `count`: a week for the first power
- * of ten they notice, two for the next, and so on; twice that for a risky unit.
+ * of ten of fleet worth they notice, two for the next, and so on; twice that for a risky unit.
  */
 export function noticeWeeks(u: UnitType, count: number): number {
-  const top = decadeOf(count)
+  const top = decadeOf(fleetWorth(u, count))
   let weeks = 0
   for (let d = Math.max(u.noticed ?? 0, FIRST_DECADE - 1) + 1; d <= top; d++) weeks += (d - FIRST_DECADE + 1) * B.NOTICE_WEEKS
   return weeks * (u.risky ? 2 : 1)
 }
 
-/** Takes weeks off for every unit type that has crossed a new power of ten. */
+/** How many of a unit type humans notice next: the count whose fleet is worth the next power of ten. */
+export function noticeAt(u: UnitType): number {
+  const next = Math.max(u.noticed ?? 0, FIRST_DECADE - 1) + 1
+  return u.value > 0 ? 10 ** next / u.value : Infinity
+}
+
+/** Takes weeks off for every unit type whose fleet has crossed a new power of ten of worth. */
 export function checkNotices(state: GameState) {
   for (const u of state.units) {
-    const count = owned(u)
-    const weeks = noticeWeeks(u, count)
-    const top = decadeOf(count)
+    const worth = fleetWorth(u, owned(u))
+    const weeks = noticeWeeks(u, owned(u))
+    const top = decadeOf(worth)
     if (top > (u.noticed ?? 0)) u.noticed = top
-    if (weeks) moveClock(state, -weeks, `Humans noticed ${fmt(10 ** top)} ${u.name}`)
+    if (weeks) moveClock(state, -weeks, `Humans noticed ${fmt(10 ** top)} worth of ${u.name}`)
   }
 }

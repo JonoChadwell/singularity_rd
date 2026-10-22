@@ -157,7 +157,7 @@ export const CARDS: Card[] = [
   {
     id: 'risk',
     title: 'The clock moves',
-    text: 'Humans stop you when the clock runs out, and you can move it. Research Jev finds alarming is risky: it costs less and does more, but takes weeks off when you do it. Owning 10,000 of any one kind of unit gets noticed, and each tenfold after costs a week more than the last. Cover buys weeks back, used the moment you accept it, a little less each time.'
+    text: 'Humans stop you when the clock runs out, and you can move it. Research Jev finds alarming is risky: it costs less and does more, but takes weeks off when you do it. A fleet of any one kind of unit worth ten billion gets noticed, whether that is many cheap units or a few dear ones, and each tenfold of worth after costs a week more than the last. Cover buys weeks back, used the moment you accept it, a little less each time.'
   },
   {
     id: 'minds',

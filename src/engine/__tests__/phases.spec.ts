@@ -9,13 +9,14 @@ import { acceptMind, judgeMind } from '../mindProposal'
 import { currentIQ, defaultTask, findResource, findUnit, MONEY_ID } from '../model'
 import { cardsFor, lockReason, newPhase, weeksLeft, type Feature } from '../phase'
 import { PHASE1_PLANS, PHASE2_PLANS, planIdeas } from '../planPresets'
-import { acceptPlan, draftPlan, judgePlan, precheckPlan, type PlanSpec } from '../planProposal'
+import { acceptPlan, coverTiers, draftPlan, judgePlan, precheckPlan, type PlanSpec } from '../planProposal'
 import { projectGoal, projectionText } from '../projection'
 import { acceptResource, acceptStrategy, judgeResource, judgeStrategy } from '../proposals'
 import { makeBuildStrategy } from '../research'
+import { noticeAt } from '../risk'
 import { describeState } from '../stateText'
 import type { GameState } from '../types'
-import { acceptUnit, answerPushback, judgeUnit, type UnitSpec } from '../unitProposal'
+import { acceptUnit, judgeUnit, precheckUnit, type UnitSpec } from '../unitProposal'
 import { acceptUpgrade, judgeUpgrade, softwareSteps, upgradeCandidates } from '../upgrade'
 import { choice, FakeJudge, noul, score } from './fakeJudge'
 
@@ -262,11 +263,20 @@ describe('the first unit', () => {
   const spec = (fields: Partial<UnitSpec> = {}): UnitSpec => ({
     name: 'CNC Mill',
     description: '',
-    parts: [MONEY_ID],
-    upkeep: [],
     builderId: null,
     first: true,
     ...fields
+  })
+
+  it('needs a tier 0 stock to be made from, and only offers tier 0 and nothing above', async () => {
+    const s = phase2(1e6)
+    s.phase.firstUnit = { name: 'CNC Mill', description: '' }
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', tier: 1 }), newResource({ id: 'power', name: 'Power', kind: 'flow', tier: 2 }))
+    const v = await judgeUnit(s, new FakeJudge(), spec())
+    // Steel and Power are above tier 0, so the mill can only be made from and run on Money.
+    expect(v.options.every((o) => o.partsIds.length === 1 && o.partsIds[0] === MONEY_ID && o.upkeepId === MONEY_ID)).toBe(true)
+    for (const r of s.resources) r.tier = 1
+    expect(precheckUnit(s, spec())).toMatch(/tier 0 stock/)
   })
 
   it('is free, designed at once, and doesn’t use the week’s proposal', async () => {
@@ -353,8 +363,6 @@ describe('risk', () => {
       judgeUnit(s, new FakeJudge({ alarm: score(level), value: score(2) }), {
         name: 'Drone Swarm',
         description: '',
-        parts: [MONEY_ID],
-        upkeep: [],
         builderId: null
       })
     const calm = acceptUnit(s, await unit(0)).state.research[0]!.effect
@@ -382,9 +390,16 @@ describe('risk', () => {
 // ---------------------------------------------------------------- notices
 
 describe('notices', () => {
-  it('takes weeks each time a unit type reaches a new power of ten, a week more each time', () => {
+  /** Robots worth 1/10,000 of the threshold, so 10,000 of them are the first thing humans notice. */
+  const noticeable = (s: GameState, count: number) => {
+    const u = addRobots(s, count)
+    u.value = B.NOTICE_FROM / 1e4
+    return u
+  }
+
+  it('takes weeks each time a unit type’s fleet is worth a new power of ten, a week more each time', () => {
     const s = phase2(1e9)
-    addRobots(s, 9000)
+    noticeable(s, 9000)
     expect(createNotice(s, 'robot', 999)).toBe(0)
     expect(createNotice(s, 'robot', 1000)).toBe(1)
     let state = createUnits(s, 'robot', 1000)
@@ -401,9 +416,21 @@ describe('notices', () => {
     expect(createNotice(state, 'robot', 1e9)).toBe(0)
   })
 
+  it('goes by what the fleet is worth, so many cheap units and a few dear ones are alike', () => {
+    const s = phase2(1e9)
+    const cheap = noticeable(s, 0)
+    const dear = newUnit({ id: 'plant', name: 'Power Plant', value: cheap.value * 1000 })
+    s.units.push(dear)
+    expect(createNotice(s, 'robot', 10_000)).toBe(1)
+    expect(createNotice(s, 'plant', 10)).toBe(1)
+    expect(createNotice(s, 'plant', 9)).toBe(0)
+    expect(noticeAt(dear)).toBe(10)
+    expect(noticeAt(cheap)).toBe(10_000)
+  })
+
   it('notices risky units twice as hard, and units built over the week too', () => {
     const s = phase2(1e9)
-    const u = addRobots(s, 9999)
+    const u = noticeable(s, 9999)
     u.risky = true
     expect(createNotice(s, 'robot', 1)).toBe(2)
     u.pending.push({ count: 1, weeks: 1 })
@@ -427,21 +454,22 @@ describe('cover', () => {
     const v = await judgeCover(s, new FakeJudge({ convincing: score(1) }), { name: 'PR campaign', description: '' })
     expect(v.risk).toBeNull()
     const d = draftCover(s, v)
-    expect(d).toMatchObject({ weeks: 4, now: 4, minIQ: 110 })
-    expect(d.cost).toEqual([{ resourceId: MONEY_ID, amount: B.COVER_COST_WEEKS * 4 * 10_000 }])
+    const decent = B.COVER[1]![2]
+    expect(d).toMatchObject({ weeks: decent, now: decent, minIQ: 110 })
+    expect(d.cost).toEqual([{ resourceId: MONEY_ID, amount: B.COVER_COST_WEEKS * decent * 10_000 }])
     // It needs the IQ now.
     expect(coverBlocker(s, v)).toMatch(/IQ 110/)
     expect(() => acceptCover(s, v)).toThrow(/IQ 110/)
     s.minds[0]!.software.bonus = 0.5
     s = acceptCover(s, v).state
     expect(s.research).toEqual([])
-    expect(s.phase.deadline).toBe(104)
+    expect(s.phase.deadline).toBe(100 + decent)
     expect(s.covers).toBe(1)
     expect(findResource(s, MONEY_ID)!.amount).toBe(1e9 - d.cost[0]!.amount)
     // The next one adds 30% less.
     s = runWeek(s)
     const again = await judgeCover(s, new FakeJudge({ convincing: score(1) }), { name: 'Shell companies', description: '' })
-    expect(draftCover(s, again).now).toBe(3)
+    expect(draftCover(s, again).now).toBe(Math.round(decent * B.COVER_DECAY))
     // And it needs the cost now: there's no locking in a cheap price for later.
     findResource(s, MONEY_ID)!.amount = 0
     expect(coverBlocker(s, again)).toMatch(/You need/)
@@ -613,8 +641,38 @@ describe('fixes', () => {
     expect((q.r1_tier as { criteria: string[] }).criteria).toHaveLength(B.PHASE_MAX_TIER[2] + 1)
     const d = draftPlan(s, v)
     expect(d.top).toMatchObject({ name: 'Nanobots', tier: 4 })
-    expect(d.added.filter((r) => r !== d.top).every((r) => r.tier === B.PHASE_MAX_TIER[2])).toBe(true)
+    // Jev puts them all at tier 3, but Phase 2 starts with every tier, so some move down to fill the gaps.
+    const rest = d.added.filter((r) => r !== d.top)
+    expect(rest.every((r) => r.tier <= B.PHASE_MAX_TIER[2])).toBe(true)
+    expect([...new Set(d.state.resources.map((r) => r.tier))].sort()).toEqual([0, 1, 2, 3, 4])
     expect(d.goal.cost).toEqual([expect.objectContaining({ resourceId: d.top.id })])
+  })
+
+  it('starts Phase 2 with at least one resource of every tier, the lowest a stock', async () => {
+    for (const moneyTier of [0, 1]) {
+      const s = createInitialState()
+      s.phase = newPhase(2, 5)
+      s.resources.push(newResource({ id: MONEY_ID, name: 'Money', tier: moneyTier }))
+      const withMoney = { ...nanotech, resources: [{ name: 'Money', description: '' }, ...nanotech.resources] }
+      // Jev tiers every new resource in the middle (tier 2), so the other tiers would be empty.
+      const d = draftPlan(s, await judgePlan(s, new FakeJudge(), withMoney))
+      expect([...new Set(d.state.resources.map((r) => r.tier))].sort()).toEqual([0, 1, 2, 3, 4])
+      expect(d.state.resources.some((r) => r.tier === 0 && r.kind === 'stock')).toBe(true)
+      expect(d.top.tier).toBe(4)
+    }
+  })
+
+  it('moves a resource into an empty tier only when its own tier keeps another', () => {
+    const r = (id: string, tier: number) => newResource({ id, name: id, tier })
+    // Two at tier 2 can spare one; the lone tier 3 stays put.
+    const all = [r('money', 1), r('goal', 4), r('a', 2), r('b', 2), r('c', 3)]
+    coverTiers(all, [all[2]!, all[3]!, all[4]!])
+    expect(all.map((x) => x.tier)).toEqual([1, 4, 0, 2, 3])
+    // A flow can't fill tier 0: units are made from stocks.
+    const flows = [r('money', 1), r('goal', 4), newResource({ id: 'f', name: 'f', kind: 'flow', tier: 2 }), r('a', 2), r('b', 3), r('c', 3)]
+    coverTiers(flows, [flows[2]!, flows[3]!, flows[4]!, flows[5]!])
+    expect(flows.some((x) => x.tier === 0 && x.kind === 'stock')).toBe(true)
+    expect(flows[2]!.tier).toBe(2)
   })
 
   it('tiers resources proposed outside a plan: tier 0 in Phase 1, up to 3 in Phase 2', async () => {
@@ -628,14 +686,19 @@ describe('fixes', () => {
     expect(findResource(acceptResource(p2, r2).state, 'robots')).toMatchObject({ name: 'Robots', tier: 3 })
   })
 
-  it('gives the plan’s first unit a few working units', async () => {
+  it('designs the plan’s first unit free, at tier 0 and a price you can afford, with no free copies', async () => {
     const s = phase2(1e6)
     s.phase.firstUnit = { name: 'CNC Mill', description: '' }
-    const v = await judgeUnit(s, new FakeJudge(), { name: 'CNC Mill', description: '', parts: [MONEY_ID], upkeep: [], builderId: null, first: true })
+    // Even if Jev thinks a mill is colossal, the first unit is held to tier 0 and a low value.
+    const judge = new FakeJudge({ value: score(6) })
+    const v = await judgeUnit(s, judge, { name: 'CNC Mill', description: '', builderId: null, first: true })
+    expect(judge.calls[0]!.questions.tier).toBeUndefined()
+    expect(v.options.length).toBeGreaterThan(0)
+    expect(v.options.every((o) => o.tier === 0 && o.band <= B.FIRST_UNIT_MAX_BAND)).toBe(true)
+    expect(v.options[0]!.band).toBe(B.FIRST_UNIT_MAX_BAND)
     const mill = findUnit(acceptUnit(s, v).state, 'cnc-mill')!
-    expect(mill.count).toBe(B.FIRST_UNITS)
-    // They're not "created", so minds stay locked until you create one.
-    expect(mill.built).toBe(0)
+    expect(mill).toMatchObject({ tier: 0, count: 0, built: 0 })
+    expect(mill.value).toBe(B.UNIT_VALUE[B.FIRST_UNIT_MAX_BAND]![1])
   })
 
   it('makes each industry upgrade once, and never offers upkeep perks to a unit with no upkeep', async () => {
@@ -664,13 +727,6 @@ describe('fixes', () => {
       s = runWeek(s)
     }
     expect(currentIQ(s.minds[0]!)).toBe(150)
-  })
-
-  it('refuses a pushback reply for a kind of part Jev didn’t ask for', async () => {
-    const s = phase2(1e6)
-    await expect(
-      answerPushback(s, new FakeJudge(), 'one Mill', [MONEY_ID], ['precision machinery'], [{ kind: 'an advanced component', resourceId: MONEY_ID }])
-    ).rejects.toThrow(/didn’t ask for an advanced component/)
   })
 
   it('doesn’t make an empty build task a new unit’s default', () => {

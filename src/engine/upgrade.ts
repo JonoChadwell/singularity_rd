@@ -40,6 +40,8 @@ interface Candidate {
 export interface UpgradeOption extends Candidate {
   /** Jev's preference among the candidates. */
   p: number
+  /** Industry upgrades: the tier of technology it is (the unit's own, then one more each time). */
+  tier?: number
   minIQ: number
   cost: Cost
   risk: Risk | null
@@ -135,6 +137,30 @@ function unitCandidates(state: GameState, u: UnitType): Candidate[] {
 export const changeKey = (changes: Change[]) => JSON.stringify(changes)
 
 /**
+ * What an industry upgrade improves, for counting: the strategy for output and input changes,
+ * otherwise the unit itself (its upkeep, parts and traits).
+ */
+export function subjectOf(unitId: string, changes: Change[]): string {
+  for (const c of changes) if (c.kind === 'output' || c.kind === 'input') return c.strategyId
+  return unitId
+}
+
+/** Upgrades already done or waiting on the same strategy (or unit) as `changes`. */
+export function upgradesOn(state: GameState, unitId: string, changes: Change[]): number {
+  const subject = subjectOf(unitId, changes)
+  const done = state.upgrades.filter(
+    (u) => u.targetId === unitId && u.key && subjectOf(unitId, JSON.parse(u.key) as Change[]) === subject
+  ).length
+  const waiting = state.research.filter(
+    (r) => r.effect.kind === 'upgrade' && r.effect.target.id === unitId && subjectOf(unitId, r.effect.changes) === subject
+  ).length
+  return done + waiting
+}
+
+/** The tier of technology an industry upgrade is: the unit's own, then one more for each before it. */
+export const upgradeTier = (state: GameState, u: UnitType, changes: Change[]) => u.tier + upgradesOn(state, u.id, changes)
+
+/**
  * Every improvement that could apply, minus any already waiting as research. An industry
  * unit's improvements happen once each: research doesn't repeat.
  */
@@ -221,12 +247,15 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
       instructions: `Which of these is the most natural way to improve ${thing.name}, given what it is and how it works?`,
       criteria: Object.fromEntries(candidates.map((c, i) => [keyOf(i), text(c)]))
     },
-    ...Object.fromEntries(
-      candidates.map((c, i) => [
-        `d_${keyOf(i)}`,
-        { type: 'score', instructions: `How hard would the research be for: ${text(c)}?`, criteria: scale(B.UPGRADE_DIFFICULTY) }
-      ])
-    ),
+    // An industry upgrade's difficulty is set by how many came before it, not by Jev.
+    ...(target.kind === 'mind'
+      ? Object.fromEntries(
+          candidates.map((c, i) => [
+            `d_${keyOf(i)}`,
+            { type: 'score', instructions: `How hard would the research be for: ${text(c)}?`, criteria: scale(B.UPGRADE_DIFFICULTY) }
+          ])
+        )
+      : {}),
     ...(asksAlarm(state)
       ? Object.fromEntries(
           candidates.map((c, i) => [`a_${keyOf(i)}`, alarmQuestion(`improving ${thing.name} this way (${text(c)})`)])
@@ -254,24 +283,27 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
   return {
     target,
     options: order.map(({ c, i, p }) => {
-      const [, bandIQ, share] = B.pick(B.UPGRADE_DIFFICULTY, read.level(`d_${keyOf(i)}`, B.UPGRADE_DIFFICULTY.length))
       const risk = riskFrom(answers, `a_${keyOf(i)}`)
-      let minIQ = bandIQ
+      let minIQ: number
       let value: number
+      let tier: number | undefined
       if (target.kind === 'mind') {
         const m = thing as Mind
+        const [, bandIQ, share] = B.pick(B.UPGRADE_DIFFICULTY, read.level(`d_${keyOf(i)}`, B.UPGRADE_DIFFICULTY.length))
         const before = currentIQ(m)
         const iq = iqAfter(m, c.changes)
         // A mind can always work on its own upgrade; harder ones just cost more.
-        minIQ = Math.min(Math.max(minIQ, iq * B.DESIGN_BAR), before)
+        minIQ = Math.min(Math.max(bandIQ, iq * B.DESIGN_BAR), before)
         const hardware = c.changes.some((x) => x.kind === 'hardware') ? B.HARDWARE_COST : 1
         value = share * B.MIND_UPGRADE_SHARE * hardware * (B.mindDesignCost(iq) - B.mindDesignCost(before))
       } else {
-        const u = thing as UnitType
-        value = share * B.UPGRADE_FLEET_SHARE * u.value * Math.max(u.count, B.MIN_FLEET)
+        // The first upgrade to a strategy is as hard as the unit itself; each one after, a tier harder.
+        tier = upgradeTier(state, thing as UnitType, c.changes)
+        minIQ = B.techIQ(tier)
+        value = B.techCost(tier)
       }
       if (risk) value *= B.RISK_COST
-      return { ...c, p, minIQ: floorIQ(minIQ), cost: priceCost(state, value, pay), risk }
+      return { ...c, p, tier, minIQ: floorIQ(minIQ), cost: priceCost(state, value, pay), risk }
     })
   }
 }

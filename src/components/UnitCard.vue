@@ -5,6 +5,7 @@
       <div class="title">
         <div class="name">
           <strong>{{ unit.name }}</strong>
+          <span class="chip tier" :title="`One is worth: ${unitValueText(unit.value)}`">{{ tierLabel(unit.tier) }}</span>
           <TraitChips :traits="unit.traits" :unit="unit" />
         </div>
         <div class="muted small desc">{{ unit.description }}</div>
@@ -34,7 +35,7 @@
       <button
         class="link"
         :disabled="!most"
-        title="The most you can create while keeping next week’s use of each resource, their upkeep included"
+        title="The most you can pay the parts for right now"
         @click="createN = most"
       >
         max {{ fmtCount(most) }}
@@ -68,7 +69,17 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { createCost, createNotice } from '@/engine/actions'
 import { lockReason } from '@/engine/phase'
-import { costShortfall, creatable, describeFlows, findResource, findUnit, fmtCount, partsFor, weeklyUse } from '@/engine/model'
+import {
+  affordable,
+  costShortfall,
+  describeFlows,
+  findResource,
+  findUnit,
+  fmtCount,
+  partsFor,
+  tierLabel,
+  unitValueText
+} from '@/engine/model'
 import { has } from '@/engine/traits'
 import type { UnitType } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
@@ -85,7 +96,7 @@ const pending = computed(() => props.unit.pending.reduce((n, p) => n + p.count, 
 const parts = computed(() => partsFor(props.unit))
 const createN = ref(1)
 const short = computed(() => costShortfall(game.state, createCost(parts.value, Math.max(0, Math.floor(createN.value || 0)))))
-const most = computed(() => creatable(game.state, props.unit, weeklyUse(game.preview)))
+const most = computed(() => affordable(game.state, props.unit))
 const unitName = (id: string) => findUnit(game.state, id)?.name ?? '?'
 const notice = computed(() => createNotice(game.state, props.unit.id, createN.value || 0))
 const upgradeLock = computed(() => lockReason(game.state, 'unit-upgrade'))

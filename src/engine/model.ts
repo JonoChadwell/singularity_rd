@@ -32,8 +32,47 @@ export function fmt(n: number): string {
 /** Whole machine counts. */
 export const fmtCount = (n: number) => fmt(Math.floor(n + 1e-9))
 
+/** A tier, in words: "Tier 2, made". Resources and units share the scale. */
+export const tierLabel = (tier: number) => `Tier ${tier}, ${(B.TIERS[tier]?.[0] ?? '').toLowerCase()}`
+
+/** Resources by tier, lowest first. Those of a tier keep the order they were made in. */
+export const byTier = (resources: readonly Resource[]): Resource[] => [...resources].sort((a, b) => a.tier - b.tier)
+
 /** A resource's tier, in words: "Tier 1, earned". */
-export const tierText = (r: Resource) => `Tier ${r.tier}, ${(B.RESOURCE_TIERS[r.tier] ?? '').split(':')[0]!.toLowerCase()}`
+export const tierText = (r: Resource) => tierLabel(r.tier)
+
+/** What one of a unit is worth, in words: "modest, like a car". */
+export function unitValueText(value: number): string {
+  if (!(value > 0)) return ''
+  const away = (band: number) => Math.abs(Math.log(B.UNIT_VALUE[band]![1] / value))
+  let nearest = 0
+  for (let band = 1; band < B.UNIT_VALUE.length; band++) if (away(band) < away(nearest)) nearest = band
+  return B.UNIT_VALUE[nearest]![0].toLowerCase()
+}
+
+/**
+ * How a unit's tier fits the tier of what it makes: below it, the output is cut hard, a tier
+ * at a time; above it, a fifth more for each tier.
+ */
+export function tierFactor(unitTier: number, outputTier: number): number {
+  const gap = unitTier - outputTier
+  if (gap >= 0) return B.TIER_BONUS ** gap
+  return B.TIER_PENALTY[Math.min(B.TIER_PENALTY.length - 1, -gap)]!
+}
+
+/** The tier fit in words, or null when the tiers match. Never shows the numbers. */
+export function tierFit(unitTier: number, outputTier: number): { text: string; good: boolean } | null {
+  const gap = unitTier - outputTier
+  if (gap === 0) return null
+  if (gap > 0) return { text: gap === 1 ? 'Overqualified' : 'Far overqualified', good: true }
+  return { text: gap === -1 ? 'Struggling' : gap === -2 ? 'Far out of its depth' : 'Hopeless', good: false }
+}
+
+/** A strategy's efficiency in Jev's word: "Brilliant". Null for build and crew strategies. */
+export function efficiencyWord(s: Strategy): string | null {
+  if (s.kind !== 'make' || s.efficiency === undefined) return null
+  return B.EFFICIENCY.find(([, m]) => m === s.efficiency)?.[0] ?? null
+}
 
 /** What one of a resource is worth, in words: "modest, like a meal". */
 export const bandText = (r: Resource) => (B.RESOURCE_VALUE[r.band]?.[0] ?? '').toLowerCase()
@@ -197,6 +236,17 @@ export function creatable(state: GameState, u: UnitType, reserve: Record<string,
     const r = findResource(state, f.resourceId)
     if (r?.kind === 'stock') per.set(f.resourceId, (per.get(f.resourceId) ?? 0) + f.amount)
   }
+  return mostFrom(state, per, reserve)
+}
+
+/** The most you can pay the parts for right now, ignoring upkeep. */
+export function affordable(state: GameState, u: UnitType): number {
+  const per = new Map<string, number>()
+  for (const p of partsFor(u)) per.set(p.resourceId, (per.get(p.resourceId) ?? 0) + p.amount)
+  return mostFrom(state, per, {})
+}
+
+function mostFrom(state: GameState, per: Map<string, number>, reserve: Record<string, number>): number {
   let most = Infinity
   for (const [id, amount] of per) {
     if (amount <= 0) continue

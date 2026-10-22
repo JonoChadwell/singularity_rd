@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { fmt } from '@/engine/model'
+import { byTier, fmt } from '@/engine/model'
 import { useGameStore } from '@/stores/game'
 
 const game = useGameStore()
@@ -35,7 +35,7 @@ const lastWeek = computed(() => (game.state.lastWeek ? game.state.week - 1 : nul
 const changes = computed(() => {
   const report = game.state.lastWeek
   if (!report) return []
-  return game.state.resources
+  return byTier(game.state.resources)
     .filter((r) => r.kind === 'stock')
     .map((r) => ({
       icon: r.icon,

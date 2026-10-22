@@ -1,5 +1,7 @@
 <template>
   <dl class="summary small">
+    <dt>Tier</dt>
+    <dd>{{ tierLabel(unit.tier) }} · one is worth: {{ unitValueText(unit.value) }}</dd>
     <dt>Work</dt>
     <dd class="num">{{ fmt(labour(unit)) }} Money’s worth a week</dd>
     <dt>Runs on</dt>
@@ -19,7 +21,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { describeFlows, findUnit, fmt, labour } from '@/engine/model'
+import { describeFlows, findUnit, fmt, labour, tierLabel, unitValueText } from '@/engine/model'
 import type { GameState, UnitType } from '@/engine/types'
 import TraitChips from './TraitChips.vue'
 

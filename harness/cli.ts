@@ -14,7 +14,6 @@ import * as actions from '@/engine/actions'
 import { alertsFor } from '@/engine/alerts'
 import { runWeek } from '@/engine/cycle'
 import { previewWeek } from '@/engine/economy'
-import { FIRST_UNITS } from '@/engine/balance'
 import { coverBlocker, draftCover } from '@/engine/coverProposal'
 import { acceptAny, judgeAny, type ProposalInput, type Verdict } from '@/engine/dispatch'
 import { draftIncome } from '@/engine/incomeProposal'
@@ -31,6 +30,7 @@ import {
   describeFlows,
   describeIncome,
   designRange,
+  efficiencyWord,
   findResource,
   findUnit,
   fmt,
@@ -38,6 +38,9 @@ import {
   partsFor,
   softwareLabel,
   tasksFor,
+  tierFit,
+  tierLabel,
+  unitValueText,
   weeklyUse
 } from '@/engine/model'
 import { COVER_PRESETS, INCOME_PRESETS, MIND_PRESETS, RESOURCE_PRESETS, STRATEGY_PRESETS, UNIT_PRESETS } from '@/engine/presets'
@@ -45,12 +48,12 @@ import { cardsFor, clockMoved, lockReason, PHASE_NAMES, weeksLeft, type Feature 
 import { plansFor, planIdeas } from '@/engine/planPresets'
 import { draftPlan } from '@/engine/planProposal'
 import { goalOf, projectGoal, projectionText } from '@/engine/projection'
-import { alarmLabel, alarmQuestions, RISK_BONUS, riskFrom, riskText } from '@/engine/risk'
+import { alarmLabel, alarmQuestions, noticeAt, RISK_BONUS, riskFrom, riskText } from '@/engine/risk'
 import { proposalText } from '@/engine/stateText'
 import { catchesOf, complicationName, draftResource, draftStrategy, payOptions } from '@/engine/proposals'
 import { TRAITS, type TraitId } from '@/engine/traits'
-import type { GameState, UpgradeTarget } from '@/engine/types'
-import { answerPushback, chosenTraits, draftUnit, nearLine, type PushbackReply } from '@/engine/unitProposal'
+import type { GameState, Strategy, UpgradeTarget } from '@/engine/types'
+import { chosenTraits, draftUnit, nearLine } from '@/engine/unitProposal'
 import { acceptUpgrade, describeChanges, judgeUpgrade, type UpgradeOffer } from '@/engine/upgrade'
 import { snapshot } from '@/telemetry'
 import { RunLog } from '../server/runLog'
@@ -118,7 +121,7 @@ function load(slot: string): Save {
   const path = savePath(slot)
   if (!existsSync(path)) throw new Error(`No game in slot "${slot}". Start one with: new`)
   const save = JSON.parse(readFileSync(path, 'utf8')) as Save
-  if (save.state.version !== 11) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
+  if (save.state.version !== 12) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
   return save
 }
 
@@ -193,7 +196,7 @@ function printPhase(s: GameState) {
     say(`  ${projectionText(s, proj)}${proj.week === null ? '' : ' (if you build nothing more)'}`)
   }
   if (p.firstUnit) {
-    say(`FIRST UNIT waiting (free, comes with ${FIRST_UNITS} working): ${p.firstUnit.name}: ${p.firstUnit.description} → propose unit with "first": true`)
+    say(`FIRST UNIT waiting (designed free, tier 0; you build the copies from parts): ${p.firstUnit.name}: ${p.firstUnit.description} → propose unit with "first": true`)
   }
   const locked = FEATURES.filter((f) => lockReason(s, f))
   if (locked.length) say(`Locked: ${locked.map((f) => `${f} (${lockReason(s, f)})`).join('; ')}`)
@@ -223,7 +226,7 @@ function printStatus(s: GameState) {
   }
   say('\nMINDS')
   for (const m of s.minds) {
-    say(`  ${m.id} "${m.name}"${m.tier ? ` Tier ${m.tier}` : ''} IQ ${Math.round(currentIQ(m))}/${Math.round(ceilingIQ(m))} · hardware ${m.hardware.name} (${m.hardware.iq}) · software ${softwareLabel(m)}`)
+    say(`  ${m.id} "${m.name}"${m.tier ? ` Generation ${m.tier}` : ''} IQ ${Math.round(currentIQ(m))}/${Math.round(ceilingIQ(m))} · hardware ${m.hardware.name} (${m.hardware.iq}) · software ${softwareLabel(m)}`)
   }
   if (s.units.length) {
     say('\nINDUSTRY')
@@ -231,11 +234,11 @@ function printStatus(s: GameState) {
       const w = preview.units[u.id]
       const { byTask, free } = allocation(s, u)
       say(
-        `  ${u.id} "${u.name}" ×${fmtCount(u.count)} (built ${fmtCount(u.built)}) · create up to ${fmtCount(creatable(s, u, weeklyUse(preview)))} now` +
-          (s.phase.n === 2 ? ` · humans notice at ${fmt(10 ** Math.max((u.noticed ?? 0) + 1, 4))}${u.risky ? ' (RISKY: −2 weeks each)' : ''}` : '')
+        `  ${u.id} "${u.name}" ${tierLabel(u.tier)} ×${fmtCount(u.count)} (built ${fmtCount(u.built)}) · create up to ${fmtCount(creatable(s, u, weeklyUse(preview)))} now` +
+          (s.phase.n === 2 ? ` · humans notice at ${fmt(noticeAt(u))}${u.risky ? ' (RISKY: −2 weeks each)' : ''}` : '')
       )
       say(
-        `      upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · parts ${describeFlows(s, partsFor(u))} each · value ${fmt(u.value)}` +
+        `      upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · parts ${describeFlows(s, partsFor(u))} each · value ${fmt(u.value)} (${unitValueText(u.value)})` +
           `${u.crew ? ` · crew ${u.crew.per} ${u.crew.unitId}` : ''}${u.builderId ? ` · built by ${u.builderId}` : ''}`
       )
       if (u.traits.length) say(`      traits: ${traitText(u.traits)}`)
@@ -257,6 +260,7 @@ function printStatus(s: GameState) {
       say(
         `  ${st.id} "${st.name}" [${st.unitId}] ${st.kind}: ${st.inputs.length ? `${describeFlows(s, st.inputs)} → ` : ''}${fmt(st.amount)} ${outName}` +
           `${st.target !== undefined ? ` · target ${fmtCount(st.target)}` : ''}${st.quirk ? ` · quirk ${st.quirk}` : ''}` +
+          `${strategyTags(s, st)}` +
           `${run ? ` · next week ${fmtCount(run.units)} running at ${pct(run.fraction)}${run.limitedBy ? ` (short of ${run.limitedBy})` : ''}` : ''}`
       )
     }
@@ -282,6 +286,15 @@ function printStatus(s: GameState) {
     say('\nALERTS')
     for (const a of alerts) say(`  [${a.tone}] ${a.text}${a.prompt ? ` → ${a.prompt.label}` : ''}`)
   }
+}
+
+/** A strategy's quality in words, as the player sees it: Jev's efficiency, and how its unit's tier fits. */
+function strategyTags(s: GameState, st: Strategy): string {
+  const unit = findUnit(s, st.unitId)
+  const target = st.kind === 'make' ? findResource(s, st.outputId) : st.kind === 'build' ? findUnit(s, st.outputId) : undefined
+  const fit = unit && target ? tierFit(unit.tier, target.tier) : null
+  const tags = [efficiencyWord(st), fit?.text].filter(Boolean)
+  return tags.length ? ` · ${tags.join(', ')}` : ''
 }
 
 function printVerdict(s: GameState, v: Verdict) {
@@ -320,13 +333,21 @@ function printVerdict(s: GameState, v: Verdict) {
     say(`  → ${r.name}: ${r.kind}, tier ${r.tier}, worth ${fmt(r.value)}`)
   } else if (v.kind === 'strategy') {
     const d = draftStrategy(s, v)
-    say(`  → ${describeFlows(s, d.strategy.inputs)} → ${fmt(d.strategy.amount)} ${findResource(s, d.strategy.outputId)?.name} per unit${d.strategy.quirk ? ` · quirk ${d.strategy.quirk}` : ''}`)
+    say(`  → ${describeFlows(s, d.strategy.inputs)} → ${fmt(d.strategy.amount)} ${findResource(s, d.strategy.outputId)?.name} per unit${d.strategy.quirk ? ` · quirk ${d.strategy.quirk}` : ''}${strategyTags(s, d.strategy)}`)
     say(d.minIQ ? research(d) : '  → ready at once')
   } else if (v.kind === 'unit') {
     const d = draftUnit(s, v)
     const u = d.unit
-    say(v.spec.first ? '  → the plan’s first unit: designed at once, free' : research(d))
-    say(`  → value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}, parts ${describeFlows(s, u.parts)}`)
+    say(v.spec.first ? '  → the plan’s first unit: designed at once, free (no free copies: create them from parts)' : research(d))
+    say(`  Jev's takes [option <n>]:`)
+    v.options.forEach((o, i) => {
+      const od = draftUnit(s, { ...v, choice: i })
+      say(
+        `    ${i}${i === v.choice ? ' *' : ''}: ${tierLabel(o.tier)} · ${unitValueText(od.unit.value)} · made from ${o.partsIds.map((id) => findResource(s, id)?.name).join(' + ')}, runs on ${findResource(s, o.upkeepId)?.name}` +
+          (v.spec.first ? '' : ` · needs IQ ${od.minIQ}, uses up ${describeCost(s, od.cost)}`)
+      )
+    })
+    say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}, parts ${describeFlows(s, u.parts)}`)
     say(`  → traits: ${u.traits.length ? traitText(u.traits) : 'none'}${u.builderId ? ` · also built by ${u.builderId}` : ''}`)
     for (const t of v.traitOdds.filter(nearLine).slice(0, 4)) {
       const on = chosenTraits(v).some((c) => c.trait === t.trait)
@@ -348,14 +369,13 @@ function printVerdict(s: GameState, v: Verdict) {
     const now = v.picks.pay ?? pays[0]!.resourceId
     say(`  paid in [pick pay <resourceId>]: ${pays.map((p) => `${p.resourceId}${p.resourceId === now ? ' (chosen)' : ''} ${pct(p.p)}`).join(', ')}`)
   }
-  if ('missing' in v && v.missing.length) say(`  PUSHBACK: missing ${v.missing.join('; ')} [pushback '<json replies>']`)
 }
 
 function printOffer(s: GameState, offer: UpgradeOffer) {
   say(`UPGRADE OPTIONS for ${offer.target.kind} ${offer.target.id} [choose <n>]`)
   offer.options.forEach((o, i) => {
     say(`  ${i + 1}. ${o.name} (Jev ${pct(o.p)}): ${describeChanges(s, offer.target, o.changes)}`)
-    say(`     needs IQ ${o.minIQ} · uses up ${describeCost(s, o.cost)}${o.risk ? ` · ⚠ ${riskText(o.risk, 'upgrade')}` : ''}`)
+    say(`     ${o.tier !== undefined ? `Tier ${o.tier} technology · ` : ''}needs IQ ${o.minIQ} · uses up ${describeCost(s, o.cost)}${o.risk ? ` · ⚠ ${riskText(o.risk, 'upgrade')}` : ''}`)
   })
 }
 
@@ -399,13 +419,12 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   presets <resource|strategy|unit|mind|income|cover>
   propose resource '{"name":"..","description":".."}'
   propose strategy '{"name":"..","description":"..","unitId":"..","inputIds":[],"outputId":".."}'
-  propose unit '{"name":"..","description":"..","parts":[],"upkeep":[],"builderId":null,"first":false}'
+  propose unit '{"name":"..","description":"..","builderId":null,"first":false}'   (Jev picks what it's made from and runs on)
   propose mind '{"name":"..","description":"..","iq":250,"hardware":"..","software":".."}'
   propose income '{"name":"..","description":"..","outputId":"..","perId":null}'   (perId: a stock it grows with)
   propose cover '{"name":"..","description":".."}'
   dismiss <cardId|all>         dismiss explainer cards
-  verdict | pick <key> <value> | trait <id> on|off
-  pushback '[{"kind":"an advanced component","resourceId":".."} | {"kind":"..","newName":"..","newDescription":".."}]'
+  verdict | pick <key> <value> | trait <id> on|off | option <n> (a unit's tier and value)
   accept | discard
   upgrade <unit|mind> <id>      ask Jev for three ways to improve it
   choose <n>                   take upgrade option n as research
@@ -523,7 +542,7 @@ async function run(args: string[], slot: string): Promise<number> {
         rejected: v.rejected,
         duplicateOf: v.duplicateOf,
         torn: v.torn.map((t) => t.key),
-        missing: 'missing' in v ? v.missing : undefined,
+        options: 'options' in v ? v.options : undefined,
         risk: v.risk
       })
       printVerdict(st, v)
@@ -538,26 +557,20 @@ async function run(args: string[], slot: string): Promise<number> {
       printVerdict(s(), v)
       break
     }
+    case 'option': {
+      const v = needVerdict()
+      if (v.kind !== 'unit') throw new Error('Only unit verdicts have options.')
+      const choice = Number(rest[0])
+      if (!v.options[choice]) throw new Error(`Choose 0 to ${v.options.length - 1}.`)
+      v.choice = choice
+      printVerdict(s(), v)
+      break
+    }
     case 'trait': {
       const v = needVerdict()
       if (v.kind !== 'unit') throw new Error('Only unit verdicts have traits to decide.')
       v.traitPicks[rest[0] as TraitId] = rest[1] === 'on'
       printVerdict(s(), v)
-      break
-    }
-    case 'pushback': {
-      const v = needVerdict()
-      if (v.kind !== 'unit') throw new Error('Nothing to push back on.')
-      const replies = JSON.parse(rest[0] ?? '[]') as PushbackReply[]
-      const result = await answerPushback(s(), judgeFor(save), `one ${v.spec.name}`, v.spec.parts, v.missing, replies)
-      adopt(save, result.state)
-      save.state.stats.pushbacks++
-      v.missing = result.missing
-      v.pushbackRounds++
-      v.spec.parts = result.parts
-      await log(save.state, 'pushback', { replies, missing: result.missing, failures: result.failures })
-      for (const f of result.failures) say(`  not accepted: ${f}`)
-      printVerdict(save.state, v)
       break
     }
     case 'accept': {

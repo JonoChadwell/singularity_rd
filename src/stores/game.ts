@@ -11,19 +11,18 @@ import { cardsFor } from '@/engine/phase'
 import { projectGoal } from '@/engine/projection'
 import type { Outcome } from '@/engine/proposals'
 import type { GameState, UpgradeTarget } from '@/engine/types'
-import { answerPushback, type PushbackReply, type UnitVerdict } from '@/engine/unitProposal'
 import { acceptUpgrade, judgeUpgrade, type UpgradeOffer } from '@/engine/upgrade'
 import { describeError, logEvent, snapshot, type LogStream } from '@/telemetry'
 
 export type { ProposalInput, Verdict }
 
-const SAVE_KEY = 'singularity-rd/save/v10'
+const SAVE_KEY = 'singularity-rd/save/v12'
 
 function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    return parsed?.version === 11 ? parsed : null
+    return parsed?.version === 12 ? parsed : null
   } catch {
     return null
   }
@@ -166,7 +165,7 @@ export const useGameStore = defineStore('game', () => {
         rejected: verdict.rejected,
         duplicateOf: verdict.duplicateOf,
         torn: verdict.torn.map((t) => t.key),
-        missing: 'missing' in verdict ? verdict.missing : undefined,
+        options: 'options' in verdict ? verdict.options : undefined,
         risk: verdict.risk
       })
       return verdict
@@ -223,32 +222,6 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  /** One pushback round. Returns the updated verdict and any replies Jev didn't accept. */
-  async function pushback(
-    verdict: UnitVerdict,
-    replies: PushbackReply[]
-  ): Promise<{ verdict: UnitVerdict; failures: string[] } | undefined> {
-    if (!canPropose.value) return
-    busy.value = true
-    lastError.value = ''
-    try {
-      const s = raw()
-      const result = await answerPushback(s, judge, `one ${verdict.spec.name}`, verdict.spec.parts, verdict.missing, replies)
-      adopt(result.state)
-      state.value.stats.pushbacks++
-      const next = JSON.parse(JSON.stringify(verdict)) as UnitVerdict
-      next.missing = result.missing
-      next.pushbackRounds++
-      next.spec.parts = result.parts
-      log('pushback', { replies, missing: result.missing, failures: result.failures })
-      return { verdict: next, failures: result.failures }
-    } catch (err) {
-      fail('pushback', err, { replies })
-    } finally {
-      busy.value = false
-    }
-  }
-
   /** Swaps the proposal judge (used by tests). Keeps the cache. */
   function setJudge(next: Judge) {
     judge = new CachedJudge(next, () => raw().jevCache, () => raw().stats.jevCalls++)
@@ -288,7 +261,6 @@ export const useGameStore = defineStore('game', () => {
     accept,
     requestUpgrade,
     chooseUpgrade,
-    pushback,
     setJudge,
     newGame
   }

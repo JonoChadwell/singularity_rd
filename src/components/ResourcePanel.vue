@@ -7,7 +7,7 @@
     <p class="muted small hint">Hover or focus one to see where next week’s comes from and goes.</p>
     <p v-if="!game.state.resources.length" class="empty">Nothing yet. Propose one: Money, Power, Training Data…</p>
     <ul class="plain-list list">
-      <li v-for="r in game.state.resources" :key="r.id" tabindex="0">
+      <li v-for="r in sorted" :key="r.id" tabindex="0">
         <span class="icon">{{ r.icon }}</span>
         <div class="info">
           <div class="name">
@@ -80,8 +80,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { netFlow } from '@/engine/economy'
-import { bandText, fmt, tierText } from '@/engine/model'
+import { bandText, byTier, fmt, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
 import type { Resource } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
@@ -90,6 +91,7 @@ import Delta from './DeltaValue.vue'
 
 const game = useGameStore()
 const ui = useUiStore()
+const sorted = computed(() => byTier(game.state.resources))
 const flows = (id: string) => game.preview.flows[id] ?? []
 const made = (id: string) => flows(id).reduce((n, f) => n + Math.max(0, f.amount), 0)
 const share = (id: string) => game.preview.shares[id] ?? 1

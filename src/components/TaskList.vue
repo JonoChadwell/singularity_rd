@@ -18,6 +18,7 @@
       <div class="what">
         <div class="name">
           {{ row.icon }} {{ row.name }}
+          <StrategyTags :strategy="row.strategy" />
           <span v-if="row.strategy.quirk" class="chip quirk" :title="QUIRKS[row.strategy.quirk].rule">
             {{ QUIRKS[row.strategy.quirk].icon }} {{ QUIRKS[row.strategy.quirk].name }}
           </span>
@@ -78,6 +79,7 @@ import type { Strategy, UnitType } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 import AssignControl from './AssignControl.vue'
+import StrategyTags from './StrategyTags.vue'
 
 const props = defineProps<{ unit: UnitType }>()
 const game = useGameStore()

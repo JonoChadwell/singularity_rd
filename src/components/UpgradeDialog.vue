@@ -16,7 +16,12 @@
       <article v-for="(o, i) in offer.options" :key="o.key" class="option">
         <div class="row top">
           <strong>💡 {{ o.name }}</strong>
-          <span class="chip iq" :class="{ bad: best < o.minIQ }">IQ {{ o.minIQ }}</span>
+          <span class="row chips">
+            <span v-if="o.tier !== undefined" class="chip tier" title="Each upgrade to the same strategy is a tier harder than the last">
+              Tier {{ o.tier }} technology
+            </span>
+            <span class="chip iq" :class="{ bad: best < o.minIQ }">IQ {{ o.minIQ }}</span>
+          </span>
         </div>
         <ul class="plain-list small changes">
           <li v-for="c in o.changes" :key="JSON.stringify(c)">{{ describeChange(game.state, offer.target, c) }}</li>
@@ -47,7 +52,7 @@ const ui = useUiStore()
 const dialog = ref<HTMLDialogElement>()
 
 const HELP =
-  'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up. Software upgrades close a third, a half or two-thirds of the gap to the ceiling, so each adds less than the last.'
+  'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up. Software upgrades close a third, a half or two-thirds of the gap to the ceiling, so each adds less than the last. An industry upgrade is technology of the unit’s own tier the first time, and a tier higher each time after, on the same strategy.'
 
 const target = props.request.target!
 const name = computed(() => targetName(game.state, target))
@@ -152,6 +157,10 @@ dialog::backdrop {
 .foot {
   justify-content: space-between;
   gap: 8px;
+}
+
+.chips {
+  gap: 6px;
 }
 
 .changes {

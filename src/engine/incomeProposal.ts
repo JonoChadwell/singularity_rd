@@ -164,7 +164,9 @@ export function draftIncome(state: GameState, v: IncomeVerdict): { income: Incom
       }
   // The first income for a resource is paid in lower tiers only: free for tier 0.
   const cost = costFor(state, v, B.INCOME_COST_WEEKS * weekly, incomePayers(state, output.id))
-  return { income, minIQ: floorIQ(minIQ), cost }
+  // Getting something of a higher tier takes a smarter mind. Phase 1 is a tutorial, and its goal is tier 1.
+  const tierIQ = state.phase.n === 1 ? 0 : (B.TIERS[output.tier]?.[1] ?? 0)
+  return { income, minIQ: floorIQ(Math.max(minIQ, tierIQ)), cost }
 }
 
 export function acceptIncome(current: GameState, v: IncomeVerdict): Accepted {

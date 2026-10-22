@@ -8,7 +8,8 @@ import {
   findUnit,
   labour,
   makeId,
-  partsFor
+  partsFor,
+  tierFactor
 } from './model'
 import { coverWeeks, moveClock, winPhase } from './phase'
 import { has, type TraitId } from './traits'
@@ -91,7 +92,8 @@ export function strategyRate(state: GameState, s: Strategy): { inputs: Flow[]; a
   if (s.kind === 'build') {
     const target = findUnit(state, s.outputId)
     if (!target) return { inputs: [], amount: 0 }
-    const amount = labour(runner) / (B.BUILD_LABOUR * Math.max(1e-9, target.value))
+    // A builder below the tier of what it builds is out of its depth.
+    const amount = (labour(runner) * tierFactor(runner.tier, target.tier)) / (B.BUILD_LABOUR * Math.max(1e-9, target.value))
     return { inputs: partsFor(target).map((p) => ({ ...p, amount: p.amount * amount })), amount }
   }
   return { inputs: s.inputs, amount: s.amount }
@@ -255,7 +257,7 @@ export function completeResearch(state: GameState, r: Research): string {
     }
     case 'mind':
       addMind(state, effect.mind)
-      return `${effect.mind.icon} ${effect.mind.name} is online: Tier ${effect.mind.tier}.`
+      return `${effect.mind.icon} ${effect.mind.name} is online: Generation ${effect.mind.tier}.`
     case 'strategy':
       addStrategy(state, effect.strategy)
       return `${r.icon} ${effect.strategy.name} is ready.`

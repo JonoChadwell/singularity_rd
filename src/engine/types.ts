@@ -69,6 +69,8 @@ export interface UnitType {
   count: number
   /** Worth of one, in Money. Sets its labour and its parts. */
   value: number
+  /** How advanced it is, on the same scale as resource tiers. Sets its research and its fit with what it makes. */
+  tier: number
   /** Jev's plausibility, kept for the card. */
   plausibility: number
   /** What creating or building one uses. */
@@ -99,7 +101,7 @@ export interface UnitType {
   assign: Record<string, number>
   /** The strategy that takes every unit not counted in `assign`. */
   rest: string | null
-  /** The highest power of ten of its count that humans have noticed (0 = none yet). */
+  /** The highest power of ten of the fleet's worth that humans have noticed (0 = none yet). */
   noticed?: number
   /** Designed with a risky research: humans notice it twice as hard. */
   risky?: boolean
@@ -121,6 +123,8 @@ export interface Strategy {
   outputId: string
   /** Made per running unit per week (units built, or units crewed). */
   amount: number
+  /** Make only: the exact multiplier Jev rated it (see EFFICIENCY), kept to name it. */
+  efficiency?: number
   /** Build only: stop when you own this many. */
   target?: number
   /** Build only: a part-built unit carried into next week. */
@@ -250,7 +254,6 @@ export interface Invention {
 export interface Stats {
   proposals: Record<Invention['kind'], number>
   rejections: number
-  pushbacks: number
   researched: number
   jevCalls: number
 }
@@ -284,7 +287,7 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 11
+  version: 12
   runId: string
   week: number
   phase: PhaseState
