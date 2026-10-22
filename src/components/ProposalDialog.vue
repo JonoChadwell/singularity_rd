@@ -116,8 +116,9 @@
         </label>
         <p class="muted small note">
           Jev decides how advanced it is (its tier), what one is worth, what it’s made from and what it runs on, which
-          are never above its own tier, and its traits. It offers you a few takes to choose from. Once designed, you
-          create them from their parts, as many as you can afford.
+          are never above its own tier, and its traits. It offers you up to three takes to choose from, each made or
+          run differently, and each with its own traits. Once designed, you create them from their parts, as many as you
+          can afford.
         </p>
       </template>
 
@@ -137,7 +138,6 @@
       :verdict="verdict"
       :accept-label="acceptLabel"
       @pick="onPick"
-      @trait="onTrait"
       @accept="accept"
       @edit="verdict = null"
     >
@@ -172,6 +172,8 @@
             <span>
               <strong>{{ o.tier }}</strong> · one is worth: {{ o.worth }}
               <span class="muted">· made from {{ o.madeFrom }}, runs on {{ o.runsOn }}</span>
+              <TraitChips v-if="o.traits.length" :traits="o.traits" class="option-traits" />
+              <span v-else class="muted">· no traits</span>
               <span v-if="!first" class="muted"> · {{ researchText(o.draft) }}</span>
             </span>
           </label>
@@ -244,7 +246,7 @@ import {
   precheckName,
   precheckStrategy
 } from '@/engine/proposals'
-import { QUIRKS, type TraitId } from '@/engine/traits'
+import { QUIRKS } from '@/engine/traits'
 import {
   draftUnit,
   guessUnitSpec,
@@ -255,6 +257,7 @@ import { useUiStore, type InventRequest } from '@/stores/ui'
 import HelpTip from './HelpTip.vue'
 import PresetList, { type PresetItem } from './PresetList.vue'
 import StrategyTags from './StrategyTags.vue'
+import TraitChips from './TraitChips.vue'
 import UnitSummary from './UnitSummary.vue'
 import VerdictView from './VerdictView.vue'
 
@@ -491,6 +494,7 @@ const unitOptions = computed(() => {
       worth: unitValueText(draft.unit.value),
       madeFrom: o.partsIds.map((id) => findResource(game.state, id)?.name ?? '?').join(' + '),
       runsOn: findResource(game.state, o.upkeepId)?.name ?? '?',
+      traits: o.traits,
       draft
     }
   })
@@ -530,10 +534,6 @@ function onPick(key: string, value: string) {
   const v = verdict.value
   if (!v) return
   v.picks[key] = value
-}
-
-function onTrait(trait: TraitId, on: boolean) {
-  if (verdict.value?.kind === 'unit') verdict.value.traitPicks[trait] = on
 }
 
 
@@ -657,5 +657,9 @@ form {
 
 .option.chosen {
   color: var(--text);
+}
+
+.option-traits {
+  margin: 0 4px;
 }
 </style>

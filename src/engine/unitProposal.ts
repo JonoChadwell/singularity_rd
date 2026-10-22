@@ -57,18 +57,22 @@ export interface UnitOption {
   partsIds: string[]
   /** What it runs on each week: a stock or a flow. */
   upkeepId: string
+  /** Its traits: part of the take, so a near-the-line trait is on in one take and off in another. */
+  traits: TraitId[]
 }
 
 export interface UnitVerdict extends VerdictBase {
   kind: 'unit'
   spec: UnitSpec
-  /** Jev's three takes on tier, value and resources, best first. The player picks one. */
+  /**
+   * Jev's takes on tier, value, resources and traits, best first, and never two alike in what
+   * they are made from and run on. The player picks one.
+   */
   options: UnitOption[]
   /** Which option the player picked. */
   choice: number
+  /** What Jev thought of each trait, kept for the traits' parameters (a crew unit, a by-product). */
   traitOdds: TraitOdds[]
-  /** The player's call on traits near the line. */
-  traitPicks: Partial<Record<TraitId, boolean>>
 }
 
 /** Question keys use underscores. */
@@ -203,10 +207,9 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     ...base,
     kind: 'unit',
     spec,
-    options: unitOptions(state, answers, tiers, pools.keys, !!spec.first),
+    options: unitOptions(state, answers, tiers, pools.keys, !!spec.first, traitOdds),
     choice: 0,
-    traitOdds,
-    traitPicks: {}
+    traitOdds
   }
   gate(v, 'Jev doesn’t think the AI could come to own these', {
     key: 'same_as',
@@ -263,14 +266,14 @@ function poolQuestions(state: GameState, name: string, tiers: number[]) {
 }
 
 /**
- * Jev's top `count` picks from a pool, most likely first. When it named fewer in the pool, the
- * pool's own order (lowest tier first) fills the rest. Fewer if the pool is smaller than that.
+ * Every resource in a pool, Jev's picks first and most likely first. Those it didn't name follow
+ * in the pool's own order (lowest tier first).
  */
-function topPicks(answers: Record<string, JevAnswer>, question: string, pool: Resource[], count: number): string[] {
+function rankedIds(answers: Record<string, JevAnswer>, question: string, pool: Resource[]): string[] {
   const answer = answers[question]
   const ids = pool.map((r) => r.id)
   const named = answer ? ranked(answer).map(([id]) => id).filter((id) => ids.includes(id)) : []
-  return [...new Set([...named, ...ids])].slice(0, count)
+  return [...new Set([...named, ...ids])]
 }
 
 /**
@@ -292,40 +295,99 @@ function levelsByOdds(answer: JevAnswer | undefined, levels: number): number[] {
   return out
 }
 
+/** The traits Jev would give it: the sure ones, and those above the keep line, up to the most allowed. */
+function defaultTraits(odds: TraitOdds[]): TraitOdds[] {
+  return odds.filter((t) => t.p >= B.TRAIT_KEEP).slice(0, B.MAX_TRAITS)
+}
+
 /**
- * Three takes on a unit's tier and value, Jev's own first. Then the next tier at the same value,
- * then the same tier at the next value, so at least two tiers are on offer. The plan's first
- * unit is always tier 0, so its options differ only in value. Each take is made from and runs on
- * what Jev picked for its tier, never above it.
+ * The trait sets the takes can have, the default first. Each other flips one trait Jev was unsure
+ * of (near the line), the closest call first: on in one take, off in another. A perk makes the
+ * unit dearer to make and a drawback cheaper, so the takes differ in price as well as in what they do.
+ */
+export function traitVariants(odds: TraitOdds[]): TraitOdds[][] {
+  const base = defaultTraits(odds)
+  const sameSet = (a: TraitOdds[], b: TraitOdds[]) => a.length === b.length && a.every((t) => b.some((u) => u.trait === t.trait))
+  const variants = [base]
+  const unsure = odds.filter((t) => t.p < B.TRAIT_SURE).sort((a, b) => Math.abs(a.p - B.TRAIT_KEEP) - Math.abs(b.p - B.TRAIT_KEEP))
+  for (const t of unsure) {
+    const on = base.some((b) => b.trait === t.trait)
+    const next = on ? base.filter((b) => b.trait !== t.trait) : [...base, t].sort((a, b) => b.p - a.p).slice(0, B.MAX_TRAITS)
+    if (!variants.some((v) => sameSet(v, next))) variants.push(next)
+  }
+  return variants
+}
+
+/** What a take is made from and runs on, as a key: two takes with the same key are alike. */
+const recipeKey = (o: Pick<UnitOption, 'partsIds' | 'upkeepId'>) => `${[...o.partsIds].sort().join('+')}|${o.upkeepId}`
+
+/**
+ * Up to three takes on a unit, Jev's own first. No two share what they are made from and run on,
+ * so each is a real choice; with only one way to make it there is only one take. They are never
+ * all worth the same (two may be). The plan's first unit is always tier 0. Elsewhere, when more
+ * than one tier is possible, the three are never all in one tier. Each take is made from and runs
+ * on resources at or below its own tier, and carries a trait set.
  */
 export function unitOptions(
   state: GameState,
   answers: Record<string, JevAnswer>,
   tiers: number[],
   keys: PoolKeys,
-  first: boolean
+  first: boolean,
+  traitOdds: TraitOdds[]
 ): UnitOption[] {
   const tierLevels = first ? [0] : levelsByOdds(answers.tier, B.MAX_UNIT_TIER + 1).filter((t) => tiers.includes(t))
   const bands = levelsByOdds(answers.value, first ? B.FIRST_UNIT_MAX_BAND + 1 : B.UNIT_VALUE.length)
-  // Best first: every (tier, band) pair by the sum of its ranks, ties to the tier change.
-  const pairs = tierLevels.flatMap((tier, t) => bands.map((band, b) => ({ tier, band, t, b })))
-  pairs.sort((x, y) => x.t + x.b - (y.t + y.b) || x.b - y.b)
-  return pairs.slice(0, B.UNIT_OPTIONS).map(({ tier, band }) => ({
+  // Every way to make a unit of a tier, with how far down Jev's lists it is: the likeliest parts
+  // (swapping the last for each next one) and the likeliest thing to run on, then the next.
+  const recipesOf = (tier: number) => {
+    const count = B.PARTS_BY_TIER[tier] ?? 1
+    const parts = rankedIds(answers, keys.parts[tier]!, partPool(state, tier))
+    const runs = rankedIds(answers, keys.runs[tier]!, runPool(state, tier))
+    const swaps = Math.max(1, parts.length - count + 1)
+    return Array.from({ length: swaps }, (_, p) =>
+      runs.map((upkeepId, u) => ({
+        rank: p + u,
+        partsIds: parts.length <= count ? parts : [...parts.slice(0, count - 1), parts[count - 1 + p]!],
+        upkeepId
+      }))
+    ).flat()
+  }
+  const candidates = tierLevels
+    .flatMap((tier, t) =>
+      recipesOf(tier).flatMap((recipe) => bands.map((band, b) => ({ tier, band, ...recipe, score: t + b + recipe.rank, t, b })))
+    )
+    .sort((x, y) => x.score - y.score || x.b - y.b || x.t - y.t || x.rank - y.rank)
+  const chosen: typeof candidates = []
+  for (const c of candidates) {
+    if (chosen.length >= B.UNIT_OPTIONS) break
+    if (!chosen.some((o) => recipeKey(o) === recipeKey(c))) chosen.push(c)
+  }
+  // Takes that are all in one tier (when more than one was possible) or all worth the same
+  // aren't a choice. Swap one for the best take that fixes it, the last first.
+  const allSame = (set: typeof candidates, of: 'tier' | 'band') => set.every((o) => o[of] === set[0]![of])
+  const fine = (set: typeof candidates) =>
+    new Set(set.map(recipeKey)).size === set.length &&
+    !(set.length === B.UNIT_OPTIONS && tierLevels.length > 1 && allSame(set, 'tier')) &&
+    !(set.length > 1 && bands.length > 1 && allSame(set, 'band'))
+  for (let i = chosen.length - 1; i >= 1 && !fine(chosen); i--) {
+    for (const c of candidates) {
+      const trial = chosen.map((o, j) => (j === i ? c : o))
+      if (!chosen.includes(c) && fine(trial)) {
+        chosen[i] = c
+        break
+      }
+    }
+  }
+  const variants = traitVariants(traitOdds)
+  return chosen.map(({ tier, band, partsIds, upkeepId }, i) => ({
     tier,
     band,
-    partsIds: topPicks(answers, keys.parts[tier]!, partPool(state, tier), B.PARTS_BY_TIER[tier] ?? 1),
-    upkeepId: topPicks(answers, keys.runs[tier]!, runPool(state, tier), 1)[0]!
+    partsIds,
+    upkeepId,
+    traits: variants[i % variants.length]!.map((t) => t.trait)
   }))
 }
-
-/** The traits the unit ends up with: sure ones, plus near-line ones the player kept. */
-export function chosenTraits(v: Pick<UnitVerdict, 'traitOdds' | 'traitPicks'>): TraitOdds[] {
-  return v.traitOdds
-    .filter((t) => (t.p >= B.TRAIT_SURE ? true : (v.traitPicks[t.trait] ?? t.p >= B.TRAIT_KEEP)))
-    .slice(0, B.MAX_TRAITS)
-}
-
-export const nearLine = (t: TraitOdds) => t.p < B.TRAIT_SURE
 
 /** Splits a value across parts so that making one uses parts worth about that value. */
 export function priceParts(state: GameState, ids: string[], value: number): Flow[] {
@@ -344,11 +406,8 @@ export interface UnitDraft {
 export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   const read = reader(v)
   const spec = v.spec
-  const traits = chosenTraits(v)
-  const ids = traits.map((t) => t.trait)
-  const param = (id: TraitId) => traits.find((t) => t.trait === id)?.param ?? null
-
-  const { tier, band, partsIds, upkeepId } = v.options[v.choice] ?? v.options[0]!
+  const { tier, band, partsIds, upkeepId, traits: ids } = v.options[v.choice] ?? v.options[0]!
+  const param = (id: TraitId) => v.traitOdds.find((t) => t.trait === id)?.param ?? null
   const value = B.pick(B.UNIT_VALUE, band)[1]
   const work = value / B.PAYBACK_WEEKS
   const upkeep: Flow[] = [

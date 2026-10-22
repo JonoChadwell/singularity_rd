@@ -168,19 +168,20 @@ function topIndex(v: PlanVerdict, fresh: number[]): number {
 }
 
 /**
- * Phase 2 starts with at least one resource of every tier, the lowest a stock (units are made
- * from stocks). Where Jev left a tier empty, the nearest spare new resource moves into it: one
- * whose own tier would still have another, so nothing opens a new gap. The goal's resource stays
- * at the top tier.
+ * Phase 2 brings at least one new resource of every tier, so a unit of any tier has something
+ * of its own tier to be made from. Where Jev left a tier empty among the plan's new resources,
+ * the nearest spare one moves into it: one whose own tier would still have another, so nothing
+ * opens a new gap. The goal's resource stays at the top tier, and for tier 0 a stock is preferred,
+ * since units are made from stocks.
  */
-export function coverTiers(resources: Resource[], movable: Resource[]): void {
-  const covered = (tier: number, without?: Resource) =>
-    resources.some((r) => r !== without && r.tier === tier && (tier > 0 || r.kind === 'stock'))
+export function coverTiers(fresh: Resource[]): void {
+  const covered = (tier: number, without?: Resource) => fresh.some((r) => r !== without && r.tier === tier)
   for (let tier = 0; tier <= B.GOAL_TIER[2]; tier++) {
     if (covered(tier)) continue
-    const spare = movable
-      .filter((r) => r.tier !== B.GOAL_TIER[2] && covered(r.tier, r) && (tier > 0 || r.kind === 'stock'))
-      .sort((a, b) => Math.abs(a.tier - tier) - Math.abs(b.tier - tier))[0]
+    const flowPenalty = (r: Resource) => (tier === 0 && r.kind !== 'stock' ? 100 : 0)
+    const spare = fresh
+      .filter((r) => r.tier !== B.GOAL_TIER[2] && covered(r.tier, r))
+      .sort((a, b) => flowPenalty(a) + Math.abs(a.tier - tier) - (flowPenalty(b) + Math.abs(b.tier - tier)))[0]
     if (spare) spare.tier = tier
   }
 }
@@ -199,7 +200,7 @@ export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
     state.resources.push(resource)
     added.push(resource)
   }
-  if (v.phase === 2) coverTiers(state.resources, added)
+  if (v.phase === 2) coverTiers(added)
   const top = added[fresh.indexOf(at)]!
   const level = reader(v).level('approach', B.GOAL_APPROACH.length)
   const [, iq1, mult1, iq2, mult2] = B.pick(B.GOAL_APPROACH, level)

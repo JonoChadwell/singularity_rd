@@ -363,8 +363,21 @@ describe('proposals', () => {
     expect(stock.torn).toMatchObject([{ key: 'kind', catch: null }])
   })
 
-  it('has Jev set a unit’s tier and value: three takes, spanning at least two tiers', async () => {
+  /** Money and a resource or two of each of the first few tiers, so a unit has more than one way to be made. */
+  function richWorld() {
     const s = moneyWorld()
+    s.resources.push(
+      newResource({ id: 'lemons', name: 'Lemons', tier: 0 }),
+      newResource({ id: 'steel', name: 'Steel', tier: 1 }),
+      newResource({ id: 'power', name: 'Power', kind: 'flow', tier: 1 }),
+      newResource({ id: 'chips', name: 'AI Chips', tier: 3 })
+    )
+    return s
+  }
+  const recipeOf = (o: { partsIds: string[]; upkeepId: string }) => `${[...o.partsIds].sort().join('+')}|${o.upkeepId}`
+
+  it('has Jev set a unit’s tier, value and recipe: three takes, each made or run differently, over two tiers', async () => {
+    const s = richWorld()
     const v = await judgeUnit(
       s,
       new FakeJudge({
@@ -376,17 +389,57 @@ describe('proposals', () => {
       unitSpec()
     )
     expect(v.torn).toEqual([])
-    // Jev's own take first, then the next tier at that value, then the next value at that tier.
-    expect(v.options).toMatchObject([
-      { tier: 1, band: 2 },
-      { tier: 2, band: 2 },
-      { tier: 1, band: 3 }
-    ])
+    expect(v.options).toHaveLength(3)
+    // Jev's own take first, at its likeliest tier and value.
+    expect(v.options[0]).toMatchObject({ tier: 1, band: 2 })
+    // No two takes are made from and run on the same things, and the three aren't all worth the same.
+    expect(new Set(v.options.map(recipeOf)).size).toBe(v.options.length)
+    expect(new Set(v.options.map((o) => o.band)).size).toBeGreaterThanOrEqual(2)
     expect(new Set(v.options.map((o) => o.tier)).size).toBeGreaterThanOrEqual(2)
     v.choice = 1
+    const tier = v.options[1]!.tier
     const r = acceptUnit(s, v).state.research[0]!
-    expect(r.effect.kind === 'unit' && r.effect.unit).toMatchObject({ tier: 2, value: B.UNIT_VALUE[2]![1] })
-    expect(r.minIQ).toBe(B.TIERS[2]![1])
+    expect(r.effect.kind === 'unit' && r.effect.unit).toMatchObject({ tier })
+    expect(r.minIQ).toBe(B.TIERS[tier]![1])
+  })
+
+  it('offers only as many takes as there are different ways to make the unit', async () => {
+    // Money is the only resource, so there is one way to make it, and so one take.
+    const v = await judgeUnit(moneyWorld(), new FakeJudge({ tier: score(1) }), unitSpec())
+    expect(v.options).toHaveLength(1)
+    // Two tier 0 stocks give the first unit a real choice of what to make it from.
+    const s = moneyWorld()
+    s.resources.push(newResource({ id: 'lemons', name: 'Lemons', tier: 0 }))
+    s.phase = { ...newPhase(2, 1), status: 'playing', firstUnit: { name: 'Mill', description: '' } } as typeof s.phase
+    const first = await judgeUnit(s, new FakeJudge({ value: score(2) }), unitSpec({ name: 'Mill', first: true }))
+    expect(first.options.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(first.options.map(recipeOf)).size).toBe(first.options.length)
+    expect(new Set(first.options.map((o) => o.band)).size).toBeGreaterThanOrEqual(2)
+    expect(first.options.every((o) => o.tier === 0)).toBe(true)
+  })
+
+  it('folds traits into the takes: one Jev was unsure of is on in one take and off in another', async () => {
+    const s = richWorld()
+    const v = await judgeUnit(
+      s,
+      new FakeJudge({
+        tier: score(1, { '1': 0.5, '2': 0.3, '0': 0.2 }),
+        trait_networked: noul(0.9),
+        trait_learns: noul(0.8),
+        // Above the keep line but not sure: Wears out is in Jev's own take.
+        trait_wears_out: noul(0.66),
+        trait_overclockable: noul(0.55)
+      }),
+      unitSpec()
+    )
+    expect('traitPicks' in v).toBe(false)
+    expect(v.options[0]!.traits).toEqual(['networked', 'learns', 'wears-out'])
+    // Another take drops it, so the trait is part of which take you pick, not a separate choice.
+    expect(v.options.some((o) => !o.traits.includes('wears-out'))).toBe(true)
+    expect(v.options.every((o) => o.traits.includes('networked') && o.traits.length <= B.MAX_TRAITS)).toBe(true)
+    v.choice = v.options.findIndex((o) => !o.traits.includes('wears-out'))
+    const effect = acceptUnit(s, v).state.research[0]!.effect
+    expect(effect.kind === 'unit' && effect.unit.traits).not.toContain('wears-out')
   })
 
   it('prices a unit’s design by its tier, not by what one is worth', async () => {

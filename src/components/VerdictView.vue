@@ -58,26 +58,6 @@
         </label>
       </fieldset>
 
-      <div v-if="verdict.kind === 'unit'" class="traits small">
-        <div class="row">
-          <span class="muted">Traits:</span>
-          <TraitChips v-if="keptList.length" :traits="keptList" />
-          <span v-else class="muted">none</span>
-        </div>
-        <div v-if="optional.length" class="row">
-          <span class="muted" title="Jev wasn’t sure. Perks raise the price; drawbacks lower it.">Your call:</span>
-          <label v-for="t in optional" :key="t.trait" class="choice" :title="TRAITS[t.trait].rule">
-            <input
-              type="checkbox"
-              :checked="kept.has(t.trait)"
-              :disabled="!kept.has(t.trait) && kept.size >= MAX_TRAITS"
-              @change="emit('trait', t.trait, !kept.has(t.trait))"
-            />
-            {{ TRAITS[t.trait].icon }} {{ TRAITS[t.trait].name }}
-          </label>
-        </div>
-      </div>
-
       <slot />
     </template>
 
@@ -97,19 +77,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { MAX_TRAITS } from '@/engine/balance'
 import { findResource } from '@/engine/model'
 import { complicationName, payOptions } from '@/engine/proposals'
 import { RISK_BONUS, riskText } from '@/engine/risk'
-import TraitChips from './TraitChips.vue'
-import { TRAITS } from '@/engine/traits'
-import { chosenTraits, nearLine } from '@/engine/unitProposal'
 import { useGameStore, type Verdict } from '@/stores/game'
 
 const props = defineProps<{ verdict: Verdict; acceptLabel: string }>()
 const emit = defineEmits<{
   pick: [key: string, value: string]
-  trait: [trait: keyof typeof TRAITS, on: boolean]
   accept: []
   edit: []
 }>()
@@ -126,10 +101,6 @@ const riskLine = computed(() => {
   const v = props.verdict
   return v.risk && v.kind in RISK_BONUS ? riskText(v.risk, v.kind as keyof typeof RISK_BONUS) : ''
 })
-const keptList = computed(() => (props.verdict.kind === 'unit' ? chosenTraits(props.verdict).map((t) => t.trait) : []))
-const kept = computed(() => new Set<string>(keptList.value))
-/** Traits near the line that the player decides. A few at most, so the list stays readable. */
-const optional = computed(() => (props.verdict.kind === 'unit' ? props.verdict.traitOdds.filter(nearLine).slice(0, 4) : []))
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$/, '')
 </script>
 
@@ -182,12 +153,6 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$
 
 .choice input {
   width: auto;
-}
-
-.traits {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .actions {

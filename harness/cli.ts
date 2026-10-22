@@ -53,7 +53,7 @@ import { proposalText } from '@/engine/stateText'
 import { catchesOf, complicationName, draftResource, draftStrategy, payOptions } from '@/engine/proposals'
 import { TRAITS, type TraitId } from '@/engine/traits'
 import type { GameState, Strategy, UpgradeTarget } from '@/engine/types'
-import { chosenTraits, draftUnit, nearLine } from '@/engine/unitProposal'
+import { draftUnit } from '@/engine/unitProposal'
 import { acceptUpgrade, describeChanges, judgeUpgrade, type UpgradeOffer } from '@/engine/upgrade'
 import { snapshot } from '@/telemetry'
 import { RunLog } from '../server/runLog'
@@ -343,16 +343,12 @@ function printVerdict(s: GameState, v: Verdict) {
     v.options.forEach((o, i) => {
       const od = draftUnit(s, { ...v, choice: i })
       say(
-        `    ${i}${i === v.choice ? ' *' : ''}: ${tierLabel(o.tier)} · ${unitValueText(od.unit.value)} · made from ${o.partsIds.map((id) => findResource(s, id)?.name).join(' + ')}, runs on ${findResource(s, o.upkeepId)?.name}` +
+        `    ${i}${i === v.choice ? ' *' : ''}: ${tierLabel(o.tier)} · ${unitValueText(od.unit.value)} · made from ${o.partsIds.map((id) => findResource(s, id)?.name).join(' + ')}, runs on ${findResource(s, o.upkeepId)?.name} · traits: ${o.traits.length ? o.traits.map((t) => TRAITS[t].name).join(', ') : 'none'}` +
           (v.spec.first ? '' : ` · needs IQ ${od.minIQ}, uses up ${describeCost(s, od.cost)}`)
       )
     })
     say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}, parts ${describeFlows(s, u.parts)}`)
     say(`  → traits: ${u.traits.length ? traitText(u.traits) : 'none'}${u.builderId ? ` · also built by ${u.builderId}` : ''}`)
-    for (const t of v.traitOdds.filter(nearLine).slice(0, 4)) {
-      const on = chosenTraits(v).some((c) => c.trait === t.trait)
-      say(`  near the line: ${t.trait} ${pct(t.p)} (${TRAITS[t.trait].kind}) now ${on ? 'ON' : 'off'} [trait ${t.trait} on|off]`)
-    }
   } else if (v.kind === 'mind') {
     const d = draftMind(s, v)
     say(`  → IQ ${d.mind.hardware.iq} (${d.mind.hardware.name}, ${softwareLabel(d.mind)})`)
@@ -424,7 +420,7 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   propose income '{"name":"..","description":"..","outputId":"..","perId":null}'   (perId: a stock it grows with)
   propose cover '{"name":"..","description":".."}'
   dismiss <cardId|all>         dismiss explainer cards
-  verdict | pick <key> <value> | trait <id> on|off | option <n> (a unit's tier and value)
+  verdict | pick <key> <value> | option <n> (a unit's take: tier, value, what it's made from and runs on, traits)
   accept | discard
   upgrade <unit|mind> <id>      ask Jev for three ways to improve it
   choose <n>                   take upgrade option n as research
@@ -563,13 +559,6 @@ async function run(args: string[], slot: string): Promise<number> {
       const choice = Number(rest[0])
       if (!v.options[choice]) throw new Error(`Choose 0 to ${v.options.length - 1}.`)
       v.choice = choice
-      printVerdict(s(), v)
-      break
-    }
-    case 'trait': {
-      const v = needVerdict()
-      if (v.kind !== 'unit') throw new Error('Only unit verdicts have traits to decide.')
-      v.traitPicks[rest[0] as TraitId] = rest[1] === 'on'
       printVerdict(s(), v)
       break
     }

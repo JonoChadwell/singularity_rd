@@ -648,7 +648,8 @@ describe('fixes', () => {
     expect(d.goal.cost).toEqual([expect.objectContaining({ resourceId: d.top.id })])
   })
 
-  it('starts Phase 2 with at least one resource of every tier, the lowest a stock', async () => {
+  it('makes Phase 2 bring at least one new resource of every tier', async () => {
+    // Money may already be tier 0 or 1: either way the plan's own resources cover every tier.
     for (const moneyTier of [0, 1]) {
       const s = createInitialState()
       s.phase = newPhase(2, 5)
@@ -656,23 +657,30 @@ describe('fixes', () => {
       const withMoney = { ...nanotech, resources: [{ name: 'Money', description: '' }, ...nanotech.resources] }
       // Jev tiers every new resource in the middle (tier 2), so the other tiers would be empty.
       const d = draftPlan(s, await judgePlan(s, new FakeJudge(), withMoney))
-      expect([...new Set(d.state.resources.map((r) => r.tier))].sort()).toEqual([0, 1, 2, 3, 4])
-      expect(d.state.resources.some((r) => r.tier === 0 && r.kind === 'stock')).toBe(true)
+      expect(d.added.map((r) => r.tier).sort()).toEqual([0, 1, 2, 3, 4])
+      expect(d.added.some((r) => r.tier === 0 && r.kind === 'stock')).toBe(true)
       expect(d.top.tier).toBe(4)
+      // So a tier 0 unit has a new resource to choose, as well as Money.
+      expect(d.state.resources.filter((r) => r.tier === 0 && r.kind === 'stock').length).toBeGreaterThanOrEqual(moneyTier === 0 ? 2 : 1)
     }
   })
 
-  it('moves a resource into an empty tier only when its own tier keeps another', () => {
-    const r = (id: string, tier: number) => newResource({ id, name: id, tier })
-    // Two at tier 2 can spare one; the lone tier 3 stays put.
-    const all = [r('money', 1), r('goal', 4), r('a', 2), r('b', 2), r('c', 3)]
-    coverTiers(all, [all[2]!, all[3]!, all[4]!])
-    expect(all.map((x) => x.tier)).toEqual([1, 4, 0, 2, 3])
-    // A flow can't fill tier 0: units are made from stocks.
-    const flows = [r('money', 1), r('goal', 4), newResource({ id: 'f', name: 'f', kind: 'flow', tier: 2 }), r('a', 2), r('b', 3), r('c', 3)]
-    coverTiers(flows, [flows[2]!, flows[3]!, flows[4]!, flows[5]!])
-    expect(flows.some((x) => x.tier === 0 && x.kind === 'stock')).toBe(true)
-    expect(flows[2]!.tier).toBe(2)
+  it('moves a new resource into an empty tier only when its own tier keeps another', () => {
+    const r = (id: string, tier: number, kind: 'stock' | 'flow' = 'stock') => newResource({ id, name: id, tier, kind })
+    // Three at tier 2 can spare two.
+    const spare = [r('goal', 4), r('a', 2), r('b', 2), r('c', 3), r('d', 2)]
+    coverTiers(spare)
+    expect(spare.map((x) => x.tier).sort()).toEqual([0, 1, 2, 3, 4])
+    // A lone tier 2 stays put while the tier 3s lend two.
+    const lone = [r('goal', 4), r('a', 2), r('b', 3), r('c', 3), r('d', 3)]
+    coverTiers(lone)
+    expect(lone[1]!.tier).toBe(2)
+    expect(lone.map((x) => x.tier).sort()).toEqual([0, 1, 2, 3, 4].sort())
+    // Tier 0 prefers a stock, since units are made from stocks.
+    const flows = [r('goal', 4), r('f', 2, 'flow'), r('a', 2), r('b', 3), r('c', 3)]
+    coverTiers(flows)
+    expect(flows[2]!.tier).toBe(0)
+    expect(flows[1]!.tier).toBe(2)
   })
 
   it('tiers resources proposed outside a plan: tier 0 in Phase 1, up to 3 in Phase 2', async () => {
