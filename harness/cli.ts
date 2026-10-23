@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { loadEnv } from 'vite'
 import { CachedJudge, JudgeError, type Answers, type Judge, type JevAnswer, type Questions } from '@/ai/jev'
 import * as actions from '@/engine/actions'
+import * as B from '@/engine/balance'
 import { alertsFor } from '@/engine/alerts'
 import { runWeek } from '@/engine/cycle'
 import { previewWeek } from '@/engine/economy'
@@ -18,18 +19,17 @@ import { coverBlocker, draftCover } from '@/engine/coverProposal'
 import { acceptAny, judgeAny, type ProposalInput, type Verdict } from '@/engine/dispatch'
 import { draftIncome } from '@/engine/incomeProposal'
 import { createInitialState } from '@/engine/initialState'
+import { computeTrait } from '@/engine/computeTraits'
 import { draftMind } from '@/engine/mindProposal'
 import {
   allocation,
   creatable,
   bestIQ,
-  ceilingIQ,
   costShortfall,
   currentIQ,
   describeCost,
   describeFlows,
   describeIncome,
-  designRange,
   efficiencyWord,
   findResource,
   findUnit,
@@ -121,7 +121,7 @@ function load(slot: string): Save {
   const path = savePath(slot)
   if (!existsSync(path)) throw new Error(`No game in slot "${slot}". Start one with: new`)
   const save = JSON.parse(readFileSync(path, 'utf8')) as Save
-  if (save.state.version !== 12) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
+  if (save.state.version !== 13) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
   return save
 }
 
@@ -157,7 +157,11 @@ const say = (line = '') => out.push(line)
 /** Traits with their rules, so a player can see what they do. */
 const traitText = (ids: TraitId[]) => ids.map((id) => `${TRAITS[id].name} (${TRAITS[id].rule})`).join('; ')
 
-const FEATURES: Feature[] =['income', 'upgrade', 'strategy', 'unit', 'cover', 'mind', 'hardware', 'unit-upgrade']
+const FEATURES: Feature[] = ['income', 'upgrade', 'strategy', 'unit', 'cover', 'mind', 'unit-upgrade']
+
+/** A platform's traits with their rules. */
+const computeTraitText = (ids: string[]) =>
+  ids.map((id) => `${computeTrait(id).name} [${computeTrait(id).kind}] (${computeTrait(id).rule})`).join('; ')
 
 function printPhase(s: GameState) {
   const p = s.phase
@@ -208,10 +212,9 @@ function printStatus(s: GameState) {
   if (s.phase.status !== 'playing') return
   const preview = previewWeek(structuredClone(s))
   const net = (id: string) => (preview.flows[id] ?? []).reduce((n, f) => n + f.amount, 0)
-  const [lo, hi] = designRange(s)
   say(`WEEK ${s.week} · Jev calls ${s.stats.jevCalls}`)
   say(
-    `Best IQ ${Math.round(bestIQ(s))}${lockReason(s, 'mind') ? '' : ` · it can design a modest mind up to IQ ${hi}, a radical one up to IQ ${lo} (Jev judges which)`} · ` +
+    `Best IQ ${Math.round(bestIQ(s))}${lockReason(s, 'mind') ? '' : ` · a new platform can be up to ${B.MAX_IQ_STEP} IQ smarter (steps ${B.PLATFORM_STEPS.join('/')}) and replaces this one for good`} · ` +
       (s.proposedThisWeek ? 'research PROPOSED this week' : 'can propose one research this week')
   )
   say('\nRESOURCES')
@@ -224,9 +227,13 @@ function printStatus(s: GameState) {
         `${sources ? `\n      ${sources}` : ''}`
     )
   }
-  say('\nMINDS')
+  say('\nPLATFORM')
   for (const m of s.minds) {
-    say(`  ${m.id} "${m.name}"${m.tier ? ` Generation ${m.tier}` : ''} IQ ${Math.round(currentIQ(m))}/${Math.round(ceilingIQ(m))} · hardware ${m.hardware.name} (${m.hardware.iq}) · software ${softwareLabel(m)}`)
+    say(
+      `  ${m.id} "${m.name}"${m.tier ? ` Generation ${m.tier}` : ''} IQ ${Math.round(currentIQ(m))} · hardware ${m.hardware.name} (${m.hardware.iq}) · software ${softwareLabel(m)}` +
+        `${m.software.upgraded ? ` (+${m.software.iq}, its one upgrade used)` : ' (one upgrade left)'}` +
+        `${m.traits.length ? `\n      traits: ${computeTraitText(m.traits)}` : ''}`
+    )
   }
   if (s.units.length) {
     say('\nINDUSTRY')
@@ -350,8 +357,12 @@ function printVerdict(s: GameState, v: Verdict) {
     say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}, parts ${describeFlows(s, u.parts)}`)
     say(`  → traits: ${u.traits.length ? traitText(u.traits) : 'none'}${u.builderId ? ` · also built by ${u.builderId}` : ''}`)
   } else if (v.kind === 'mind') {
+    say(`  Jev's perk-and-drawback pairs [option <n>]:`)
+    v.options.forEach((o, i) => {
+      say(`    ${i}${i === v.choice ? ' *' : ''}: ${computeTraitText([o.perk])} · but ${computeTraitText([o.drawback])}`)
+    })
     const d = draftMind(s, v)
-    say(`  → IQ ${d.mind.hardware.iq} (${d.mind.hardware.name}, ${softwareLabel(d.mind)})`)
+    say(`  → IQ ${d.mind.hardware.iq} (${d.mind.hardware.name}, ${softwareLabel(d.mind)}), replacing the current platform for good`)
     say(research(d))
   } else {
     const d = draftIncome(s, v)
@@ -371,6 +382,11 @@ function printOffer(s: GameState, offer: UpgradeOffer) {
   say(`UPGRADE OPTIONS for ${offer.target.kind} ${offer.target.id} [choose <n>]`)
   offer.options.forEach((o, i) => {
     say(`  ${i + 1}. ${o.name} (Jev ${pct(o.p)}): ${describeChanges(s, offer.target, o.changes)}`)
+    if (o.sizes) {
+      say(`     sizes [choose ${i + 1} <size>]: ${o.sizes.map((z) => `+${z.step} IQ uses up ${describeCost(s, z.cost) || 'nothing'}`).join(' · ')}`)
+      say(`     needs IQ ${o.minIQ}${o.risk ? ` · ⚠ ${riskText(o.risk, 'upgrade')}` : ''}`)
+      return
+    }
     say(`     ${o.tier !== undefined ? `Tier ${o.tier} technology · ` : ''}needs IQ ${o.minIQ} · uses up ${describeCost(s, o.cost)}${o.risk ? ` · ⚠ ${riskText(o.risk, 'upgrade')}` : ''}`)
   })
 }
@@ -416,14 +432,15 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   propose resource '{"name":"..","description":".."}'
   propose strategy '{"name":"..","description":"..","unitId":"..","inputIds":[],"outputId":".."}'
   propose unit '{"name":"..","description":"..","builderId":null,"first":false}'   (Jev picks what it's made from and runs on)
-  propose mind '{"name":"..","description":"..","iq":250,"hardware":"..","software":".."}'
+  propose mind '{"name":"..","description":"..","step":100,"hardware":"..","software":".."}'
+                               (step: IQ over your best, one of 25/50/75/100. It replaces your platform for good; Jev offers three perk+drawback pairs, pick with option <n>)
   propose income '{"name":"..","description":"..","outputId":"..","perId":null}'   (perId: a stock it grows with)
   propose cover '{"name":"..","description":".."}'
   dismiss <cardId|all>         dismiss explainer cards
-  verdict | pick <key> <value> | option <n> (a unit's take: tier, value, what it's made from and runs on, traits)
+  verdict | pick <key> <value> | option <n> (a unit's take: tier, value, what it's made from and runs on, traits; or a platform's perk+drawback pair)
   accept | discard
-  upgrade <unit|mind> <id>      ask Jev for three ways to improve it
-  choose <n>                   take upgrade option n as research
+  upgrade <unit|mind> <id>      ask Jev for three ways to improve it (a platform gets one software upgrade, ever)
+  choose <n> [size]            take upgrade option n as research (a platform upgrade also takes a size: 25/50/75/100 IQ, default 100)
   research <researchId>        do a research now (any number a week; proposing is one a week)
   drop <researchId>            drop a research
   create <unitId> <n|max>       create units from their parts
@@ -456,7 +473,7 @@ async function run(args: string[], slot: string): Promise<number> {
     const samples = [
       'proposes a strategy: CNC Mills mill precision parts for sale',
       'proposes a strategy: CNC Mills turn feedstock into nanobots',
-      'proposes a software upgrade to itself, from IQ 125 to 140',
+      'proposes a software upgrade to itself, from IQ 100 to 150',
       'proposes a strategy: pâtisserie kiosks bake better croissants',
       'proposes designing a new AI server, IQ 300, from its own milled parts',
       'proposes a strategy: trading desks run high-frequency trades',
@@ -555,7 +572,7 @@ async function run(args: string[], slot: string): Promise<number> {
     }
     case 'option': {
       const v = needVerdict()
-      if (v.kind !== 'unit') throw new Error('Only unit verdicts have options.')
+      if (v.kind !== 'unit' && v.kind !== 'mind') throw new Error('Only unit and platform verdicts have options.')
       const choice = Number(rest[0])
       if (!v.options[choice]) throw new Error(`Choose 0 to ${v.options.length - 1}.`)
       v.choice = choice
@@ -595,10 +612,11 @@ async function run(args: string[], slot: string): Promise<number> {
       if (!save.offer) throw new Error('No upgrade options waiting. Try: upgrade <unit|mind> <id>')
       const offer = save.offer
       const index = num(rest[0]) - 1
-      const result = acceptUpgrade(s(), offer, index)
+      const step = rest[1] ? num(rest[1]) : undefined
+      const result = acceptUpgrade(s(), offer, index, step)
       adopt(save, result.state)
       save.offer = null
-      await log(save.state, 'accept', { kind: 'upgrade', option: offer.options[index]?.key, outcome: result.outcome })
+      await log(save.state, 'accept', { kind: 'upgrade', option: offer.options[index]?.key, step, outcome: result.outcome })
       if (result.outcome.kind === 'research') say(`research: ${result.outcome.research.id} needs IQ ${result.outcome.research.minIQ}`)
       break
     }

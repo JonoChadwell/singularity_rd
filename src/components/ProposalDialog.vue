@@ -83,27 +83,38 @@
       <template v-if="kind === 'mind'">
         <label class="field">
           <span>Hardware</span>
-          <input
-            v-model="mind.hardware"
-            :maxlength="NAME_MAX"
-            :placeholder="name.trim() || 'The platform it runs on'"
-            aria-label="Hardware"
-          />
+          <span class="row">
+            <input
+              v-model="mind.hardware"
+              :maxlength="NAME_MAX"
+              :placeholder="name.trim() || 'The platform it runs on'"
+              aria-label="Hardware"
+            />
+            <button v-if="current" type="button" class="link small" @click="mind.hardware = nextHardwareName(current.hardware.name)">
+              {{ nextHardwareName(current.hardware.name) }}
+            </button>
+          </span>
         </label>
         <label class="field">
-          <span>Hardware IQ</span>
+          <span>Smarter by</span>
           <span class="row">
-            <input v-model.number="mind.iq" class="n" type="number" min="10" step="10" aria-label="Hardware IQ" />
-            <span class="small" :class="mind.iq > range[1] ? 'warn' : 'muted'">{{ iqHint }}</span>
+            <select v-model.number="mind.step" aria-label="Smarter by">
+              <option v-for="s in PLATFORM_STEPS" :key="s" :value="s">+{{ s }} IQ → IQ {{ bestNow + s }}</option>
+            </select>
+            <span class="small muted">{{ stepHint }}</span>
           </span>
         </label>
         <label class="field">
           <span>Software</span>
           <span class="row">
             <input v-model="mind.software" :maxlength="NAME_MAX" :placeholder="DEFAULT_SOFTWARE" aria-label="Software" />
-            <span class="small muted">{{ softwareVersion(0) }}; upgrades can raise IQ to ×{{ IQ_CEILING }}</span>
+            <span class="small muted">{{ softwareVersion(false) }}; it gets one upgrade, ever</span>
           </span>
         </label>
+        <p v-if="current" class="muted small note">
+          It replaces {{ current.name }} for good, even a hardware “Mk II”: nothing carries over. Jev offers three
+          perk-and-drawback pairs to pick from.
+        </p>
       </template>
 
       <template v-if="kind === 'unit'">
@@ -199,6 +210,19 @@
           {{ mindDraft.mind.icon }} <strong>{{ mindDraft.mind.name }}</strong>: {{ mindDraft.mind.hardware.name }}
           hardware, IQ {{ mindDraft.mind.hardware.iq }}, running {{ mindDraft.mind.software.name }}.
         </div>
+        <fieldset v-if="mindOptions.length" class="options">
+          <legend class="small muted">Jev’s takes: pick a perk and the drawback that comes with it</legend>
+          <label v-for="o in mindOptions" :key="o.i" class="option small" :class="{ chosen: mindChoice === o.i }">
+            <input v-model="mindChoice" type="radio" name="mind-option" :value="o.i" />
+            <span>
+              <span class="good" :title="o.perk.rule">{{ o.perk.icon }} {{ o.perk.name }}</span>
+              <span class="muted"> ({{ o.perk.rule }})</span>
+              <br />
+              <span class="warn" :title="o.drawback.rule">{{ o.drawback.icon }} {{ o.drawback.name }}</span>
+              <span class="muted"> ({{ o.drawback.rule }})</span>
+            </span>
+          </label>
+        </fieldset>
         <div class="warn">{{ researchText(mindDraft) }}</div>
       </div>
     </VerdictView>
@@ -207,20 +231,22 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue'
-import { IQ_CEILING } from '@/engine/balance'
+import { MAX_IQ_STEP, PLATFORM_STEPS, platformGateTier } from '@/engine/balance'
+import { computeTrait } from '@/engine/computeTraits'
 import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
-import { DEFAULT_SOFTWARE, draftMind, guessIQ, precheckMind } from '@/engine/mindProposal'
+import { DEFAULT_SOFTWARE, draftMind, precheckMind, stepFor } from '@/engine/mindProposal'
 import { draftIncome, precheckIncome } from '@/engine/incomeProposal'
 import {
   bandText,
   bestIQ,
+  bestMind,
   byTier,
   describeCost,
   describeFlows,
   describeIncome,
-  designRange,
   findResource,
   fmt,
+  nextHardwareName,
   softwareVersion,
   tierLabel,
   tierText,
@@ -294,7 +320,7 @@ const COPY: Record<
   },
   mind: {
     title: 'Propose an intelligence system',
-    help: 'An intelligence system is one machine that thinks: a hardware platform running software. The hardware sets its IQ; software upgrades can raise it to 1.5×, and only new hardware goes further. A new one must be smarter than your best, and designing it needs a mind with about half its IQ. Your smartest mind sets which research you can do.',
+    help: 'An intelligence system is one machine that thinks: a hardware platform running software. A new one is up to 100 IQ smarter than your best and replaces the old one for good. Jev offers three perk-and-drawback pairs, and you pick one. Each platform gets one software upgrade, ever; after that you need another platform. The smartest platforms are paid for in a resource your units make. Your smartest mind sets which research you can do.',
     presets: 'Pick one to fill the spec, or write your own:',
     name: 'e.g. Custom AI Server, Optical Neural Chip',
     description: 'What is it? (optional, but helps Jev)',
@@ -341,7 +367,17 @@ const strategy = reactive({
 })
 
 const unit = reactive(guessUnitSpec())
-const mind = reactive({ iq: props.request.iq ?? guessIQ(game.state), hardware: '', software: '' })
+const mind = reactive({
+  step: props.request.iq ? stepFor(game.state, props.request.iq) : MAX_IQ_STEP,
+  hardware: '',
+  software: ''
+})
+const current = computed(() => bestMind(game.state))
+const bestNow = computed(() => Math.round(bestIQ(game.state)))
+const stepHint = computed(() => {
+  const tier = platformGateTier(bestNow.value + mind.step)
+  return tier === null ? 'Any stock may pay.' : `Paid in a tier ${tier}+ resource your units make.`
+})
 const stocks = computed(() => game.state.resources.filter((r) => r.kind === 'stock'))
 const income = reactive({ outputId: props.request.outputId ?? stocks.value[0]?.id ?? '', perId: '' })
 
@@ -356,14 +392,7 @@ const presetItems = computed<PresetItem[]>(() => {
   if (kind === 'strategy') return STRATEGY_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
   if (kind === 'income') return INCOME_PRESETS.map((p) => ({ ...p, icon: '💸', blocked: blocked(p.name) }))
   if (kind === 'cover') return COVER_PRESETS.map((p) => ({ ...p, icon: '🕶️', blocked: blocked(p.name) }))
-  if (kind === 'mind') {
-    const best = Math.round(bestIQ(game.state))
-    return MIND_PRESETS.map((p) => ({
-      ...p,
-      icon: '🧠',
-      blocked: blocked(p.name) ?? (p.iq <= best ? `No smarter than your best, IQ ${best}.` : null)
-    }))
-  }
+  if (kind === 'mind') return MIND_PRESETS.map((p) => ({ ...p, icon: '🧠', blocked: blocked(p.name) }))
   return UNIT_PRESETS.map((p) => ({ ...p, icon: '🏭', blocked: blocked(p.name) }))
 })
 
@@ -408,7 +437,7 @@ function applyPreset(presetId: string) {
     if (!p) return
     name.value = p.name
     description.value = p.description
-    Object.assign(mind, { iq: p.iq, hardware: p.hardware, software: p.software })
+    Object.assign(mind, { hardware: p.hardware, software: p.software })
   } else {
     const p = UNIT_PRESETS.find((x) => x.name === presetId)
     if (!p) return
@@ -430,13 +459,6 @@ function introduce(resourceName: string) {
 }
 
 if (props.request.preset) applyPreset(props.request.preset)
-const range = computed(() => designRange(game.state))
-const iqHint = computed(() =>
-  mind.iq > range.value[1]
-    ? `Your best mind can design about IQ ${range.value[0]}–${range.value[1]}. Above that, it can wait as research until you’re smarter.`
-    : `Within reach: about IQ ${range.value[0]}–${range.value[1]}, depending on how radical Jev judges it.`
-)
-
 onMounted(async () => {
   dialog.value?.showModal?.()
   await nextTick()
@@ -451,7 +473,7 @@ const input = computed<ProposalInput>(() => {
   if (kind === 'unit') {
     return { kind, spec: { ...base, builderId: unit.builderId, first } }
   }
-  if (kind === 'mind') return { kind, spec: { ...base, iq: mind.iq, hardware: mind.hardware, software: mind.software } }
+  if (kind === 'mind') return { kind, spec: { ...base, step: mind.step, hardware: mind.hardware, software: mind.software } }
   if (kind === 'income') return { kind, spec: { ...base, outputId: income.outputId, perId: income.perId || null } }
   if (kind === 'cover') return { kind, spec: base }
   return { kind: 'resource', spec: base }
@@ -506,6 +528,17 @@ const unitChoice = computed({
   }
 })
 const mindDraft = computed(() => (verdict.value?.kind === 'mind' ? draftMind(game.state, verdict.value) : null))
+const mindOptions = computed(() => {
+  const v = verdict.value
+  if (v?.kind !== 'mind') return []
+  return v.options.map((o, i) => ({ i, perk: computeTrait(o.perk), drawback: computeTrait(o.drawback) }))
+})
+const mindChoice = computed({
+  get: () => (verdict.value?.kind === 'mind' ? verdict.value.choice : 0),
+  set: (choice: number) => {
+    if (verdict.value?.kind === 'mind') verdict.value.choice = choice
+  }
+})
 const incomeDraft = computed(() => (verdict.value?.kind === 'income' ? draftIncome(game.state, verdict.value) : null))
 // Cover previews next week, which structuredClones the state: it needs the raw state, not the proxy.
 const coverDraft = computed(() => (verdict.value?.kind === 'cover' ? draftCover(toRaw(game.state), verdict.value) : null))

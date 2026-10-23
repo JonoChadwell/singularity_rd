@@ -39,13 +39,14 @@
         <template v-if="ui.tab === 'minds'">
           <div class="tab-head">
             <p class="muted small">
-              Your smartest mind sets how hard a research you can do. Each one is a single machine.
+              Your platform sets how hard a research you can do. One machine at a time: a new platform replaces it
+              for good, and each gets one software upgrade.
             </p>
             <button class="add" :disabled="!!mindLock" :title="mindLock ?? ''" @click="ui.openInvent({ kind: 'mind' })">
-              + Intelligence system
+              + New platform
             </button>
           </div>
-          <p v-if="mindLock" class="muted small locked">🔒 New minds: {{ mindLock }}</p>
+          <p v-if="mindLock" class="muted small locked">🔒 New platforms: {{ mindLock }}</p>
           <MindCard v-for="m in minds" :key="m.id" :mind="m" />
         </template>
 

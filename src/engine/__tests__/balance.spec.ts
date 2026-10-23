@@ -52,7 +52,7 @@ describe('balance', () => {
   })
 
   it('never asks for less than IQ 100, and makes harder research cost more', () => {
-    for (const table of [B.TIERS, B.INCOME_DIFFICULTY, B.UPGRADE_DIFFICULTY]) {
+    for (const table of [B.TIERS, B.INCOME_DIFFICULTY]) {
       for (const [label, iq] of table) expect(iq, label).toBeGreaterThanOrEqual(B.MIN_IQ)
       for (let i = 1; i < table.length; i++) expect(table[i]![2]).toBeGreaterThan(table[i - 1]![2])
     }
@@ -60,12 +60,26 @@ describe('balance', () => {
     expect(B.INCOME_COST_WEEKS).toBeLessThanOrEqual(4)
   })
 
-  it('allows two to four tiers: the software ceiling and the leap rule cap each leap', () => {
-    // A tier at its software ceiling can design at most this multiple of its base IQ.
-    const leap = (share: number) => B.IQ_CEILING / share
-    expect(leap(B.DESIGN_BAR)).toBeCloseTo(3)
-    expect(Math.ceil(Math.log(10) / Math.log(2))).toBe(4)
-    expect(Math.ceil(Math.log(10) / Math.log(leap(B.LEAP_MIN)))).toBe(2)
+  it('reaches IQ 450 with two new platforms and their software, the second one only needing to exist', () => {
+    // Every option at full size: the starting software, a platform, its software, a platform.
+    let iq = B.START_IQ
+    const path: number[] = []
+    for (let i = 0; i < 4; i++) path.push((iq += B.MAX_IQ_STEP))
+    expect(path).toEqual([200, 300, 400, 500])
+    // Without the second platform's own software, the second platform still clears 450;
+    // without the second platform, the first one's software (400) doesn't.
+    const goal = B.GOAL_APPROACH[2]![3]
+    expect(goal).toBeLessThanOrEqual(path[3]!)
+    expect(goal).toBeGreaterThan(path[2]!)
+  })
+
+  it('makes a platform cost far more than a software upgrade, and gates the smart ones on units', () => {
+    for (const iq of [200, 300, 400, 500]) {
+      const software = B.MIND_UPGRADE_SHARE * B.TRAIT_SOFTWARE_COST * (B.softwareCost(iq) - B.softwareCost(iq - B.MAX_IQ_STEP))
+      expect(software).toBeLessThan(B.mindDesignCost(iq) / 10)
+    }
+    expect([100, 299, 300, 449, 450, 600].map(B.platformGateTier)).toEqual([null, null, 1, 1, 2, 2])
+    expect(B.platformGateTier(B.START_IQ + B.MAX_IQ_STEP)).toBeNull()
   })
 
   it('makes goals that need less brilliance need more resources', () => {
@@ -101,10 +115,11 @@ describe('Phase 1 bots', () => {
     for (const a of APPROACHES) expect((await play(await phase1(a), chain2, 12)).won).not.toBeNull()
   })
 
-  it('get nothing for free: rushing to IQ 140 for the richest incomes doesn’t pay in ten weeks', async () => {
+  it('get little for free: rushing the server’s one upgrade for the richest incomes wins at most a week sooner', async () => {
+    // A full-size upgrade is IQ 200, which unlocks Jev's richest income band, but it is dear.
     const rushed = await play(await phase1(2), smart, 12)
     const steady = await play(await phase1(2), flat, 12)
-    expect(rushed.won ?? 11).toBeGreaterThanOrEqual(steady.won!)
+    expect(rushed.won ?? 11).toBeGreaterThanOrEqual(steady.won! - 1)
   })
 })
 

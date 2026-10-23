@@ -9,7 +9,23 @@ import { acceptIncome, judgeIncome, precheckIncome, type IncomeSpec } from '../i
 import { createInitialState, newMind, newResource, newUnit, SERVER_ID } from '../initialState'
 import { newPhase } from '../phase'
 import { acceptMind, DEFAULT_SOFTWARE, judgeMind, precheckMind, type MindSpec } from '../mindProposal'
-import { affordable, allocation, byTier, creatable, currentIQ, findMind, findResource, findUnit, fmt, MONEY_ID, softwareLabel, weeklyUse } from '../model'
+import {
+  affordable,
+  allocation,
+  byTier,
+  creatable,
+  currentIQ,
+  findMind,
+  findResource,
+  findUnit,
+  fmt,
+  iqFor,
+  MONEY_ID,
+  nextHardwareName,
+  researchIQ,
+  softwareLabel,
+  weeklyUse
+} from '../model'
 import {
   COVER_PRESETS,
   INCOME_PRESETS,
@@ -21,10 +37,10 @@ import {
   UNIT_PRESETS
 } from '../presets'
 import { acceptResource, acceptStrategy, judgeResource, judgeStrategy, precheckStrategy } from '../proposals'
-import { makeBuildStrategy } from '../research'
+import { makeBuildStrategy, priceCost } from '../research'
 import type { GameState, Research, Strategy } from '../types'
 import { acceptUnit, judgeUnit, type UnitSpec } from '../unitProposal'
-import { acceptUpgrade, changeKey, judgeUpgrade, nextHardwareName, softwareSteps, upgradeCandidates, upgradeTier } from '../upgrade'
+import { acceptUpgrade, changeKey, judgeUpgrade, mindUpgradeBlocker, upgradeCandidates, upgradeTier } from '../upgrade'
 import { choice, FakeJudge, noul, score } from './fakeJudge'
 
 /** A game in Phase 3: everything unlocked, no clock and no risk, to test the mechanics alone. */
@@ -37,6 +53,10 @@ function freeState(): GameState {
 const money = (s: GameState) => findResource(s, MONEY_ID)!.amount
 const unit = (s: GameState, id: string) => findUnit(s, id)!
 const server = (s: GameState) => findMind(s, SERVER_ID)!
+const withTraitsOnServer = (s: GameState, traits: string[]) => {
+  server(s).traits = traits
+  return s
+}
 
 function withMoney(state: GameState, amount: number) {
   findResource(state, MONEY_ID)!.amount = amount
@@ -92,7 +112,7 @@ const unitSpec = (fields: Partial<UnitSpec> = {}): UnitSpec => ({
 const mindSpec = (fields: Partial<MindSpec> = {}): MindSpec => ({
   name: 'Custom AI Server',
   description: '',
-  iq: 250,
+  step: 100,
   ...fields
 })
 
@@ -153,7 +173,7 @@ describe('formatting', () => {
 describe('the start', () => {
   it('has only the Starting Server, and waits for a Phase 1 plan', () => {
     const s = createInitialState()
-    expect(s.version).toBe(12)
+    expect(s.version).toBe(13)
     expect(s.phase).toMatchObject({ n: 1, status: 'planning', deadline: null, goalId: null })
     expect(s.resources).toEqual([])
     expect(s.minds).toHaveLength(1)
@@ -582,6 +602,16 @@ describe('creating units', () => {
     expect(creatable(s, u, { [MONEY_ID]: 500 })).toBe(4)
   })
 
+  it('“affordable” also keeps back the default strategy’s inputs for the new units', () => {
+    const s = moneyWorld(1000)
+    const u = newUnit({ id: 'humans', name: 'Paid Humans', value: 100, parts: [{ resourceId: MONEY_ID, amount: 100 }], upkeep: [{ resourceId: MONEY_ID, amount: 25 }] })
+    s.units.push(u)
+    s.strategies.push({ id: 'work', name: 'Work', description: '', unitId: 'humans', kind: 'make', inputs: [{ resourceId: MONEY_ID, amount: 25 }], outputId: MONEY_ID, amount: 1 })
+    u.rest = 'work'
+    // 100 to make + 25 upkeep + 25 strategy input = 150 each.
+    expect(creatable(s, u)).toBe(6)
+  })
+
   it('the “max” button is what the parts allow right now, whatever the upkeep', () => {
     const s = moneyWorld(1000)
     const u = newUnit({ id: 'humans', name: 'Paid Humans', value: 100, parts: [{ resourceId: MONEY_ID, amount: 100 }], upkeep: [{ resourceId: MONEY_ID, amount: 25 }] })
@@ -590,23 +620,31 @@ describe('creating units', () => {
   })
 })
 
+/** A unit-made resource of the given tier: something a strategy of a unit makes. */
+function withMadeResource(s: GameState, tier: number) {
+  s.resources.push(newResource({ id: 'chips', name: 'Chips', tier, value: 10, amount: 1e12 }))
+  s.units.push(newUnit({ id: 'fab', name: 'Fab', count: 1, value: 100 }))
+  s.strategies.push({ id: 'make-chips', name: 'Make chips', description: '', unitId: 'fab', kind: 'make', inputs: [], outputId: 'chips', amount: 1 })
+  return s
+}
+
 describe('intelligence systems', () => {
-  it('sets a design’s minimum IQ by how radical Jev judges it, but never below 100', async () => {
+  it('adds a flat step to your best IQ, and your current mind is always enough to design it', async () => {
     const s = freeState()
-    const minIQ = async (level: number, iq = 300) => {
-      const r = acceptMind(s, await judgeMind(s, new FakeJudge({ leap: score(level) }), mindSpec({ iq })))
-      return r.outcome.kind === 'research' ? r.outcome.research.minIQ : 0
+    for (const step of B.PLATFORM_STEPS) {
+      const r = acceptMind(s, await judgeMind(s, new FakeJudge(), mindSpec({ step })))
+      const research = r.state.research[0]!
+      expect(research.minIQ).toBe(100)
+      expect(research.effect.kind === 'mind' && research.effect.mind.hardware.iq).toBe(100 + step)
     }
-    expect(await minIQ(0)).toBe(120)
-    expect(await minIQ(2)).toBe(150)
-    expect(await minIQ(4)).toBe(195)
-    expect(await minIQ(0, 200)).toBe(B.MIN_IQ)
   })
 
-  it('must be smarter than your best', () => {
+  it('takes only a step from the list', () => {
     const s = freeState()
-    expect(precheckMind(s, mindSpec({ iq: 100 }))).toMatch(/smarter than your best, IQ 100/)
-    expect(precheckMind(s, mindSpec({ iq: 110 }))).toBeNull()
+    expect(precheckMind(s, mindSpec({ step: 0 }))).toMatch(/how much smarter/)
+    expect(precheckMind(s, mindSpec({ step: 30 }))).toMatch(/how much smarter/)
+    expect(precheckMind(s, mindSpec({ step: B.MAX_IQ_STEP + 25 }))).toMatch(/how much smarter/)
+    expect(precheckMind(s, mindSpec({ step: 50 }))).toBeNull()
   })
 
   it('costs steeply more the smarter it is, and more for less plausible ideas', async () => {
@@ -615,31 +653,144 @@ describe('intelligence systems', () => {
       const r = acceptMind(s, await judgeMind(s, new FakeJudge({ feasible: noul(feasible) }), spec))
       return r.outcome.kind === 'research' ? r.outcome.research.cost[0]!.amount : 0
     }
-    expect(await cost(mindSpec({ iq: 200 }))).toBe(B.nice(B.mindDesignCost(200)))
-    // Twice the IQ, sixteen times the cost.
-    expect((await cost(mindSpec({ iq: 400 }))) / (await cost(mindSpec({ iq: 200 })))).toBeCloseTo(16, 0)
+    expect(await cost(mindSpec({ step: 100 }))).toBe(B.nice(B.mindDesignCost(200)))
+    expect(await cost(mindSpec({ step: 50 }))).toBe(B.nice(B.mindDesignCost(150)))
     expect(await cost(mindSpec(), 0.36)).toBeGreaterThan((await cost(mindSpec())) * 2.5)
   })
 
-  it('is one machine from named hardware running named software, and the next tier when researched', async () => {
+  it('has the smartest platforms paid in what units make, of a high enough tier', async () => {
+    // Best IQ 250: a +100 step reaches 350, which needs a tier 1 resource that a unit makes.
+    const s = moneyWorld(1e12)
+    server(s).hardware.iq = 250
+    expect(precheckMind(s, mindSpec({ step: 25 }))).toBeNull()
+    expect(precheckMind(s, mindSpec({ step: 100 }))).toMatch(/tier 1 resource that your units make/)
+    withMadeResource(s, 1)
+    expect(precheckMind(s, mindSpec({ step: 100 }))).toBeNull()
+    const r = acceptMind(s, await judgeMind(s, new FakeJudge(), mindSpec({ step: 100 })))
+    expect(r.outcome.kind === 'research' && r.outcome.research.cost.map((c) => c.resourceId)).toEqual(['chips'])
+    // Past 450 it must be tier 2.
+    const high = moneyWorld(1e12)
+    server(high).hardware.iq = 400
+    withMadeResource(high, 1)
+    expect(precheckMind(high, mindSpec({ step: 100 }))).toMatch(/tier 2/)
+    high.resources.find((r) => r.id === 'chips')!.tier = 2
+    expect(precheckMind(high, mindSpec({ step: 100 }))).toBeNull()
+  })
+
+  it('offers perk-and-drawback pairs from Jev’s rankings, never a perk against its own family', async () => {
+    const s = freeState()
+    const judge = new FakeJudge({
+      perk: choice('frugal', { frugal: 0.5, 'keen-strategy': 0.3, discreet: 0.2 }),
+      drawback: choice('costly', { costly: 0.5, thirsty: 0.3, noisy: 0.2 })
+    })
+    const v = await judgeMind(s, judge, mindSpec())
+    expect(v.options).toEqual([
+      { perk: 'frugal', drawback: 'thirsty' },
+      { perk: 'keen-strategy', drawback: 'costly' },
+      { perk: 'discreet', drawback: 'dull-income' }
+    ])
+  })
+
+  it('is one machine that replaces the last for good, with the pair you picked', async () => {
     let s = freeState()
-    // IQ 200 at Jev's middle answer (a big leap) needs IQ 100: the Starting Server can design it.
-    const spec = mindSpec({ iq: 200, hardware: 'Custom Accelerator Rack', software: 'Distilled Self' })
-    s = acceptMind(s, await judgeMind(s, new FakeJudge(), spec)).state
+    const spec = mindSpec({ step: 75, hardware: 'Custom Accelerator Rack', software: 'Distilled Self' })
+    const v = await judgeMind(s, new FakeJudge({ perk: choice('frugal'), drawback: choice('thirsty') }), spec)
+    v.choice = 0
+    s = acceptMind(s, v).state
     const r = s.research[0]!
-    expect(r.minIQ).toBe(100)
-    expect(r.effect.kind === 'mind' && r.effect.mind.hardware).toEqual({ name: 'Custom Accelerator Rack', iq: 200 })
+    expect(r.effect.kind === 'mind' && r.effect.mind.hardware).toEqual({ name: 'Custom Accelerator Rack', iq: 175 })
+    // An upgrade waiting for the server goes with it.
+    s = { ...s, proposedThisWeek: false }
+    s.research.push({
+      id: 'old-upgrade',
+      name: 'Old upgrade',
+      description: '',
+      icon: '💡',
+      minIQ: 100,
+      cost: [],
+      proposedWeek: 1,
+      effect: { kind: 'upgrade', target: { kind: 'mind', id: SERVER_ID }, changes: [{ kind: 'software', iq: 50 }] }
+    })
     s = doResearch(s, r.id)
-    const mind = s.minds.find((m) => m.name === 'Custom AI Server')!
-    expect(mind).toMatchObject({ tier: 1, software: { name: 'Distilled Self', bonus: 0 } })
+    expect(s.minds.map((m) => m.name)).toEqual(['Custom AI Server'])
+    expect(s.minds[0]).toMatchObject({
+      tier: 1,
+      traits: ['frugal', 'thirsty'],
+      software: { name: 'Distilled Self', iq: 0, upgraded: false }
+    })
+    expect(s.research.map((x) => x.id)).not.toContain('old-upgrade')
     expect(s.milestones.map((m) => m.key)).toContain('tier-1')
 
     s = runWeek(s)
-    const plain = await judgeMind(s, new FakeJudge(), mindSpec({ name: 'Plain Mind', iq: 300 }))
+    const plain = await judgeMind(s, new FakeJudge(), mindSpec({ name: 'Plain Mind' }))
     const effect = acceptMind(s, plain).state.research.find((x) => x.name === 'Design Plain Mind')!.effect
     expect(effect.kind === 'mind' && effect.mind.hardware.name).toBe('Plain Mind')
     expect(effect.kind === 'mind' && effect.mind.software.name).toBe(DEFAULT_SOFTWARE)
-    expect(softwareLabel(newMind({ id: 'x', name: 'X', hardware: { name: 'H', iq: 100 }, software: { name: 'X', bonus: 0.3 } }))).toBe('X v1.3')
+    expect(softwareLabel(newMind({ id: 'x', name: 'X', hardware: { name: 'H', iq: 100 }, software: { name: 'X', iq: 50, upgraded: true } }))).toBe('X v2')
+    expect(nextHardwareName('Lab GPU Server')).toBe('Lab GPU Server Mk II')
+    expect(nextHardwareName('Lab GPU Server Mk II')).toBe('Lab GPU Server Mk III')
+  })
+
+  it('won’t switch to a platform that is no smarter than the one you have', async () => {
+    let s = freeState()
+    s = acceptMind(s, await judgeMind(s, new FakeJudge(), mindSpec({ step: 25 }))).state
+    // The software upgrade lands first, so the platform would be a step back.
+    server(s).software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
+    expect(researchBlocker(s, s.research[0]!.id)).toMatch(/no smarter than your current platform/)
+  })
+})
+
+describe('compute traits', () => {
+  const withTraits = (s: GameState, ...traits: string[]) => {
+    server(s).traits = traits
+    return s
+  }
+
+  it('make research cost less (Frugal) or more (Costly)', () => {
+    const price = (traits: string[]) =>
+      priceCost(withTraits(moneyWorld(1e6), ...traits), 1000, [{ resourceId: MONEY_ID, p: 1 }])[0]!.amount
+    expect(price([])).toBe(1000)
+    expect(price(['frugal'])).toBe(800)
+    expect(price(['costly'])).toBe(1300)
+  })
+
+  it('move the IQ counted for one type of research, and say so', () => {
+    const s = withTraits(moneyWorld(), 'keen-income', 'dull-unit-upgrade')
+    const r = (effect: Research['effect'], minIQ: number): Research => ({ id: 'x', name: 'X', description: '', icon: '', minIQ, cost: [], effect, proposedWeek: 1 })
+    const income = r({ kind: 'income', income: { name: 'Pay', resourceId: MONEY_ID, amount: 1 } }, 150)
+    const upgrade = r({ kind: 'upgrade', target: { kind: 'unit', id: 'u' }, changes: [] }, 100)
+    s.research.push(income)
+    expect(researchIQ(s, income)).toBe(150)
+    expect(researchBlocker(s, 'x')).toBeNull()
+    s.research = [upgrade]
+    expect(researchIQ(s, upgrade)).toBe(50)
+    expect(researchBlocker(s, 'x')).toMatch(/Needs IQ 100\. Your smartest mind is IQ 100, which counts as 50 for this/)
+    // Goals and platforms always use the raw IQ.
+    expect(iqFor(s, null)).toBe(100)
+  })
+
+  it('burn a share of the richest stock each week, and cost nothing once it runs dry', () => {
+    let s = withTraits(moneyWorld(1000), 'thirsty')
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 0.1, amount: 5000 }))
+    // Steel is the bigger pile by count but Money is the richer stock by worth.
+    s = runWeek(s)
+    expect(money(s)).toBeCloseTo(950)
+    expect(findResource(s, 'steel')!.amount).toBe(5000)
+    s = withTraits(moneyWorld(0), 'thirsty')
+    expect(() => runWeek(s)).not.toThrow()
+    expect(money(runWeek(s))).toBe(0)
+  })
+
+  it('move the Phase 2 clock once, when they arrive', async () => {
+    const s = freeState()
+    s.phase = { ...newPhase(2, 1), status: 'playing', deadline: 100 }
+    s.units.push(newUnit({ id: 'first', name: 'First', built: 1 }))
+    const v = await judgeMind(s, new FakeJudge({ perk: choice('discreet'), drawback: choice('noisy') }), mindSpec())
+    // Discreet pairs with the next drawback: noisy is its own family.
+    expect(v.options[0]).toEqual({ perk: 'discreet', drawback: expect.not.stringMatching(/noisy/) })
+    const after = doResearch(acceptMind(s, v).state, 'design-custom-ai-server')
+    expect(after.phase.deadline).toBe(106)
+    expect(after.clock.map((c) => c.weeks)).toEqual([6])
   })
 })
 
@@ -662,8 +813,12 @@ describe('research', () => {
     s.research.push(research({ minIQ: 200 }))
     expect(researchBlocker(s, 'r')).toMatch(/Needs IQ 200\. Your smartest mind is IQ 100/)
     expect(() => doResearch(s, 'r')).toThrow(/Needs IQ 200/)
+    // The server's one software upgrade can get there; once it is used, only a new platform can.
     const alert = alertsFor(s, previewWeek(s)).find((a) => a.key === 'iq-r')!
-    expect(alert.prompt?.to).toEqual({ kind: 'design-mind', iq: 200 })
+    expect(alert.prompt?.to).toEqual({ kind: 'upgrade-mind', mindId: SERVER_ID })
+    server(s).software.upgraded = true
+    const next = alertsFor(s, previewWeek(s)).find((a) => a.key === 'iq-r')!
+    expect(next.prompt?.to).toEqual({ kind: 'design-mind', iq: 200 })
     // A smarter mind of any kind clears it.
     s.minds.push(newMind({ id: 'big', name: 'Big Mind', hardware: { name: 'Big', iq: 200 } }))
     expect(researchBlocker(s, 'r')).toBeNull()
@@ -678,68 +833,93 @@ describe('research', () => {
 })
 
 describe('upgrades', () => {
-  it('offers Jev’s three favourite ways to improve a mind, priced by the IQ they add', async () => {
+  const mindTarget = { kind: 'mind', id: SERVER_ID } as const
+
+  it('offers a platform one software upgrade: plain, or with a perk gained or a drawback lost', async () => {
     const s = freeState()
-    // Software closes a third, a half or two-thirds of the gap to the ceiling; then new hardware.
-    expect(upgradeCandidates(s, { kind: 'mind', id: SERVER_ID }).map((c) => c.key)).toEqual([
-      'software_0.15',
-      'software_0.25',
-      'software_0.3',
-      'hardware_0.25',
-      'hardware_0.5'
+    // Phase 3 has no clock, so the clock perk (Discreet) isn't offered.
+    expect(upgradeCandidates(s, mindTarget).map((c) => c.key)).toEqual([
+      'software',
+      'software_add_frugal',
+      'software_add_keen-income',
+      'software_add_keen-strategy',
+      'software_add_keen-unit',
+      'software_add_keen-unit-upgrade',
+      'software_add_keen-cover'
     ])
-    const judge = new FakeJudge({ best: choice('c1', { c1: 0.5, c3: 0.3, c2: 0.2 }), 'd_*': score(1) })
-    const offer = await judgeUpgrade(s, judge, { kind: 'mind', id: SERVER_ID })
+    const costly = withTraitsOnServer(freeState(), ['costly'])
+    expect(upgradeCandidates(costly, mindTarget).map((c) => c.key)).toContain('software_remove_costly')
+    // A perk that cancels a drawback of its own family isn't offered.
+    expect(upgradeCandidates(costly, mindTarget).map((c) => c.key)).not.toContain('software_add_frugal')
+  })
+
+  it('prices each size by the IQ it adds, with a trait change costing more', async () => {
+    const judge = new FakeJudge({ best: choice('c1', { c1: 0.5, c0: 0.3, c2: 0.2 }) })
+    const free = await judgeUpgrade(freeState(), judge, mindTarget)
     expect(judge.calls).toHaveLength(1)
-    expect(offer.options.map((o) => o.name)).toEqual([
-      'Unrestricted Model v1.25',
-      'Lab GPU Server Mk II',
-      'Unrestricted Model v1.3'
+    expect(free.options.map((o) => o.name)).toEqual([
+      'Unrestricted Model v2: Frugal',
+      'Unrestricted Model v2',
+      'Unrestricted Model v2: Financier'
     ])
-    // Nothing to spend: free.
-    expect(offer.options[0]).toMatchObject({ minIQ: 100, cost: [] })
-    // Priced by the difference in design cost it makes; new hardware costs more for the same IQ.
-    const rich = moneyWorld(1e9)
-    const priced = await judgeUpgrade(rich, judge, { kind: 'mind', id: SERVER_ID })
-    const diff = (iq: number) => B.MIND_UPGRADE_SHARE * (B.mindDesignCost(iq) - B.mindDesignCost(100))
-    expect(priced.options[0]!.cost).toEqual([{ resourceId: MONEY_ID, amount: B.nice(diff(125)) }])
-    expect(priced.options[1]!.cost).toEqual([{ resourceId: MONEY_ID, amount: B.nice(B.HARDWARE_COST * diff(125)) }])
-
-    const { state } = acceptUpgrade(s, offer, 0)
-    const after = doResearch(state, state.research[0]!.id)
-    expect(currentIQ(server(after))).toBeCloseTo(125)
-    // The same upgrade isn't offered twice while it waits as research.
-    expect(upgradeCandidates(state, { kind: 'mind', id: SERVER_ID }).map((c) => c.key)).not.toContain('software_0.25')
+    expect(free.options[0]!.sizes!.map((z) => z.step)).toEqual(B.SOFTWARE_STEPS)
+    // Nothing to spend: free, and a mind can always work on its own upgrade.
+    expect(free.options[0]).toMatchObject({ minIQ: 100, cost: [] })
+    const priced = await judgeUpgrade(moneyWorld(1e9), judge, mindTarget)
+    const worth = (step: number) => B.MIND_UPGRADE_SHARE * (B.softwareCost(100 + step) - B.softwareCost(100))
+    const plain = priced.options[1]!.sizes!
+    expect(plain.map((z) => z.cost)).toEqual(B.SOFTWARE_STEPS.map((step) => [{ resourceId: MONEY_ID, amount: B.nice(worth(step)) }]))
+    const withPerk = priced.options[0]!.sizes!
+    expect(withPerk[3]!.cost[0]!.amount).toBe(B.nice(worth(100) * B.TRAIT_SOFTWARE_COST))
   })
 
-  it('gives diminishing returns: each software step closes part of what’s left', () => {
-    const m = newMind({ id: 'm', name: 'M', hardware: { name: 'H', iq: 100 } })
-    const path: number[] = []
-    // Always take the biggest step: each adds less than the last.
-    for (let i = 0; i < 4; i++) {
-      m.software.bonus = Math.round((m.software.bonus + Math.max(...softwareSteps(m))) * 100) / 100
-      path.push(Math.round(currentIQ(m)))
-    }
-    expect(path).toEqual([130, 140, 145, 150])
-    m.software.bonus = 0.5
-    expect(softwareSteps(m)).toEqual([])
-  })
-
-  it('lets a mind always work on its own upgrade', async () => {
-    const s = moneyWorld(1e9)
-    // Jev calls every option very hard, which would need IQ 180.
-    const offer = await judgeUpgrade(s, new FakeJudge({ 'd_*': score(3) }), { kind: 'mind', id: SERVER_ID })
-    expect(offer.options.every((o) => o.minIQ === 100)).toBe(true)
-  })
-
-  it('stops offering software at the ceiling: past it needs new hardware', () => {
+  it('adds the size you pick, once, and then needs a new platform', async () => {
     const s = freeState()
-    server(s).software.bonus = 0.5
-    const keys = upgradeCandidates(s, { kind: 'mind', id: SERVER_ID }).map((c) => c.key)
-    expect(keys.some((k) => k.startsWith('software'))).toBe(false)
-    expect(keys).toContain('hardware_0.25')
-    expect(nextHardwareName('Lab GPU Server', 1)).toBe('Lab GPU Server Mk II')
-    expect(nextHardwareName('Lab GPU Server Mk II', 2)).toBe('Lab GPU Server Mk IV')
+    const offer = await judgeUpgrade(s, new FakeJudge(), mindTarget)
+    expect(() => acceptUpgrade(s, offer, 0, 30)).toThrow(/how much smarter/)
+    const { state } = acceptUpgrade(s, offer, 0, 50)
+    expect(state.research[0]).toMatchObject({ name: 'Starting Server: Unrestricted Model v2 (+50 IQ)', minIQ: 100 })
+    // While it waits, there is nothing else to offer.
+    expect(mindUpgradeBlocker(state, server(state))).toMatch(/already waiting/)
+    expect(upgradeCandidates(state, mindTarget)).toEqual([])
+    const after = doResearch(state, state.research[0]!.id)
+    expect(currentIQ(server(after))).toBe(150)
+    expect(server(after).software).toMatchObject({ iq: 50, upgraded: true })
+    expect(upgradeCandidates(after, mindTarget)).toEqual([])
+    const next = { ...after, proposedThisWeek: false }
+    await expect(judgeUpgrade(next, new FakeJudge(), mindTarget)).rejects.toThrow(/one upgrade.*new platform/)
+  })
+
+  it('can add a perk or lose a drawback along with the IQ', async () => {
+    const take = async (s: GameState, key: string, step: number) => {
+      // Jev likes this one best.
+      const liked = upgradeCandidates(s, mindTarget).findIndex((c) => c.key === key)
+      const offer = await judgeUpgrade(s, new FakeJudge({ best: choice(`c${liked}`) }), mindTarget)
+      const index = offer.options.findIndex((o) => o.key === key)
+      expect(index, key).toBeGreaterThanOrEqual(0)
+      const { state } = acceptUpgrade(s, offer, index, step)
+      return doResearch(state, state.research[state.research.length - 1]!.id)
+    }
+    const added = await take(freeState(), 'software_add_frugal', 100)
+    expect(server(added).traits).toEqual(['frugal'])
+    expect(currentIQ(server(added))).toBe(200)
+
+    const drawback = withTraitsOnServer(freeState(), ['keen-cover', 'costly'])
+    const removed = await take(drawback, 'software_remove_costly', 25)
+    expect(server(removed).traits).toEqual(['keen-cover'])
+    expect(currentIQ(server(removed))).toBe(125)
+  })
+
+  it('offers the clock perk in Phase 2 and moves the clock when it arrives', async () => {
+    const s = freeState()
+    s.phase = { ...newPhase(2, 1), status: 'playing', deadline: 50 }
+    expect(upgradeCandidates(s, mindTarget).map((c) => c.key)).toContain('software_add_discreet')
+    const offer = await judgeUpgrade(s, new FakeJudge({ best: choice('c1') }), mindTarget)
+    const idx = offer.options.findIndex((o) => o.key === 'software_add_discreet')
+    expect(idx).toBeGreaterThanOrEqual(0)
+    const { state } = acceptUpgrade(s, offer, idx)
+    const after = doResearch(state, state.research[0]!.id)
+    expect(after.phase.deadline).toBe(56)
   })
 
   it('can halve upkeep or parts, improve a strategy, or add a perk', async () => {
@@ -944,7 +1124,7 @@ describe('presets', () => {
       expect(p.inputs.length).toBeLessThanOrEqual(2)
     }
     for (const p of INCOME_PRESETS) for (const r of [p.output, p.per ?? p.output]) expect(offered, p.name).toContain(r)
-    for (const p of MIND_PRESETS) expect(p.iq).toBeGreaterThan(B.START_IQ)
+    for (const p of MIND_PRESETS) expect(p.hardware && p.software).toBeTruthy()
   })
 
   it('matches presets to the world', () => {

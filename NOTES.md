@@ -617,3 +617,27 @@ The designer asked to simplify before adding features. The game now works like t
 - On Windows, the running dev server missed command-line (`sed -i`) edits and served a stale
   module, which crashed the proposal dialog. Re-saving the files and reloading fixed it. If the UI
   seems dead after code changes, reload and check the console.
+
+---
+
+## 11. Intelligence rework (2026-10-21)
+
+After the designer's playtest `mviwc6ws-88n4b` (both phases won, week 47), the designer found the
+economy good and the Intelligence tab flat: IQ only gated research, and 8 of 40 research slots went
+on Starting Server upgrades (Mk II to Mk IX, IQ 135 to 1159) that were always affordable and had no
+visible effect. The rework is described in [INTELLIGENCE_DESIGN.md](INTELLIGENCE_DESIGN.md) and is
+built (save version 13). In short:
+
+- One platform at a time; a new one replaces the old for good and is a flat 25 to 100 IQ step over
+  your best.
+- Each new platform comes with a perk and a drawback from a fixed list (Jev offers three pairs).
+- Each platform gets one software upgrade, ever, in four sizes.
+- Platforms of IQ 300 and up are paid for in a resource units make, of tier 1 (tier 2 from 450).
+- The leap rule, the 1.5× software ceiling, "new hardware" upgrades and Jev's difficulty bands for
+  mind upgrades are gone.
+
+**Not yet playtested.** The numbers (costs, the exponent of 10 on platform cost, trait values, the
+gate tiers) are first guesses. Known open points: research thresholds above about IQ 500 are
+unreachable in Phase 2; in Phase 1 the server's one upgrade can reach IQ 200, and a bot that rushes
+it wins about a week sooner; the Phase 2 bots are still skipped, so the new platform steps have no
+balance test.

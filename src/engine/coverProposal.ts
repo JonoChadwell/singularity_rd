@@ -1,7 +1,7 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
 import { previewWeek } from './economy'
-import { bestIQ, costShortfall, findResource } from './model'
+import { costShortfall, findResource, iqFor } from './model'
 import { coverWeeks, lockReason, moveClock } from './phase'
 import {
   baseVerdict,
@@ -91,7 +91,8 @@ export function draftCover(state: GameState, v: CoverVerdict): { weeks: number; 
 export function coverBlocker(state: GameState, v: CoverVerdict): string | null {
   if (v.rejected) return 'This proposal was not accepted.'
   const { minIQ, cost } = draftCover(state, v)
-  if (bestIQ(state) < minIQ) return `Pulling this off needs IQ ${minIQ}; your smartest mind is IQ ${Math.round(bestIQ(state))}.`
+  const iq = iqFor(state, 'cover')
+  if (iq < minIQ) return `Pulling this off needs IQ ${minIQ}; your smartest mind counts as IQ ${Math.round(iq)} for it.`
   const short = costShortfall(state, cost)
   return short ? `You need ${short} to do it now.` : null
 }

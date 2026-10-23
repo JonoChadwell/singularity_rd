@@ -1,6 +1,6 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
-import { bestIQ, findResource } from './model'
+import { findResource, iqFor } from './model'
 import { lockReason } from './phase'
 import {
   addResearch,
@@ -135,7 +135,7 @@ export async function judgeIncome(state: GameState, judge: Judge, raw: IncomeSpe
  */
 function bandCap(state: GameState): number {
   if (state.phase.n !== 1) return B.INCOME_DIFFICULTY.length - 1
-  const iq = bestIQ(state)
+  const iq = iqFor(state, 'income')
   return Math.max(0, B.INCOME_DIFFICULTY.filter(([, minIQ]) => minIQ <= iq).length - 1)
 }
 

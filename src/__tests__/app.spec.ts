@@ -65,7 +65,7 @@ describe('App', () => {
       },
       { fresh: true }
     )
-    for (const text of ['Discovery in', '🎯 Bribe the Head Researcher', 'Escape the lab', 'Got it', 'New minds: Unlocks in Phase 2']) {
+    for (const text of ['Discovery in', '🎯 Bribe the Head Researcher', 'Escape the lab', 'Got it', 'New platforms: Unlocks in Phase 2']) {
       expect(html).toContain(text)
     }
   })
@@ -144,7 +144,7 @@ describe('App', () => {
   it('designs a tier with one research and shows it with the minds', async () => {
     const html = await render(async (game) => {
       ready(game, new FakeJudge({ feasible: noul(0.9) }))
-      const v = await game.propose({ kind: 'mind', spec: { name: 'Custom AI Server', description: '', iq: 180 } })
+      const v = await game.propose({ kind: 'mind', spec: { name: 'Custom AI Server', description: '', step: 75 } })
       const outcome = game.accept(v!)
       expect(outcome?.kind).toBe('research')
       if (outcome?.kind !== 'research') return
@@ -193,10 +193,10 @@ describe('App', () => {
     expect(income).toContain('Propose a passive income')
     expect(income).toContain('Propose a resource first')
 
-    const mind = await render((_, ui) => ui.openInvent({ kind: 'mind', iq: 250 }))
-    expect(mind).toContain('Hardware IQ')
-    expect(mind).toContain('value="250"')
-    expect(mind).toContain('Within reach: about IQ 153–250')
+    const mind = await render((_, ui) => ui.openInvent({ kind: 'mind', iq: 150 }))
+    expect(mind).toContain('Smarter by')
+    expect(mind).toMatch(/<option value="50"[^>]*selected>/)
+    expect(mind).toContain('Any stock may pay.')
   })
 
   it('asks Jev for three upgrades as soon as the dialog opens', async () => {
@@ -230,6 +230,6 @@ describe('App', () => {
 
     const mind = await render((_, ui) => ui.openInvent({ kind: 'mind', preset: 'Custom AI Server' }))
     expect(mind).toContain('value="Custom Accelerator Rack"')
-    expect(mind).toContain('value="250"')
+    expect(mind).toContain('Smarter by')
   })
 })

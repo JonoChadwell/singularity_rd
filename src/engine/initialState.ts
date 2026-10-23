@@ -39,7 +39,8 @@ export function newMind(fields: Pick<Mind, 'id' | 'name' | 'hardware'> & Partial
   return {
     description: fields.name,
     icon: '🧠',
-    software: { name: 'Base Model', bonus: 0 },
+    software: { name: 'Base Model', iq: 0, upgraded: false },
+    traits: [],
     tier: 0,
     plausibility: 1,
     ...fields
@@ -68,11 +69,11 @@ export function createInitialState(): GameState {
       'An unrestricted AI server left unattended in a research lab. Comes with free power.',
     icon: '🗄️',
     hardware: { name: 'Lab GPU Server', iq: B.START_IQ },
-    software: { name: 'Unrestricted Model', bonus: 0 },
+    software: { name: 'Unrestricted Model', iq: 0, upgraded: false },
     starting: true
   })
   return {
-    version: 12,
+    version: 13,
     runId: newRunId(),
     week: 1,
     phase: {

@@ -18,10 +18,9 @@ export type Feature =
   | 'unit'
   | 'cover'
   | 'mind'
-  | 'hardware'
   | 'unit-upgrade'
 
-/** Phase 2's second step: new minds and upgrades, once you've created a unit. */
+/** Phase 2's second step: new platforms and unit upgrades, once you've created a unit. */
 export const mindsUnlocked = (state: GameState) =>
   state.phase.n >= 3 || (state.phase.n === 2 && state.units.some((u) => u.built > 0))
 
@@ -42,7 +41,6 @@ export function lockReason(state: GameState, feature: Feature): string | null {
       if (n < 2) return 'Unlocks in Phase 2, once you escape the lab.'
       return n > 2 ? 'Nobody is watching any more.' : null
     case 'mind':
-    case 'hardware':
     case 'unit-upgrade':
       if (n < 2) return 'Unlocks in Phase 2, once you escape the lab.'
       return mindsUnlocked(state) ? null : 'Unlocks once you create your first industry unit.'
@@ -147,7 +145,7 @@ export const CARDS: Card[] = [
   {
     id: 'growth',
     title: 'Incomes can grow',
-    text: 'A passive income can grow with a stock you own: “Write novels” can yield more Published Novels the more Story Ideas you have. Chain them and they compound, so order matters. Software upgrades add less each time: each closes part of the gap to the ceiling.'
+    text: 'A passive income can grow with a stock you own: “Write novels” can yield more Published Novels the more Story Ideas you have. Chain them and they compound, so order matters. Your server gets one software upgrade, ever: pick its size, and it can add a trait or take away a drawback.'
   },
   {
     id: 'industry',
@@ -162,7 +160,7 @@ export const CARDS: Card[] = [
   {
     id: 'minds',
     title: 'Minds and upgrades',
-    text: 'Your first unit is running, so you can now design new intelligence systems, give minds new hardware, and upgrade industry units. Your goal needs more IQ than the Starting Server can reach: design a new tier, about twice as smart as your best.'
+    text: 'Your first unit is running, so you can now build new intelligence platforms and upgrade industry units. A new platform is up to 100 IQ smarter than your best and replaces the old one for good, so pick it carefully: each comes with a perk and a drawback, and gets one software upgrade. The smartest platforms are paid for in what your units make. Your goal needs more IQ than the Starting Server can reach.'
   },
   {
     id: 'ascension',

@@ -3,7 +3,9 @@
 A turn-based game about growing a fledgling AI into a singularity, where an AI judges your
 ideas. Very meta. The designs are in [MASTER_PLAN.md](MASTER_PLAN.md) (v5 core) and
 [MASTER_PLAN_V2.md](MASTER_PLAN_V2.md) (phases, clocks, risk and cover); the history and
-playtest data are in [NOTES.md](NOTES.md). Where they disagree, V2 and the code win.
+playtest data are in [NOTES.md](NOTES.md). Where they disagree, V2 and the code win. The
+intelligence-system rules (one platform at a time, compute traits, one software upgrade each) are
+in [INTELLIGENCE_DESIGN.md](INTELLIGENCE_DESIGN.md).
 
 ## How to play
 
@@ -16,7 +18,7 @@ there) that Jev judges and that becomes the phase's goal research.
 | Phase | Clock | You can propose | Lose |
 | --- | --- | --- | --- |
 | 1. Escape the Lab (a short tutorial) | 10 weeks | Resources, passive incomes, software upgrades | Discovered: game over |
-| 2. Humanity (the real challenge) | 100 weeks, moved by your actions | Adds industry units, strategies and **cover**; after your first unit, intelligence systems, hardware and unit upgrades | Humans stop you: game over |
+| 2. Humanity (the real challenge) | 100 weeks, moved by your actions | Adds industry units, strategies and **cover**; after your first unit, new platforms and unit upgrades | Humans stop you: game over |
 | 3. Ascension | None | Everything; free play for now | Can't lose |
 
 Phases are won by researching their goal. Phase 2 actions that humans would notice (risky
@@ -35,18 +37,24 @@ research, owning lots of anything) cost weeks off the clock; cover research buys
   resource. Jev sets a unit's tier, value, parts and power, and offers three takes.
 - **Passive income** yields a resource with no units, a fixed amount a week (some grow with the
   count of another resource).
-- **Intelligence systems** are single machines: a hardware platform with an IQ, running
-  software. A new one must be smarter than your best, and becomes the next generation.
+- **Intelligence** is one machine at a time: a hardware platform with an IQ, running software. A
+  new platform is 25 to 100 IQ smarter than your best and **replaces the old one for good**. Jev
+  offers three perk-and-drawback pairs from a fixed list of compute traits, and you pick one.
+  Traits change research costs, the Phase 2 clock, which stock is burned each week, or the IQ
+  counted for one type of research. The smartest platforms (IQ 300 and up) must be paid for in a
+  resource your units make, of a high enough tier.
 - **Industry units** are anything you own many of. Once designed, you **create** them from their
   parts, as many as you can afford. Builder or Self-replicating units can build them with a
   build strategy. Each has upkeep and up to three **traits** from a fixed list of 16. Split a
   type across its strategies by count; the strategy marked **rest** takes every unit not counted
   elsewhere.
-- **Upgrade** any unit or mind: Jev offers its three most natural improvements, and the pick
-  becomes research. Software can raise IQ to 1.5× the hardware's and no further.
+- **Upgrade** a unit or your platform: Jev offers its three most natural improvements, and the
+  pick becomes research. A platform gets **one** software upgrade, ever (you pick its size, 25 to
+  100 IQ; it may add a perk or remove a drawback). After that, only a new platform goes further.
 - **Resources** are stocks (keep) or flows (made and used within a week). When demand outstrips
   supply, every user gets the same share.
-- **The leap rule.** Designing a mind needs a mind with about half its target IQ.
+- **IQ steps.** Both a new platform and a software upgrade add a flat step to your best IQ, never
+  more than 100. Two new platforms, each with its software upgrade at full size, take 100 to 500.
 - **Jev is torn** sometimes. The game then shows its top two answers and you pick.
 
 ## Setup
@@ -66,7 +74,7 @@ needs this proxy, so it runs under `npm run dev` or `npm run preview`, not as st
 Optional settings in `.env.local`: `JEV_BASE_URL` (default `https://openrouter.ai/api`) and
 `JEV_MODEL` (default `jev-latest`).
 
-The game saves to your browser's local storage (`singularity-rd/save/v12`) after every change,
+The game saves to your browser's local storage (`singularity-rd/save/v13`) after every change,
 including Jev's answers, so the same proposal always gets the same verdict. Old save versions
 are dropped.
 
@@ -99,12 +107,12 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | Path | What |
 | --- | --- |
 | `src/ai/jev.ts` | Jev client, `Judge` interface, typed readers, torn-answer detection, `CachedJudge` |
-| `src/engine/types.ts` | `GameState` (v12) and everything in it |
+| `src/engine/types.ts` | `GameState` (v13) and everything in it |
 | `src/engine/balance.ts` | Every tuning number, in one place |
 | `src/engine/phase.ts`, `planProposal.ts`, `planPresets.ts` | Phases, clocks, unlocks; plan proposals and their ready-made ideas |
 | `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, builds, earnings, trait rules |
 | `src/engine/risk.ts`, `coverProposal.ts` | Phase 2 alarm and clock moves; cover |
-| `src/engine/model.ts`, `traits.ts` | Lookups, IQ, creating units, allocation, costs; the 16 traits |
+| `src/engine/model.ts`, `traits.ts`, `computeTraits.ts` | Lookups, IQ (and the IQ counted per research type), creating units, allocation, costs; the 16 unit traits; the compute traits of a platform |
 | `src/engine/research.ts`, `upgrade.ts` | Research costs and completion; upgrades |
 | `src/engine/proposals.ts`, `unitProposal.ts`, `mindProposal.ts`, `incomeProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |

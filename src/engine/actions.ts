@@ -3,12 +3,14 @@ import { addUnits } from './economy'
 import {
   bestIQ,
   costShortfall,
+  findMind,
   findResearch,
   findResource,
   findStrategy,
   findUnit,
   owned,
   partsFor,
+  researchIQ,
   tasksFor
 } from './model'
 import { completeResearch } from './research'
@@ -119,8 +121,19 @@ export function setOverclock(current: GameState, unitId: string, on: boolean): G
 export function researchBlocker(state: GameState, researchId: string): string | null {
   const r = findResearch(state, researchId)
   if (!r) return 'No such research.'
-  const best = bestIQ(state)
-  if (best < r.minIQ) return `Needs IQ ${r.minIQ}. Your smartest mind is IQ ${Math.round(best)}.`
+  const best = researchIQ(state, r)
+  if (best < r.minIQ) {
+    const raw = bestIQ(state)
+    const shifted = Math.round(best) !== Math.round(raw)
+    return `Needs IQ ${r.minIQ}. Your smartest mind is IQ ${Math.round(raw)}${shifted ? `, which counts as ${Math.round(best)} for this` : ''}.`
+  }
+  // A platform that is no smarter than the one you have would be a step back; an upgrade to a platform that's gone does nothing.
+  if (r.effect.kind === 'mind' && r.effect.mind.hardware.iq + r.effect.mind.software.iq <= bestIQ(state)) {
+    return `${r.effect.mind.name} is no smarter than your current platform, IQ ${Math.round(bestIQ(state))}. Drop it.`
+  }
+  if (r.effect.kind === 'upgrade' && r.effect.target.kind === 'mind' && !findMind(state, r.effect.target.id)) {
+    return 'The platform it would improve is gone. Drop it.'
+  }
   const short = costShortfall(state, r.cost)
   return short ? `You need ${short}.` : null
 }

@@ -40,6 +40,14 @@
       >
         max {{ fmtCount(most) }}
       </button>
+      <button
+        class="link"
+        :disabled="!safe"
+        title="The most you can make while still paying next week's upkeep and every other drain, plus a week of upkeep for the new ones"
+        @click="createN = safe"
+      >
+        affordable {{ fmtCount(safe) }}
+      </button>
       <span v-if="short && createN >= 1" class="warn">You need {{ short }}.</span>
       <span v-else-if="notice" class="bad">Humans will notice: −{{ notice }} week{{ notice === 1 ? '' : 's' }}.</span>
     </div>
@@ -72,13 +80,15 @@ import { lockReason } from '@/engine/phase'
 import {
   affordable,
   costShortfall,
+  creatable,
   describeFlows,
   findResource,
   findUnit,
   fmtCount,
   partsFor,
   tierLabel,
-  unitValueText
+  unitValueText,
+  weeklyUse
 } from '@/engine/model'
 import { has } from '@/engine/traits'
 import type { UnitType } from '@/engine/types'
@@ -97,7 +107,8 @@ const parts = computed(() => partsFor(props.unit))
 const createN = ref(1)
 const short = computed(() => costShortfall(game.state, createCost(parts.value, Math.max(0, Math.floor(createN.value || 0)))))
 const most = computed(() => affordable(game.state, props.unit))
-const unitName = (id: string) => findUnit(game.state, id)?.name ?? '?'
+const safe = computed(() => creatable(game.state, props.unit, weeklyUse(game.preview)))
+const unitName =(id: string) => findUnit(game.state, id)?.name ?? '?'
 const notice = computed(() => createNotice(game.state, props.unit.id, createN.value || 0))
 const upgradeLock = computed(() => lockReason(game.state, 'unit-upgrade'))
 

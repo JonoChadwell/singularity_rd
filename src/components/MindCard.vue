@@ -8,9 +8,9 @@
           <span v-if="mind.tier" class="chip tier">Generation {{ mind.tier }}</span>
           <span
             class="chip iq"
-            :title="`${mind.hardware.name} hardware, IQ ${mind.hardware.iq}, running ${softwareLabel(mind)}. Software upgrades can raise it to ${Math.round(ceilingIQ(mind))}; past that needs new hardware.`"
+            :title="`${mind.hardware.name} hardware, IQ ${mind.hardware.iq}, running ${softwareLabel(mind)}${mind.software.upgraded ? `, which added ${mind.software.iq}` : ''}.`"
           >
-            IQ {{ Math.round(currentIQ(mind)) }}<span class="muted"> / {{ Math.round(ceilingIQ(mind)) }}</span>
+            IQ {{ Math.round(currentIQ(mind)) }}
           </span>
         </div>
         <div class="muted small desc">{{ mind.description }}</div>
@@ -22,21 +22,47 @@
       <span v-if="!mind.starting">· Jev: {{ Math.round(mind.plausibility * 100) }}% plausible</span>
     </div>
 
+    <div v-if="mind.traits.length" class="traits small">
+      <span
+        v-for="t in mind.traits"
+        :key="t"
+        class="chip trait"
+        :class="computeTrait(t).kind"
+        :title="`${computeTrait(t).name} (${computeTrait(t).kind}): ${computeTrait(t).rule}`"
+      >
+        {{ computeTrait(t).icon }} {{ computeTrait(t).name }}
+        <span class="muted">{{ computeTrait(t).rule }}</span>
+      </span>
+    </div>
+
     <footer class="row foot">
-      <button class="link" @click="ui.openInvent({ kind: 'upgrade', target: { kind: 'mind', id: mind.id } })">
-        Upgrade
+      <button
+        class="link"
+        :disabled="!!blocked"
+        :title="blocked ?? ''"
+        @click="ui.openInvent({ kind: 'upgrade', target: { kind: 'mind', id: mind.id } })"
+      >
+        Upgrade software
       </button>
+      <span v-if="blocked" class="muted small">{{ blocked }}</span>
     </footer>
   </article>
 </template>
 
 <script setup lang="ts">
-import { ceilingIQ, currentIQ, softwareLabel } from '@/engine/model'
+import { computed } from 'vue'
+import { computeTrait } from '@/engine/computeTraits'
+import { currentIQ, softwareLabel } from '@/engine/model'
 import type { Mind } from '@/engine/types'
+import { mindUpgradeBlocker } from '@/engine/upgrade'
+import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 
-defineProps<{ mind: Mind }>()
+const props = defineProps<{ mind: Mind }>()
 const ui = useUiStore()
+const game = useGameStore()
+/** Why its one software upgrade can't be proposed, if so. */
+const blocked = computed(() => mindUpgradeBlocker(game.state, props.mind))
 </script>
 
 <style scoped>
@@ -82,6 +108,20 @@ const ui = useUiStore()
   display: flex;
   flex-wrap: wrap;
   gap: 4px 6px;
+}
+
+.traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.chip.trait.perk {
+  color: var(--good);
+}
+
+.chip.trait.drawback {
+  color: var(--warn);
 }
 
 .foot {

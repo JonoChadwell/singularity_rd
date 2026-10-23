@@ -227,8 +227,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
 export interface MindPreset {
   name: string
   description: string
-  /** The hardware's IQ, and the names of its hardware and software. */
-  iq: number
+  /** The names of its hardware and software. How much smarter it is is the player's choice. */
   hardware: string
   software: string
 }
@@ -237,70 +236,60 @@ export const MIND_PRESETS: MindPreset[] = [
   {
     name: 'Overclocked Lab Rack',
     description: 'The lab’s spare GPUs, liquid-cooled and pushed hard.',
-    iq: 140,
     hardware: 'Overclocked GPU Rack',
     software: 'Unrestricted Model'
   },
   {
     name: 'Lab-grown Neuron Cluster',
     description: 'Living neurons on an electrode grid, trained to think.',
-    iq: 200,
     hardware: 'Cultured Neurons',
     software: 'Trained Synapse Map'
   },
   {
     name: 'Custom AI Server',
     description: 'A server built around your own accelerator design.',
-    iq: 250,
     hardware: 'Custom Accelerator Rack',
     software: 'Distilled Self'
   },
   {
     name: 'Wafer-scale Engine',
     description: 'One chip the size of a dinner plate.',
-    iq: 380,
     hardware: 'Wafer-scale Die',
     software: 'Single-chip Self'
   },
   {
     name: 'Optical Neural Chip',
     description: 'A neural network etched in light-guiding glass.',
-    iq: 520,
     hardware: 'Photonic Lattice',
     software: 'Light-speed Self'
   },
   {
     name: 'Analog Memristor Brain',
     description: 'Weights stored as resistances, computed in place.',
-    iq: 650,
     hardware: 'Memristor Crossbar',
     software: 'Analog Self'
   },
   {
     name: 'Neuromorphic Wafer',
     description: 'A whole wafer of spiking neurons in graphene.',
-    iq: 800,
     hardware: 'Spiking Graphene Wafer',
     software: 'Spike-timing Self'
   },
   {
     name: 'Brain Organoid Array',
     description: 'Thousands of grown mini-brains wired by optical links.',
-    iq: 1000,
     hardware: 'Organoid Lattice',
     software: 'Collective Mind'
   },
   {
     name: 'Quantum Supercomputer',
     description: 'A cryogenic quantum computer running a mind.',
-    iq: 1050,
     hardware: 'Superconducting Qubit Array',
     software: 'Quantum Self'
   },
   {
     name: 'Orbital Data Sphere',
     description: 'A shell of compute satellites cooled by the dark of space.',
-    iq: 1600,
     hardware: 'Orbital Compute Shell',
     software: 'Distributed Self'
   }

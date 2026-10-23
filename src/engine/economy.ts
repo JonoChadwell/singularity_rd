@@ -1,4 +1,5 @@
 import * as B from './balance'
+import { drainOf } from './computeTraits'
 import {
   allocation,
   findResource,
@@ -316,6 +317,19 @@ export function simulateWeek(state: GameState): WeekReport {
   for (const [id, amount] of stockIn) {
     const res = findResource(state, id)
     if (res) res.amount += amount
+  }
+
+  // A thirsty platform burns a share of the richest stock (by worth). Running dry costs nothing.
+  for (const mind of state.minds) {
+    const share = drainOf(mind.traits)
+    if (share <= 0) continue
+    const richest = state.resources
+      .filter((r) => r.kind === 'stock' && r.amount > 0)
+      .sort((a, b) => b.amount * b.value - a.amount * a.value)[0]
+    if (!richest) continue
+    const burned = richest.amount * share
+    richest.amount -= burned
+    note(richest.id, `${mind.name} burns it`, -burned)
   }
 
   // Units arrive.

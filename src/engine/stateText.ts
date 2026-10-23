@@ -1,3 +1,4 @@
+import { computeTrait } from './computeTraits'
 import { currentIQ, describeFlows, findUnit, softwareLabel } from './model'
 import { TRAITS } from './traits'
 import type { GameState } from './types'
@@ -30,7 +31,10 @@ export function describeState(state: GameState): string {
     '',
     'Intelligence systems (single machines that think and do research):',
     ...state.minds.map(
-      (m) => `- ${m.name} (IQ ${Math.round(currentIQ(m))}: ${m.hardware.name} hardware running ${softwareLabel(m)}): ${m.description}`
+      (m) =>
+        `- ${m.name} (IQ ${Math.round(currentIQ(m))}: ${m.hardware.name} hardware running ${softwareLabel(m)}${
+          m.traits.length ? `; ${m.traits.map((t) => computeTrait(t).name).join(', ')}` : ''
+        }): ${m.description}`
     ),
     '',
     'Industry units:',

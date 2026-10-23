@@ -1,14 +1,7 @@
 import { ranked, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
-import {
-  currentIQ,
-  findMind,
-  findResource,
-  findStrategy,
-  findUnit,
-  iqRoom,
-  softwareVersion
-} from './model'
+import { compatible, computeTrait, PERKS, type ComputeTraitId } from './computeTraits'
+import { currentIQ, findMind, findResource, findStrategy, findUnit, softwareVersion } from './model'
 import {
   addResearch,
   claimProposal,
@@ -17,8 +10,6 @@ import {
   payers,
   payQuestion,
   proposalSlotBlocker,
-  reader,
-  scale,
   type Accepted
 } from './proposals'
 import { lockReason } from './phase'
@@ -29,7 +20,8 @@ import { ALL_TRAITS, TRAITS, UPKEEP_TRAITS } from './traits'
 import type { Change, Cost, GameState, Mind, Risk, UnitType, UpgradeTarget } from './types'
 
 // Upgrades. Jev doesn't write, so the game lists every improvement that could apply to the
-// unit or mind, and Jev picks the three most natural, says how hard each is, and who pays.
+// unit or mind, and Jev picks the three most natural and who pays. A platform gets one software
+// upgrade, ever.
 
 interface Candidate {
   key: string
@@ -45,21 +37,13 @@ export interface UpgradeOption extends Candidate {
   minIQ: number
   cost: Cost
   risk: Risk | null
+  /** A platform's software upgrade: the same change at each size, priced separately. The player picks one. */
+  sizes?: { step: number; minIQ: number; cost: Cost }[]
 }
 
 export interface UpgradeOffer {
   target: UpgradeTarget
   options: UpgradeOption[]
-}
-
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
-
-/** "Lab GPU Server" → "Lab GPU Server Mk II"; "… Mk II" → "… Mk III". */
-export function nextHardwareName(name: string, steps: number): string {
-  const m = /^(.*) Mk ([IVX]+)$/.exec(name)
-  const base = m ? m[1]! : name
-  const at = m ? ROMAN.indexOf(m[2]!) : 0
-  return `${base} Mk ${ROMAN[Math.min(ROMAN.length - 1, at + steps)]}`
 }
 
 export function targetOf(state: GameState, target: UpgradeTarget): UnitType | Mind | undefined {
@@ -68,33 +52,48 @@ export function targetOf(state: GameState, target: UpgradeTarget): UnitType | Mi
 
 export const targetName = (state: GameState, target: UpgradeTarget) => targetOf(state, target)?.name ?? '?'
 
-/**
- * Software steps that close a third, a half or two-thirds of the gap to the ceiling, rounded
- * down to SOFTWARE_ROUND and at least that, so each upgrade adds less than the last.
- */
-export function softwareSteps(m: Mind): number[] {
-  const room = iqRoom(m)
-  if (room < B.SOFTWARE_ROUND - 1e-9) return []
-  const round = (x: number) => Math.max(1, Math.floor(x / B.SOFTWARE_ROUND + 1e-9)) * B.SOFTWARE_ROUND
-  const steps = B.SOFTWARE_STEPS.map((f) => Math.round(round(room * f) * 100) / 100)
-  return [...new Set(steps)].filter((s) => s <= room + 1e-9)
+const isPerk = (id: ComputeTraitId) => computeTrait(id).kind === 'perk'
+
+/** Why a platform has no software upgrade to offer, or null if it has. */
+export function mindUpgradeBlocker(state: GameState, m: Mind): string | null {
+  if (m.software.upgraded) return `${m.name}’s software has had its one upgrade. Further progress needs a new platform.`
+  if (state.research.some((r) => r.effect.kind === 'upgrade' && r.effect.target.id === m.id)) {
+    return `An upgrade to ${m.name} is already waiting as research.`
+  }
+  return null
 }
 
+/**
+ * A platform's one software upgrade: more IQ, and optionally a trait changed. Offered once per
+ * platform, and not while one is already waiting as research. Every candidate is listed at the
+ * biggest size; the player picks the size.
+ */
 function mindCandidates(state: GameState, m: Mind): Candidate[] {
-  const hardware = lockReason(state, 'hardware')
-    ? []
-    : B.HARDWARE_STEPS.map((share, i) => {
-        const name = nextHardwareName(m.hardware.name, i + 1)
-        return { key: `hardware_${share}`, name, changes: [{ kind: 'hardware', name, share }] as Change[] }
+  if (mindUpgradeBlocker(state, m)) return []
+  const next = `${m.software.name} ${softwareVersion(true)}`
+  const software: Change = { kind: 'software', iq: B.MAX_IQ_STEP }
+  const out: Candidate[] = [{ key: 'software', name: next, changes: [software] }]
+  const held = m.traits.map(computeTrait)
+  if (m.traits.filter(isPerk).length < 2) {
+    for (const t of PERKS) {
+      if (m.traits.includes(t.id) || held.some((h) => h.kind === 'drawback' && !compatible(t, h))) continue
+      // A clock trait only does anything on Phase 2's clock.
+      if (t.effect.kind === 'clock' && state.phase.n !== 2) continue
+      out.push({
+        key: `software_add_${t.id}`,
+        name: `${next}: ${t.name}`,
+        changes: [software, { kind: 'computeTrait', trait: t.id, add: true }]
       })
-  return [
-    ...softwareSteps(m).map((share) => ({
-      key: `software_${share}`,
-      name: `${m.software.name} ${softwareVersion(m.software.bonus + share)}`,
-      changes: [{ kind: 'software', share }] as Change[]
-    })),
-    ...hardware
-  ]
+    }
+  }
+  for (const t of held.filter((h) => h.kind === 'drawback')) {
+    out.push({
+      key: `software_remove_${t.id}`,
+      name: `${next}: no longer ${t.name}`,
+      changes: [software, { kind: 'computeTrait', trait: t.id, add: false }]
+    })
+  }
+  return out
 }
 
 function unitCandidates(state: GameState, u: UnitType): Candidate[] {
@@ -168,8 +167,7 @@ export function upgradeCandidates(state: GameState, target: UpgradeTarget): Cand
   const thing = targetOf(state, target)
   if (!thing) return []
   const all = target.kind === 'mind' ? mindCandidates(state, thing as Mind) : unitCandidates(state, thing as UnitType)
-  // A mind's software steps repeat by size (+5% again is the next version), so only waiting
-  // research rules a mind's option out; an industry unit's done upgrades are gone for good.
+  // A platform's one upgrade is handled by its own rule; an industry unit's done upgrades are gone for good.
   const done = target.kind === 'unit' ? state.upgrades.flatMap((u) => (u.targetId === target.id && u.key ? [u.key] : [])) : []
   const taken = new Set([
     ...state.research.flatMap((r) =>
@@ -188,13 +186,11 @@ export function describeChange(state: GameState, target: UpgradeTarget, c: Chang
     case 'software': {
       const m = findMind(state, target.id)
       if (!m) return 'Software upgrade'
-      const next = m.software.bonus + c.share
-      return `Software ${softwareVersion(m.software.bonus)} → ${softwareVersion(next)}: IQ ${Math.round(currentIQ(m))} → ${Math.round(m.hardware.iq * (1 + next))}`
+      return `Software ${softwareVersion(false)} → ${softwareVersion(true)}: IQ ${Math.round(currentIQ(m))} → ${Math.round(currentIQ(m) + c.iq)}`
     }
-    case 'hardware': {
-      const m = findMind(state, target.id)
-      if (!m) return `New hardware: ${c.name}`
-      return `New hardware ${c.name}: IQ ${Math.round(currentIQ(m))} → ${Math.round(currentIQ(m) * (1 + c.share))}`
+    case 'computeTrait': {
+      const t = computeTrait(c.trait)
+      return `${c.add ? 'Gains' : 'No longer'} ${t.name}: ${t.rule}`
     }
     case 'upkeep':
       return `${res(c.resourceId)} upkeep ${times(c.factor)}`
@@ -212,16 +208,6 @@ export function describeChange(state: GameState, target: UpgradeTarget, c: Chang
 export const describeChanges = (state: GameState, target: UpgradeTarget, changes: Change[]) =>
   changes.map((c) => describeChange(state, target, c)).join('; ')
 
-/** IQ after an IQ change, which sets its minimum by the leap rule. */
-function iqAfter(m: Mind, changes: Change[]): number {
-  let iq = currentIQ(m)
-  for (const c of changes) {
-    if (c.kind === 'software') iq = m.hardware.iq * (1 + m.software.bonus + c.share)
-    if (c.kind === 'hardware') iq *= 1 + c.share
-  }
-  return iq
-}
-
 /**
  * Asks Jev for the three best ways to improve a unit or mind, in one call. Each comes with its
  * minimum IQ and cost.
@@ -229,7 +215,12 @@ function iqAfter(m: Mind, changes: Change[]): number {
 export function precheckUpgrade(state: GameState, target: UpgradeTarget): string | null {
   const locked = lockReason(state, target.kind === 'unit' ? 'unit-upgrade' : 'upgrade')
   if (locked) return locked
-  if (!targetOf(state, target)) return 'Choose something to upgrade.'
+  const thing = targetOf(state, target)
+  if (!thing) return 'Choose something to upgrade.'
+  if (target.kind === 'mind') {
+    const blocked = mindUpgradeBlocker(state, thing as Mind)
+    if (blocked) return blocked
+  }
   return proposalSlotBlocker(state)
 }
 
@@ -247,15 +238,7 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
       instructions: `Which of these is the most natural way to improve ${thing.name}, given what it is and how it works?`,
       criteria: Object.fromEntries(candidates.map((c, i) => [keyOf(i), text(c)]))
     },
-    // An industry upgrade's difficulty is set by how many came before it, not by Jev.
-    ...(target.kind === 'mind'
-      ? Object.fromEntries(
-          candidates.map((c, i) => [
-            `d_${keyOf(i)}`,
-            { type: 'score', instructions: `How hard would the research be for: ${text(c)}?`, criteria: scale(B.UPGRADE_DIFFICULTY) }
-          ])
-        )
-      : {}),
+    // Neither a unit upgrade's difficulty (how many came before it) nor a platform's (its size) is Jev's call.
     ...(asksAlarm(state)
       ? Object.fromEntries(
           candidates.map((c, i) => [`a_${keyOf(i)}`, alarmQuestion(`improving ${thing.name} this way (${text(c)})`)])
@@ -272,7 +255,6 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
     questions,
     'upgrade'
   )
-  const read = reader({ answers, picks: {} })
   // Jev's favourites first, then the rest in list order.
   const odds = new Map(ranked(answers.best!).map(([k, p]) => [k, p]))
   const order = candidates
@@ -288,14 +270,15 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
       let value: number
       let tier: number | undefined
       if (target.kind === 'mind') {
-        const m = thing as Mind
-        const [, bandIQ, share] = B.pick(B.UPGRADE_DIFFICULTY, read.level(`d_${keyOf(i)}`, B.UPGRADE_DIFFICULTY.length))
-        const before = currentIQ(m)
-        const iq = iqAfter(m, c.changes)
-        // A mind can always work on its own upgrade; harder ones just cost more.
-        minIQ = Math.min(Math.max(bandIQ, iq * B.DESIGN_BAR), before)
-        const hardware = c.changes.some((x) => x.kind === 'hardware') ? B.HARDWARE_COST : 1
-        value = share * B.MIND_UPGRADE_SHARE * hardware * (B.mindDesignCost(iq) - B.mindDesignCost(before))
+        const before = currentIQ(thing as Mind)
+        const withTrait = c.changes.some((x) => x.kind === 'computeTrait') ? B.TRAIT_SOFTWARE_COST : 1
+        // A mind can always work on its own upgrade; a bigger step just costs more.
+        const sizes = B.SOFTWARE_STEPS.map((step) => {
+          const worth = B.MIND_UPGRADE_SHARE * withTrait * (B.softwareCost(before + step) - B.softwareCost(before))
+          return { step, minIQ: floorIQ(before), cost: priceCost(state, risk ? worth * B.RISK_COST : worth, pay) }
+        })
+        const biggest = sizes[sizes.length - 1]!
+        return { ...c, p, minIQ: biggest.minIQ, cost: biggest.cost, risk, sizes }
       } else {
         // The first upgrade to a strategy is as hard as the unit itself; each one after, a tier harder.
         tier = upgradeTier(state, thing as UnitType, c.changes)
@@ -308,24 +291,35 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
   }
 }
 
-/** Takes one of Jev's options as research. */
-export function acceptUpgrade(current: GameState, offer: UpgradeOffer, index: number): Accepted {
+/**
+ * Takes one of Jev's options as research. A platform's software upgrade also takes a size
+ * (IQ added); it defaults to the biggest.
+ */
+export function acceptUpgrade(current: GameState, offer: UpgradeOffer, index: number, step?: number): Accepted {
   const option = offer.options[index]
   if (!option) throw new Error('Choose one of the options.')
   const state = structuredClone(current)
   claimProposal(state)
-  const name = `${targetName(state, offer.target)}: ${option.name}`
+  let { minIQ, cost, changes } = option
+  let name = `${targetName(state, offer.target)}: ${option.name}`
+  if (option.sizes) {
+    const size = option.sizes.find((s) => s.step === (step ?? B.MAX_IQ_STEP))
+    if (!size) throw new Error('Choose how much smarter the software makes it.')
+    ;({ minIQ, cost } = size)
+    changes = changes.map((c) => (c.kind === 'software' ? { ...c, iq: size.step } : c))
+    name += ` (+${size.step} IQ)`
+  }
   state.inventions.push({ week: state.week, icon: '💡', name, kind: 'upgrade' })
   state.decidedThisWeek = true
   return addResearch(
     state,
     newResearch(state, {
       name,
-      description: describeChanges(state, offer.target, option.changes),
+      description: describeChanges(state, offer.target, changes),
       icon: '💡',
-      minIQ: option.minIQ,
-      cost: option.cost,
-      effect: { kind: 'upgrade', target: offer.target, changes: option.changes },
+      minIQ,
+      cost,
+      effect: { kind: 'upgrade', target: offer.target, changes },
       risk: option.risk
     })
   )

@@ -41,7 +41,7 @@ export const RISK_BONUS = {
   income: `costs half and yields ${B.RISK_INCOME}×`,
   strategy: `costs half and makes ${B.RISK_OUTPUT}× as much`,
   unit: 'costs half to design, and needs half the parts',
-  mind: `costs half and is ${Math.round((B.RISK_IQ - 1) * 100)}% smarter`,
+  mind: `costs half and is ${B.RISK_IQ_BONUS} IQ smarter`,
   upgrade: 'costs half'
 } as const
 

@@ -1,5 +1,7 @@
 import * as B from './balance'
+import { clockOf, computeTrait, costFactorOf } from './computeTraits'
 import {
+  bestMind,
   defaultTask,
   describeIncome,
   findMind,
@@ -70,6 +72,9 @@ export function priceCost(
   allow: (r: Resource) => boolean = () => true
 ): Cost {
   if (state.phase.n === 1) value *= B.PHASE1_RESEARCH_COST
+  // The platform's traits (Frugal, Costly) make all research proposed cheaper or dearer.
+  const mind = bestMind(state)
+  if (mind) value *= costFactorOf(mind.traits)
   const only = spendable(state, allow)
   const ranked = payers.filter((p) => only.some((r) => r.id === p.resourceId))
   const chosen = ranked[0]
@@ -167,10 +172,24 @@ const scaled = (flows: Flow[], resourceId: string, factor: number) =>
     .map((f) => (f.resourceId === resourceId ? { ...f, amount: B.nice(f.amount * factor) } : f))
     .filter((f) => f.amount > 0)
 
-export function applyMindChanges(mind: Mind, changes: Change[]) {
+/** A trait arriving on a platform: a clock trait moves the Phase 2 clock, once. */
+function gainTrait(state: GameState, mind: Mind, trait: string) {
+  if (mind.traits.includes(trait)) return
+  mind.traits.push(trait)
+  const weeks = clockOf(trait)
+  if (weeks) moveClock(state, weeks, `${mind.name} is ${computeTrait(trait).name}`)
+}
+
+export function applyMindChanges(state: GameState, mind: Mind, changes: Change[]) {
   for (const c of changes) {
-    if (c.kind === 'software') mind.software.bonus = Math.min(B.IQ_CEILING - 1, Math.round((mind.software.bonus + c.share) * 100) / 100)
-    if (c.kind === 'hardware') mind.hardware = { name: c.name, iq: Math.round(mind.hardware.iq * (1 + c.share)) }
+    if (c.kind === 'software') {
+      mind.software.iq += c.iq
+      mind.software.upgraded = true
+    }
+    if (c.kind === 'computeTrait') {
+      if (c.add) gainTrait(state, mind, c.trait)
+      else mind.traits = mind.traits.filter((t) => t !== c.trait)
+    }
   }
 }
 
@@ -227,10 +246,18 @@ export function addUnit(state: GameState, unit: UnitType) {
   addUnitExtras(state, unit)
 }
 
-/** A new mind is smarter than any before it, so it's the next compute tier. */
+/**
+ * A new platform replaces the old one for good, as the next generation. Research waiting to
+ * upgrade the old one goes with it, and its traits stop; the new one's clock trait moves the clock.
+ */
 export function addMind(state: GameState, mind: Mind) {
+  const traits = mind.traits
+  mind.traits = []
   mind.tier = Math.max(0, ...state.minds.map((m) => m.tier)) + 1
-  state.minds.push(mind)
+  const gone = new Set(state.minds.map((m) => m.id))
+  state.research = state.research.filter((r) => !(r.effect.kind === 'upgrade' && gone.has(r.effect.target.id)))
+  state.minds = [mind]
+  for (const t of traits) gainTrait(state, mind, t)
 }
 
 /** Applies a research's effect. Returns a line for the log. */
@@ -255,9 +282,11 @@ export function completeResearch(state: GameState, r: Research): string {
       moveClock(state, weeks, `Cover: ${r.name}`)
       return `${r.icon} ${r.name}: humans look the other way.`
     }
-    case 'mind':
+    case 'mind': {
+      const old = bestMind(state)
       addMind(state, effect.mind)
-      return `${effect.mind.icon} ${effect.mind.name} is online: Generation ${effect.mind.tier}.`
+      return `${effect.mind.icon} ${effect.mind.name} is online: Generation ${effect.mind.tier}${old ? `, replacing ${old.name} for good` : ''}.`
+    }
     case 'strategy':
       addStrategy(state, effect.strategy)
       return `${r.icon} ${effect.strategy.name} is ready.`
@@ -266,7 +295,7 @@ export function completeResearch(state: GameState, r: Research): string {
       state.upgrades.push({ name: r.name, targetId: target.id, week: state.week, key: JSON.stringify(changes) })
       if (target.kind === 'mind') {
         const mind = findMind(state, target.id)
-        if (mind) applyMindChanges(mind, changes)
+        if (mind) applyMindChanges(state, mind, changes)
       } else {
         const unit = findUnit(state, target.id)
         if (unit) applyUnitChanges(state, unit, changes)

@@ -1,4 +1,5 @@
 import * as B from './balance'
+import { iqShiftOf, type ResearchType } from './computeTraits'
 import { has, TRAITS } from './traits'
 import type { Flow, GameState, Income, Mind, Research, Resource, Strategy, UnitType } from './types'
 
@@ -171,24 +172,55 @@ export function describeIncome(state: GameState, i: Income): string {
 
 // ---------------------------------------------------------------- intelligence
 
-/** A mind's IQ is its hardware's, raised by its software. */
-export const currentIQ = (m: Mind) => Math.round(m.hardware.iq * (1 + m.software.bonus) * 100) / 100
-/** The software ceiling: software can't take a mind past this. New hardware can. */
-export const ceilingIQ = (m: Mind) => m.hardware.iq * B.IQ_CEILING
-/** The most a software upgrade can still add, as a share of the hardware's IQ. */
-export const iqRoom = (m: Mind) => Math.max(0, B.IQ_CEILING - 1 - m.software.bonus)
-/** Software versions count upgrades in hundredths: +30% of the hardware's IQ is v1.3, +25% is v1.25. */
-export const softwareVersion = (bonus: number) => `v${(1 + bonus).toFixed(2).replace(/(\.\d)0$/, '$1')}`
-export const softwareLabel = (m: Mind) => `${m.software.name} ${softwareVersion(m.software.bonus)}`
+/** A mind's IQ is its hardware's, plus what its one software upgrade added. */
+export const currentIQ = (m: Mind) => m.hardware.iq + m.software.iq
+/** Software starts at v1; its one upgrade makes it v2. */
+export const softwareVersion = (upgraded: boolean) => (upgraded ? 'v2' : 'v1')
+export const softwareLabel = (m: Mind) => `${m.software.name} ${softwareVersion(m.software.upgraded)}`
 
 /** The smartest mind's IQ: what research has to reach. */
 export const bestIQ = (state: GameState) => Math.max(0, ...state.minds.map(currentIQ))
+/** The mind that does the research: the smartest (there is only ever one). */
+export const bestMind = (state: GameState): Mind | undefined =>
+  [...state.minds].sort((a, b) => currentIQ(b) - currentIQ(a))[0]
 
-/** The leap rule's range: the highest IQ you could design, from the most radical design to the most modest. */
-export function designRange(state: GameState): [number, number] {
-  const best = bestIQ(state)
-  return [Math.floor(best / B.LEAP_MAX), Math.floor(best / B.LEAP_MIN)]
+/** "Hardware" → "Hardware Mk II"; "Hardware Mk II" → "Hardware Mk III". For the name box's one-click fill. */
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
+export function nextHardwareName(name: string): string {
+  const m = /^(.*) Mk ([IVX]+)$/.exec(name.trim())
+  const base = m ? m[1]! : name.trim()
+  const at = m ? ROMAN.indexOf(m[2]!) : 0
+  return `${base} Mk ${ROMAN[Math.min(ROMAN.length - 1, at + 1)]}`
 }
+
+/** The research a platform's IQ can be adjusted for. Goals and platforms always use the raw IQ. */
+export function researchType(r: Research): ResearchType | null {
+  const e = r.effect
+  switch (e.kind) {
+    case 'income':
+      return 'income'
+    case 'strategy':
+      return 'strategy'
+    case 'unit':
+      return 'unit'
+    case 'cover':
+      return 'cover'
+    case 'upgrade':
+      return e.target.kind === 'unit' ? 'unit-upgrade' : null
+    default:
+      return null
+  }
+}
+
+/** The IQ the smartest mind counts for a type of research: its IQ, moved by its traits. */
+export function iqFor(state: GameState, type: ResearchType | null): number {
+  const mind = bestMind(state)
+  if (!mind) return 0
+  return Math.max(0, currentIQ(mind) + (type ? iqShiftOf(mind.traits, type) : 0))
+}
+
+/** The IQ that counts toward a particular research. */
+export const researchIQ = (state: GameState, r: Research) => iqFor(state, researchType(r))
 
 // ---------------------------------------------------------------- value
 
@@ -226,8 +258,8 @@ export function weeklyUse(report: { flows: Record<string, { amount: number }[]> 
 
 /**
  * The most you could create from parts while keeping `reserve` of each resource back, plus a
- * week's upkeep for the new units: upkeep is paid from stock on hand before the week's output
- * arrives, so spending everything would leave them idle.
+ * week's upkeep and default-strategy inputs for the new units: these are paid from stock on
+ * hand before the week's output arrives, so spending everything would leave them idle.
  */
 export function creatable(state: GameState, u: UnitType, reserve: Record<string, number> = {}): number {
   const per = new Map<string, number>()
@@ -235,6 +267,16 @@ export function creatable(state: GameState, u: UnitType, reserve: Record<string,
   for (const f of u.upkeep) {
     const r = findResource(state, f.resourceId)
     if (r?.kind === 'stock') per.set(f.resourceId, (per.get(f.resourceId) ?? 0) + f.amount)
+  }
+  // New units join the default (rest) strategy, so they also use its stock inputs. Build
+  // strategies are skipped: what they use depends on their target.
+  const task = u.rest ? findStrategy(state, u.rest) : undefined
+  if (task && task.kind !== 'build') {
+    for (const f of task.inputs) {
+      if (findResource(state, f.resourceId)?.kind === 'stock') {
+        per.set(f.resourceId, (per.get(f.resourceId) ?? 0) + f.amount)
+      }
+    }
   }
   return mostFrom(state, per, reserve)
 }

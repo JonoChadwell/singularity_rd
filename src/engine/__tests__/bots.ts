@@ -1,16 +1,16 @@
 import type { JevAnswer } from '@/ai/jev'
 import * as B from '../balance'
-import { assign, assignAll, createUnits, doResearch, researchBlocker } from '../actions'
+import { assignAll, createUnits, doResearch, researchBlocker } from '../actions'
 import { runWeek } from '../cycle'
 import { acceptAny, judgeAny, type ProposalInput } from '../dispatch'
 import { netFlow, previewWeek } from '../economy'
 import { createInitialState, newResource, SERVER_ID } from '../initialState'
-import { bestIQ, creatable, currentIQ, findResource, findUnit, MONEY_ID, tierFactor, weeklyUse } from '../model'
+import { bestIQ, creatable, currentIQ, findResource, findUnit, MONEY_ID, weeklyUse } from '../model'
 import { newPhase } from '../phase'
 import { acceptPlan, judgePlan, type PlanSpec } from '../planProposal'
 import { goalOf } from '../projection'
 import type { GameState, UpgradeTarget } from '../types'
-import { acceptUpgrade, judgeUpgrade, softwareSteps } from '../upgrade'
+import { acceptUpgrade, judgeUpgrade, mindUpgradeBlocker } from '../upgrade'
 import { FakeJudge, noul, score, type Overrides } from './fakeJudge'
 
 // Scripted players for the balance tests. They play through the real engine with a fake Jev
@@ -59,7 +59,7 @@ function rankBy(prefix: string): (q: Record<string, unknown>) => JevAnswer {
     const keys = Object.entries(best.criteria)
       .filter(([, text]) => (prefix === 'software' ? /Software v/.test(text) : text.includes(prefix)))
       .map(([k]) => k)
-    const top = keys[keys.length - 1] ?? 'c0'
+    const top = (prefix === 'software' ? keys[0] : keys[keys.length - 1]) ?? 'c0'
     return { type: 'choice', choice: top, probabilities: { [top]: 0.9 } }
   }
 }
@@ -219,7 +219,7 @@ export async function phase2(approach = 2): Promise<GameState> {
   const s = createInitialState()
   s.phase = newPhase(2, 8)
   s.week = 8
-  s.minds[0]!.software.bonus = 0.4
+  s.minds[0]!.software = { name: 'Unrestricted Model', iq: 40, upgraded: true }
   s.resources.push(newResource({ id: MONEY_ID, name: 'Money', value: 10, amount: 500 }))
   s.incomes.push({ name: 'Freelance coding', resourceId: MONEY_ID, amount: 300 })
   const values = Object.fromEntries(NANOTECH.resources.map((_, i) => [`r${i}_value`, score(2)]))
@@ -280,11 +280,8 @@ export function steady(style: Phase2Style): Turn {
       const upgrading = s.research.some((r) => r.effect.kind === 'upgrade')
       const covering = s.research.some((r) => r.effect.kind === 'cover')
       const alarm = { 'a_*': (answers.alarm as JevAnswer) ?? score(0) }
-      // Software first; new hardware once software is at its ceiling.
-      const improve = (id: string) => {
-        const m = s.minds.find((x) => x.id === id)!
-        return upgrade(s, { kind: 'mind', id }, { 'd_*': score(1), ...alarm }, softwareSteps(m).length ? 'software' : 'Mk')
-      }
+      // The platform's one software upgrade first; then a new platform.
+      const improve = (id: string) => upgrade(s, { kind: 'mind', id }, alarm)
       if (!has('Sell machined parts')) s = await propose(s, strategy('Sell machined parts', MONEY_ID), answers)
       else if (!findUnit(s, FAB) && !has('Design Nanofab') && bestIQ(s) >= B.TIERS[B.MAX_UNIT_TIER]![1]) {
         const spec = { name: 'Nanofab', description: '', builderId: null }
@@ -297,13 +294,12 @@ export function steady(style: Phase2Style): Turn {
         s = await propose(s, { kind: 'cover', spec: { name: fresh('PR campaign'), description: '' } }, { convincing: score(1) }).catch(() => s)
         saving = s === before
       } else if (bestIQ(s) < goal.minIQ && !designing && !upgrading && mill()?.built) {
-        // Design a tier twice as smart as the best mind once that mind is at its ceiling; until then, upgrade it.
-        const room = softwareSteps(tier).length > 0
-        if (tier.tier === 0 && room) s = await improve(tier.id)
-        else if (tier.tier === 0) {
-          const iq = Math.floor((bestIQ(s) / B.DESIGN_BAR) / 10) * 10
-          s = await propose(s, { kind: 'mind', spec: { name: 'Custom AI Server', description: '', iq } }, answers)
-        } else s = await improve(tier.id)
+        // Upgrade the platform's software once; after that, build a platform 100 IQ smarter.
+        if (!mindUpgradeBlocker(s, tier)) s = await improve(tier.id)
+        else {
+          const spec = { name: fresh('Custom AI Server'), description: '', step: B.MAX_IQ_STEP }
+          s = await propose(s, { kind: 'mind', spec }, answers)
+        }
       }
     }
     s = researchAll(s)

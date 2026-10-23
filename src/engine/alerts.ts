@@ -1,11 +1,12 @@
 import { researchBlocker } from './actions'
-import { bestIQ, ceilingIQ, currentIQ, findResource, fmt, fmtCount } from './model'
+import * as B from './balance'
+import { bestIQ, bestMind, findResource, fmt, fmtCount, researchIQ } from './model'
 import { lockReason, weeksLeft } from './phase'
 import { goalOf } from './projection'
 import type { GameState, WeekReport } from './types'
+import { mindUpgradeBlocker } from './upgrade'
 
-const bestMindId = (state: GameState) =>
-  [...state.minds].sort((a, b) => currentIQ(b) - currentIQ(a))[0]?.id ?? ''
+const bestMindId = (state: GameState) => bestMind(state)?.id ?? ''
 
 /** Where a wall's prompt leads: straight into the right proposal. */
 export type Prompt =
@@ -114,22 +115,26 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
     })
   }
 
-  // Research nothing you own is smart enough for.
+  // Research your platform isn't smart enough for.
   const best = bestIQ(state)
   const mindsLocked = lockReason(state, 'mind')
-  const ceiling = Math.max(0, ...state.minds.map(ceilingIQ))
-  for (const r of state.research.filter((x) => x.minIQ > best)) {
-    const upgradable = r.minIQ <= ceiling
-    const prompt: Alert['prompt'] = upgradable
-      ? { label: 'Upgrade your best mind?', to: { kind: 'upgrade-mind', mindId: bestMindId(state) } }
-      : mindsLocked
-        ? undefined
-        : { label: 'Design something smarter?', to: { kind: 'design-mind', iq: r.minIQ } }
-    const beyond = !upgradable && mindsLocked ? ` No mind you have can get there: ${mindsLocked.toLowerCase()}` : ''
+  const mind = bestMind(state)
+  // Its one software upgrade is the quickest way up; a new platform is the way after that.
+  const softwareLeft = !!mind && !mindUpgradeBlocker(state, mind)
+  for (const r of state.research.filter((x) => x.minIQ > researchIQ(state, x))) {
+    const have = researchIQ(state, r)
+    const shifted = Math.round(have) !== Math.round(best)
+    const prompt: Alert['prompt'] =
+      softwareLeft && r.minIQ <= have + B.MAX_IQ_STEP
+        ? { label: 'Upgrade your software?', to: { kind: 'upgrade-mind', mindId: bestMindId(state) } }
+        : mindsLocked
+          ? undefined
+          : { label: 'Build a smarter platform?', to: { kind: 'design-mind', iq: r.minIQ } }
+    const beyond = !prompt && mindsLocked ? ` Nothing you have can get there: ${mindsLocked.toLowerCase()}` : ''
     add({
       key: `iq-${r.id}`,
       tone: 'info',
-      text: `${r.name} needs IQ ${r.minIQ}; your smartest mind is IQ ${Math.round(best)}.${beyond}`,
+      text: `${r.name} needs IQ ${r.minIQ}; your smartest mind is IQ ${Math.round(best)}${shifted ? `, which counts as ${Math.round(have)} for it` : ''}.${beyond}`,
       prompt
     })
   }

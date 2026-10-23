@@ -36,7 +36,7 @@
             {{ projectionText }}
           </div>
         </div>
-        <span class="chip iq" :class="{ bad: best < r.minIQ }">IQ {{ r.minIQ }}</span>
+        <span class="chip iq" :class="{ bad: iqFor(r) < r.minIQ }" :title="iqTitle(r)">IQ {{ r.minIQ }}</span>
       </header>
       <div class="small row cost">
         <span class="muted">Uses up</span>
@@ -50,8 +50,8 @@
           Research now
         </button>
         <span v-if="blocker(r.id)" class="warn">{{ blocker(r.id) }}</span>
-        <button v-if="best < r.minIQ" class="link" @click="smarter(r.minIQ)">
-          {{ mindLock ? 'Upgrade your best mind?' : 'Design something smarter?' }}
+        <button v-if="iqFor(r) < r.minIQ" class="link" @click="smarter(r.minIQ)">
+          {{ softwareLeft ? 'Upgrade your software?' : 'Build a smarter platform?' }}
         </button>
         <button
           v-if="r.effect.kind !== 'goal'"
@@ -73,17 +73,29 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { researchBlocker } from '@/engine/actions'
-import { bestIQ, currentIQ, describeCost, describeIncome } from '@/engine/model'
+import { bestIQ, bestMind, describeCost, describeIncome, researchIQ } from '@/engine/model'
 import { coverWeeks, lockReason } from '@/engine/phase'
 import { projectionText as describeProjection } from '@/engine/projection'
 import { alarmLabel } from '@/engine/risk'
+import { mindUpgradeBlocker } from '@/engine/upgrade'
+import type { Research } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 
 const game = useGameStore()
 const ui = useUiStore()
-const best = computed(() => bestIQ(game.state))
 const blocker = (id: string) => researchBlocker(game.state, id)
+/** The IQ that counts for this research: your best mind's, moved by its traits. */
+const iqFor = (r: Research) => researchIQ(game.state, r)
+const iqTitle = (r: Research) =>
+  Math.round(iqFor(r)) === Math.round(bestIQ(game.state))
+    ? ''
+    : `Your platform counts as IQ ${Math.round(iqFor(r))} for this, not ${Math.round(bestIQ(game.state))}.`
+/** Whether the platform's one software upgrade is still to come. */
+const softwareLeft = computed(() => {
+  const m = bestMind(game.state)
+  return !!m && !mindUpgradeBlocker(game.state, m)
+})
 const coverLock = computed(() => lockReason(game.state, 'cover'))
 const mindLock = computed(() => lockReason(game.state, 'mind'))
 /** The goal first. */
@@ -92,9 +104,9 @@ const ordered = computed(() =>
 )
 
 function smarter(iq: number) {
-  if (!mindLock.value) return ui.openInvent({ kind: 'mind', iq })
-  const top = [...game.state.minds].sort((a, b) => currentIQ(b) - currentIQ(a))[0]
-  if (top) ui.openInvent({ kind: 'upgrade', target: { kind: 'mind', id: top.id } })
+  const top = bestMind(game.state)
+  if (top && softwareLeft.value) return ui.openInvent({ kind: 'upgrade', target: { kind: 'mind', id: top.id } })
+  if (!mindLock.value) ui.openInvent({ kind: 'mind', iq })
 }
 
 const projectionText = computed(() => (game.projection ? describeProjection(game.state, game.projection) : ''))

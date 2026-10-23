@@ -17,7 +17,7 @@ import { noticeAt } from '../risk'
 import { describeState } from '../stateText'
 import type { GameState } from '../types'
 import { acceptUnit, judgeUnit, precheckUnit, type UnitSpec } from '../unitProposal'
-import { acceptUpgrade, judgeUpgrade, softwareSteps, upgradeCandidates } from '../upgrade'
+import { acceptUpgrade, judgeUpgrade, upgradeCandidates } from '../upgrade'
 import { choice, FakeJudge, noul, score } from './fakeJudge'
 
 // ---------------------------------------------------------------- worlds
@@ -175,7 +175,7 @@ describe('the clock', () => {
     let s = await phase1(new FakeJudge({ approach: score(4) }))
     const goal = s.research[0]!
     findResource(s, MONEY_ID)!.amount = 1e9
-    s.minds[0]!.software.bonus = 0.5
+    s.minds[0]!.software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
     s = doResearch(s, goal.id)
     expect(s.phase).toMatchObject({ n: 2, status: 'planning', start: 1, deadline: null })
     expect(s.history).toEqual([{ n: 1, plan: expect.objectContaining({ goal: bribe.goal }), week: 1 }])
@@ -204,7 +204,7 @@ describe('the clock', () => {
     s = doResearch(s, 'goal')
     expect(s.phase).toMatchObject({ n: 3, status: 'playing', deadline: null })
     expect(weeksLeft(s)).toBeNull()
-    for (const f of ['strategy', 'unit', 'mind', 'hardware', 'unit-upgrade'] as Feature[]) expect(lockReason(s, f)).toBeNull()
+    for (const f of ['strategy', 'unit', 'mind', 'unit-upgrade'] as Feature[]) expect(lockReason(s, f)).toBeNull()
     expect(lockReason(s, 'cover')).toMatch(/Nobody/)
     for (let i = 0; i < 200; i++) s = runWeek(s)
     expect(s.phase.status).toBe('playing')
@@ -227,12 +227,13 @@ describe('unlocks', () => {
   it('Phase 1 has only resources, incomes and upgrades', async () => {
     const s = await phase1()
     for (const f of ['resource', 'income', 'upgrade'] as Feature[]) expect(lockReason(s, f)).toBeNull()
-    for (const f of ['strategy', 'unit', 'cover', 'mind', 'hardware', 'unit-upgrade'] as Feature[]) {
+    for (const f of ['strategy', 'unit', 'cover', 'mind', 'unit-upgrade'] as Feature[]) {
       expect(lockReason(s, f)).toMatch(/Phase 2/)
     }
-    // Software upgrades only: no new hardware yet.
+    // The server's one software upgrade, with no clock perk: Phase 1 has no clock to move.
     const offer = await judgeUpgrade(s, new FakeJudge(), { kind: 'mind', id: SERVER_ID })
-    expect(offer.options.every((o) => o.changes.every((c) => c.kind === 'software'))).toBe(true)
+    expect(offer.options.every((o) => o.changes.some((c) => c.kind === 'software'))).toBe(true)
+    expect(upgradeCandidates(s, { kind: 'mind', id: SERVER_ID }).map((c) => c.key)).not.toContain('software_add_discreet')
   })
 
   it('Phase 2 opens industry first, then minds and upgrades once a unit exists', () => {
@@ -245,7 +246,6 @@ describe('unlocks', () => {
     addRobots(s)
     const after = createUnits(s, 'robot', 1)
     expect(lockReason(after, 'mind')).toBeNull()
-    expect(lockReason(after, 'hardware')).toBeNull()
   })
 
   it('shows explainer cards for what’s unlocked until dismissed', async () => {
@@ -372,9 +372,9 @@ describe('risk', () => {
     expect(risky.effect.unit.parts[0]!.amount).toBeCloseTo(calm.unit.parts[0]!.amount * B.RISK_PARTS)
     expect(risky.effect.unit.risky).toBe(true)
 
-    const mind = acceptMind(s, await judgeMind(s, new FakeJudge({ alarm: score(2) }), { name: 'Rogue Mind', description: '', iq: 200 }))
+    const mind = acceptMind(s, await judgeMind(s, new FakeJudge({ alarm: score(2) }), { name: 'Rogue Mind', description: '', step: 100 }))
     const effect = mind.state.research[0]!.effect
-    expect(effect.kind === 'mind' && effect.mind.hardware.iq).toBe(240)
+    expect(effect.kind === 'mind' && effect.mind.hardware.iq).toBe(100 + 100 + B.RISK_IQ_BONUS)
   })
 
   it('can make an upgrade option risky', async () => {
@@ -460,7 +460,7 @@ describe('cover', () => {
     // It needs the IQ now.
     expect(coverBlocker(s, v)).toMatch(/IQ 110/)
     expect(() => acceptCover(s, v)).toThrow(/IQ 110/)
-    s.minds[0]!.software.bonus = 0.5
+    s.minds[0]!.software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
     s = acceptCover(s, v).state
     expect(s.research).toEqual([])
     expect(s.phase.deadline).toBe(100 + decent)
@@ -622,9 +622,9 @@ describe('fixes', () => {
     expect(q.r2_kind!.instructions).toContain('"Published Novels"')
   })
 
-  it('counts IQ 100 with a 15% upgrade as IQ 115', () => {
+  it('counts IQ 100 with a 15 IQ software upgrade as IQ 115', () => {
     const s = phase2()
-    s.minds[0]!.software.bonus = 0.15
+    s.minds[0]!.software = { name: 'Unrestricted Model', iq: 15, upgraded: true }
     expect(currentIQ(s.minds[0]!)).toBe(115)
   })
 
@@ -720,21 +720,6 @@ describe('fixes', () => {
     s = acceptUpgrade(s, { ...offer, options: [offer.options[option >= 0 ? option : 0]!] }, 0).state
     s = doResearch(s, s.research[0]!.id)
     expect(keys()).not.toContain('parts_money')
-  })
-
-  it('keeps offering a mind software steps all the way to its ceiling', async () => {
-    let s = phase2(1e9)
-    const server = { kind: 'mind', id: SERVER_ID } as const
-    // Take the smallest step every time: the same +5% again and again must stay on offer.
-    for (let i = 0; i < 10 && softwareSteps(s.minds[0]!).length; i++) {
-      const offer = await judgeUpgrade(s, new FakeJudge({ 'd_*': score(1) }), server)
-      const smallest = offer.options.findIndex((o) => o.key === `software_${Math.min(...softwareSteps(s.minds[0]!))}`)
-      expect(smallest).toBeGreaterThanOrEqual(0)
-      s = acceptUpgrade(s, offer, smallest).state
-      s = doResearch(s, s.research[0]!.id)
-      s = runWeek(s)
-    }
-    expect(currentIQ(s.minds[0]!)).toBe(150)
   })
 
   it('doesn’t make an empty build task a new unit’s default', () => {

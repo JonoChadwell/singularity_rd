@@ -1,4 +1,5 @@
 import type { JevAnswer } from '@/ai/jev'
+import type { ComputeTraitId } from './computeTraits'
 import type { QuirkId, TraitId } from './traits'
 
 export interface Resource {
@@ -30,19 +31,22 @@ export interface Flow {
 }
 
 /**
- * An intelligence system: one machine, a hardware platform running software. Minds do the
- * research. They have no count, upkeep or strategies.
+ * An intelligence system: one machine, a hardware platform running software. It does the
+ * research. There is only ever one: a new platform replaces the old one for good. It has no
+ * count, upkeep or strategies.
  */
 export interface Mind {
   id: string
   name: string
   description: string
   icon: string
-  /** Its IQ is what the machine can think with on its first software. Hard to change. */
+  /** What the machine can think with on its first software. */
   hardware: Hardware
-  /** Upgrades add IQ, up to the software ceiling. */
+  /** One upgrade, ever. After that, progress needs a new platform. */
   software: Software
-  /** Compute tier number, or 0 for the Starting Server. */
+  /** Perks and drawbacks of this platform. */
+  traits: ComputeTraitId[]
+  /** Generation: 0 for the Starting Server, then one more for each platform. */
   tier: number
   /** Jev's plausibility, kept for the card. */
   plausibility: number
@@ -56,8 +60,9 @@ export interface Hardware {
 
 export interface Software {
   name: string
-  /** Share of the hardware's IQ added by software upgrades, up to the software ceiling. */
-  bonus: number
+  /** IQ added by its one upgrade (0 until then). */
+  iq: number
+  upgraded: boolean
 }
 
 /** An industry unit: anything you own a number of, running strategies. */
@@ -149,9 +154,9 @@ export interface Income {
 
 /** One change an upgrade makes. */
 export type Change =
-  | { kind: 'software'; share: number }
-  /** New hardware: IQ × (1 + share). */
-  | { kind: 'hardware'; name: string; share: number }
+  /** A platform's one software upgrade: adds `iq`. */
+  | { kind: 'software'; iq: number }
+  | { kind: 'computeTrait'; trait: ComputeTraitId; add: boolean }
   | { kind: 'upkeep'; resourceId: string; factor: number }
   | { kind: 'parts'; resourceId: string; factor: number }
   | { kind: 'trait'; trait: TraitId; add: boolean }
@@ -287,7 +292,7 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 12
+  version: 13
   runId: string
   week: number
   phase: PhaseState
@@ -300,6 +305,7 @@ export interface GameState {
   /** Explainer cards the player has dismissed. */
   cardsSeen: string[]
   resources: Resource[]
+  /** The active platform, and nothing else: a new platform replaces it. */
   minds: Mind[]
   units: UnitType[]
   strategies: Strategy[]

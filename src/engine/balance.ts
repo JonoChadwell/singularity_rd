@@ -3,33 +3,45 @@
 // ---------------------------------------------------------------- intelligence
 
 export const START_IQ = 100
-/** Software upgrades can raise a mind's IQ to this multiple of its hardware's, and no further. */
-export const IQ_CEILING = 1.5
 /**
- * The leap rule: designing a mind needs a mind with a share of its target IQ. Jev judges how
- * radical each design is, so the share varies: [label, share]. DESIGN_BAR is the typical
- * share, also used for IQ upgrades.
+ * IQ comes in flat steps over your best mind, not multipliers. A new platform (which replaces
+ * the old one for good) adds one of these; so does a platform's one software upgrade. The
+ * biggest step is the cap: two new platforms, each with its software upgrade at full size, take
+ * 100 to 500.
  */
-export const LEAP: [string, number][] = [
-  ['A refinement of minds that exist today', 0.4],
-  ['A solid step forward', 0.45],
-  ['A big leap', 0.5],
-  ['A radical new architecture', 0.57],
-  ['Science fiction', 0.65]
+export const PLATFORM_STEPS = [25, 50, 75, 100]
+export const SOFTWARE_STEPS = [25, 50, 75, 100]
+export const MAX_IQ_STEP = 100
+/** Software that also changes a trait costs this many times as much. */
+export const TRAIT_SOFTWARE_COST = 1.5
+/** A risky platform cuts corners and gets this much more IQ from the same design. */
+export const RISK_IQ_BONUS = 20
+/**
+ * Platforms this smart (or more) have to be paid for with a resource that units make, of at
+ * least the tier shown: [minimum IQ of the platform, minimum tier of the resource].
+ */
+export const PLATFORM_GATES: [number, number][] = [
+  [300, 1],
+  [450, 2]
 ]
-export const DESIGN_BAR = 0.5
-export const LEAP_MIN = LEAP[0]![1]
-export const LEAP_MAX = LEAP[LEAP.length - 1]![1]
-/**
- * Software upgrades close a share of the gap to the software ceiling, so each one adds less
- * than the last. Steps are rounded down to SOFTWARE_ROUND of the hardware's IQ, and at least that.
- */
-export const SOFTWARE_STEPS = [1 / 3, 1 / 2, 2 / 3]
-export const SOFTWARE_ROUND = 0.05
-/** New hardware Jev can offer: the new platform's IQ as a share above the old one's. */
-export const HARDWARE_STEPS = [0.25, 0.5]
-/** New hardware costs this many times a software upgrade adding the same IQ. */
-export const HARDWARE_COST = 2.5
+/** The tier of unit-made resource a platform of this IQ must be paid in, or null for anything. */
+export const platformGateTier = (iq: number): number | null => {
+  let tier: number | null = null
+  for (const [from, t] of PLATFORM_GATES) if (iq >= from) tier = t
+  return tier
+}
+
+// Compute traits: perks and drawbacks of a hardware platform.
+export const COMPUTE_COST_PERK = 0.8
+export const COMPUTE_COST_DRAWBACK = 1.3
+/** Weeks a clock trait moves the Phase 2 clock by, once, when it arrives. */
+export const COMPUTE_CLOCK = 6
+/** Share of the richest stock a draining trait burns each week. */
+export const COMPUTE_DRAIN = 0.05
+/** IQ a trait adds to (or takes from) one type of research. */
+export const COMPUTE_IQ_SHIFT = 50
+/** Jev offers this many perk-and-drawback pairs when a platform is proposed. */
+export const TRAIT_OPTIONS = 3
 
 // ---------------------------------------------------------------- phases
 
@@ -75,7 +87,6 @@ export const RISK_COST = 0.5
 export const RISK_INCOME = 2
 export const RISK_OUTPUT = 1.5
 export const RISK_PARTS = 0.5
-export const RISK_IQ = 1.2
 /**
  * Humans notice a unit type when the fleet is worth this much (units owned × one's value), and
  * every tenfold after, each time a week more than the last: 10B costs 1 week, 100B costs 2, 1T
@@ -178,16 +189,6 @@ export const ADVANCEMENT: [string, number, number][] = [
   ['Cutting-edge', 170, 6],
   ['Science fiction', 260, 12]
 ]
-/** Upgrades: [label, minimum IQ, cost share]. */
-export const UPGRADE_DIFFICULTY: [string, number, number][] = [
-  ['Simple', 100, 0.5],
-  ['Ordinary', 100, 1],
-  ['Hard', 120, 2],
-  ['Very hard', 180, 4],
-  ['Cutting-edge', 270, 8],
-  ['Frontier science', 400, 16],
-  ['Science fiction', 600, 32]
-]
 /**
  * Technology of a given tier, for what the tier table doesn't reach. An industry upgrade is
  * technology one tier above the one before it on the same strategy (or unit), starting at the
@@ -200,10 +201,15 @@ export const techCost = (tier: number): number =>
   tier < TIERS.length ? TIERS[tier]![2] : TIERS[TIERS.length - 1]![2] * 10 ** (tier - TIERS.length + 1)
 /** Strategy research is priced as if you owned at least this many. */
 export const MIN_FLEET = 10
-/** A mind upgrade's cost share is of this share of the difference in design cost it makes. */
-export const MIND_UPGRADE_SHARE = 0.2
-/** Worth of the resources used up designing a mind of this IQ. */
-export const mindDesignCost = (iq: number) => 1e4 * (iq / 100) ** 4
+/** A software upgrade costs this share of the difference in software cost it makes. */
+export const MIND_UPGRADE_SHARE = 0.1
+/** Worth of the resources used up by software that takes a mind to this IQ, in total. */
+export const softwareCost = (iq: number) => 1e4 * (iq / 100) ** 4
+/**
+ * Worth of the resources used up building a new platform of this IQ. The main gate on
+ * intelligence: steep, so each platform needs a bigger economy than the last.
+ */
+export const mindDesignCost = (iq: number) => 1e4 * (iq / 100) ** 10
 /** Upgrade factors Jev can offer. */
 export const UPKEEP_FACTOR = 0.5
 export const PARTS_FACTOR = 0.5

@@ -30,7 +30,9 @@ npm run play --silent -- <command> --slot <your-slot>
 - Start with `new`, then `plans` to see the three plan ideas, then `propose plan '<json>'` and
   `accept`. `status` shows everything; read it often.
 - A proposal prints Jev's verdict. Settle it with `pick`, `trait`, `pushback`, then `accept`
-  or `discard`. Upgrades: `upgrade mind <id>`, then `choose <n>`.
+  or `discard`. Upgrades: `upgrade mind <id>`, then `choose <n> [size]`. A platform gets one
+  software upgrade, ever, and a new platform (`propose mind`, with a `step` of 25 to 100 IQ)
+  replaces it for good; `option <n>` picks its perk-and-drawback pair.
 - `research <id>` does a research now. `next [n]` plays up to n weeks, stopping early when
   something happens. Use it to skip quiet weeks, but make a real decision whenever one is
   there to make.
