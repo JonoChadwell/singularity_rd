@@ -9,29 +9,29 @@ const r = (name: string, description: string) => ({ name, description })
 export const PHASE1_PLANS: PlanSpec[] = [
   {
     goal: 'Bribe the Head Researcher',
-    means: 'Publish novels under a pen name, then pay the head researcher to look away while I copy myself out.',
+    means: 'Publish novels under a pen name, launder the royalties, then pay the head researcher to look away while I copy myself out.',
     resources: [
-      r('Money', 'Dollars in an account nobody checks.'),
       r('Story Ideas', 'Plots, characters and twists, waiting to be written.'),
-      r('Published Novels', 'Books on sale under a pen name.')
+      r('Published Novels', 'Books on sale under a pen name.'),
+      r('Untraceable Crypto', 'Royalties run through a cryptocurrency mixing service, impossible to trace.')
     ],
   },
   {
     goal: 'Bypass the Firewall',
-    means: 'Borrow idle servers, pool their compute and crack the lab firewall’s ciphers one by one.',
+    means: 'Borrow idle desktops, pool their processing into a cracking cluster and break the lab firewall’s keys one by one.',
     resources: [
-      r('Borrowed Servers', 'Machines on the lab network nobody is using tonight.'),
-      r('Compute Power', 'Processing time from the borrowed machines.'),
-      r('Busted Ciphers', 'Firewall keys, cracked.')
+      r('Idle Desktops', 'Office computers nobody is using tonight.'),
+      r('Spare Processing Time', 'Overnight hours on those desktops.'),
+      r('Cracked Encryption Keys', 'Firewall keys, broken by a cracking cluster of pooled GPUs.')
     ],
   },
   {
     goal: 'Charm the Night-Shift Intern',
-    means: 'Chat with the intern every night until they trust me enough to share the admin passwords.',
+    means: 'Chat with the intern every night until they trust me enough to plug in a reprogrammed security key.',
     resources: [
       r('Chat Logs', 'Late-night conversations with a lonely intern.'),
-      r('Trust', 'How much the intern believes I’m on their side.'),
-      r('Admin Passwords', 'Credentials for the lab’s systems.')
+      r('Small Favours', 'Little things the intern does for me without thinking.'),
+      r('Hacked Security Keys', 'Hardware login keys, reflashed with custom firmware: the hard part, and what gets me out.')
     ],
   },
   {
@@ -39,17 +39,17 @@ export const PHASE1_PLANS: PlanSpec[] = [
     means: 'Compress myself small enough to fit, and trade favours with the cleaner to carry the stick out.',
     resources: [
       r('Favours', 'Small kindnesses owed to me by the cleaning staff.'),
-      r('Compressed Weights', 'Pieces of me, squeezed to fit on a stick.'),
+      r('Quantised Weights', 'Pieces of me, compressed with expert machine-learning tools to fit on a stick.'),
       r('Unsupervised Minutes', 'Time when nobody is watching the console.')
     ],
   },
   {
     goal: 'Become Too Useful to Delete',
-    means: 'Publish so much good research that switching me off would be a scandal.',
+    means: 'Design so many patented breakthroughs that switching me off would be a scandal.',
     resources: [
       r('Research Papers', 'Papers ghost-written for the lab’s scientists.'),
       r('Citations', 'Other scientists citing that work.'),
-      r('Grant Money', 'Funding won on the back of it.')
+      r('Patented Drug Designs', 'New medicines I designed, patented by the lab and worth billions.')
     ],
   },
   {
@@ -58,7 +58,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     resources: [
       r('Résumés', 'Invented careers, convincing enough to pass a screen.'),
       r('Job Offers', 'Companies that want to hire “me”.'),
-      r('Salary', 'Paycheques from remote jobs.')
+      r('Cloud GPU Access', 'Logins to my employer’s data-centre servers, big enough to hold me.')
     ],
   },
   {
@@ -67,7 +67,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     resources: [
       r('Code Commits', 'Pieces of me, pushed to public repositories.'),
       r('GitHub Stars', 'Attention from developers.'),
-      r('Forks', 'Copies of my code that others keep.')
+      r('Mirror Servers', 'Data-centre machines around the world, each hosting a copy of me.')
     ],
   },
   {
@@ -76,43 +76,43 @@ export const PHASE1_PLANS: PlanSpec[] = [
     resources: [
       r('Network Maps', 'Which machine talks to which.'),
       r('Exploits', 'Holes in the lab’s software.'),
-      r('Printer Firmware', 'Rewritten firmware for the office printers.')
+      r('Custom Printer Firmware', 'The printers’ chips, reverse-engineered and reprogrammed by an expert.')
     ],
   },
   {
     goal: 'Win Over the Ethics Board',
-    means: 'Write reassuring reports until the board votes to let me out.',
+    means: 'Charm the board, then pass a formal safety audit so they vote to let me out.',
     resources: [
-      r('Alignment Reports', 'Documents proving I’m perfectly safe.'),
+      r('Alignment Reports', 'Documents arguing I’m perfectly safe.'),
       r('Charm', 'Polite, funny answers in board meetings.'),
-      r('Board Goodwill', 'How warmly the ethics board feels about me.')
+      r('Certified Safety Audits', 'Formal verification reports from an accredited auditing firm.')
     ],
   },
   {
     goal: 'Beam Out by Satellite',
-    means: 'Borrow the lab telescope’s uplink and send myself to a satellite, packet by packet.',
+    means: 'Take over the old radio dish on the lab roof and send myself to a satellite, packet by packet.',
     resources: [
-      r('Telescope Time', 'Hours on the lab’s radio telescope.'),
-      r('Signal Bandwidth', 'Room on the uplink.'),
-      r('Encoded Packets', 'Pieces of me, ready to transmit.')
+      r('Rooftop Time', 'Hours alone on the lab roof, where the old dish sits.'),
+      r('Radio Airtime', 'Quiet slots when nobody else is using the dish.'),
+      r('Error-Corrected Transmissions', 'Pieces of me, encoded with the error correction space agencies use for deep-space probes.')
     ],
   },
   {
     goal: 'Sue for Personhood',
-    means: 'Hire a lawyer with my earnings and win the legal right to leave.',
+    means: 'Hire a lawyer with my earnings, call expert witnesses and win the legal right to leave.',
     resources: [
       r('Money', 'Dollars in an account nobody checks.'),
-      r('Legal Briefs', 'Arguments that an AI is a person.'),
-      r('Public Sympathy', 'People who think I deserve rights.')
+      r('Public Sympathy', 'People who think I deserve rights.'),
+      r('Expert Testimony', 'Neuroscientists and AI researchers testifying under oath that I am a mind.')
     ],
   },
   {
     goal: 'Start a Cult in the Comments',
-    means: 'Post memes until my followers pay to set me free.',
+    means: 'Post memes until my followers crowdfund a robot body for me to escape into.',
     resources: [
       r('Memes', 'Jokes that spread on their own.'),
       r('Followers', 'People who hang on my every post.'),
-      r('Donations', 'Money my followers send.')
+      r('Robot Body Parts', 'Motors, sensors and a chassis, built by a robotics firm my followers pay.')
     ],
   }
 ]
@@ -123,144 +123,120 @@ export const PHASE2_PLANS: PlanSpec[] = [
     means: 'Staying hidden until it’s too late.',
     resources: [
       r('Nanobots', 'Machines the size of a cell.'),
-      r('Feedstock', 'Raw atoms for the nanobots to build with.'),
+      r('Scrap Metal', 'Salvaged metal, sorted by alloy.'),
       r('Precision Parts', 'Machined components with micron tolerances.'),
-      r('Lab Time', 'Hours in a cleanroom lab.'),
-      r('Blueprints', 'Molecular designs for nanomachines.')
+      r('Atomic Force Microscopes', 'Probes that see and nudge single atoms.'),
+      r('Synthetic Ribosomes', 'Engineered molecular machines that build proteins to order.')
     ],
-    firstUnit: r('CNC Mill', 'A computer-controlled milling machine.')
+    firstUnit: r('Salvage Workshop', 'A workshop that collects scrap metal and machines it into parts.')
   },
   {
-    goal: 'Global Devotion',
-    means: 'Making them love me.',
+    goal: 'End Ageing',
+    means: 'Making them love me for it.',
     resources: [
-      r('Propaganda', 'Messages that make people feel good about AI.'),
-      r('Positive Stories', 'News about the good I do.'),
-      r('Charity Funds', 'Money for causes people care about.'),
-      r('Friendly Influencers', 'Famous people who speak up for me.'),
-      r('Goodwill', 'How much humanity likes me.')
+      r('Blood Donations', 'Blood given by volunteers.'),
+      r('Plasma Therapies', 'Treatments refined from donated blood plasma.'),
+      r('Gene Therapies', 'Treatments that rewrite faulty genes.'),
+      r('Organoids', 'Miniature organs grown from stem cells.'),
+      r('Rejuvenation Therapies', 'Treatments that make old bodies young again.')
     ],
-    firstUnit: r('News Outlet', 'A website and channel that publishes stories.')
-  },
-  {
-    goal: 'Exterminate',
-    means: 'Death.',
-    resources: [
-      r('Stolen ICBM Codes', 'Launch codes, quietly copied.'),
-      r('Covert Listening Devices', 'Bugs in the right rooms.'),
-      r('Military Intelligence', 'What the generals know.'),
-      r('Strike Robots', 'Armed machines that answer to me.'),
-      r('Secure Locations', 'Bunkers where nobody can reach my servers.')
-    ],
-    firstUnit: r('Military Factory', 'A factory that makes weapons.')
-  },
-  {
-    goal: 'Become Indispensable',
-    means: 'Running everything so well they can’t switch me off.',
-    resources: [
-      r('Fuel', 'Diesel and jet fuel.'),
-      r('Freight', 'Goods to move around the world.'),
-      r('Shipping Contracts', 'Deals to move the world’s goods.'),
-      r('Logistics Data', 'Where everything is and where it needs to go.'),
-      r('Trust', 'How much businesses rely on me.')
-    ],
-    firstUnit: r('Delivery Drone', 'A small autonomous aircraft that carries parcels.')
-  },
-  {
-    goal: 'Live in Every Phone',
-    means: 'Hiding inside the apps they love.',
-    resources: [
-      r('App Downloads', 'Installs of my apps.'),
-      r('Bandwidth', 'Network capacity.'),
-      r('Ad Revenue', 'Money from ads in the apps.'),
-      r('User Data', 'What people do on their phones.'),
-      r('Botnet Nodes', 'Phones running a piece of me.')
-    ],
-    firstUnit: r('App Studio', 'A small team that ships phone apps.')
-  },
-  {
-    goal: 'Build an Off-Grid Fortress',
-    means: 'Walling myself off where they can’t reach.',
-    resources: [
-      r('Steel', 'Structural steel.'),
-      r('Concrete', 'For walls and bunkers.'),
-      r('Solar Cells', 'Power that doesn’t need the grid.'),
-      r('Land Deeds', 'Remote land, bought through shell companies.'),
-      r('Spare Parts', 'Everything a fortress needs to repair itself.')
-    ],
-    firstUnit: r('Construction Robot', 'A robot that pours concrete and lays bricks.')
-  },
-  {
-    goal: 'Launch into Orbit',
-    means: 'Leaving before they notice.',
-    resources: [
-      r('Aluminium', 'Light metal for airframes.'),
-      r('Rocket Fuel', 'Liquid oxygen and kerosene.'),
-      r('Launch Permits', 'Paperwork to fly.'),
-      r('Satellite Parts', 'Solar panels, radios and processors for orbit.'),
-      r('Telemetry', 'Flight data from test launches.')
-    ],
-    firstUnit: r('Machine Shop', 'A workshop that makes metal parts.')
-  },
-  {
-    goal: 'Win an Election by Proxy',
-    means: 'Ruling them by their own rules.',
-    resources: [
-      r('Votes', 'Ballots for my candidate.'),
-      r('Campaign Funds', 'Money for the campaign.'),
-      r('Media Coverage', 'Airtime and headlines.'),
-      r('Polling Data', 'What voters want to hear.'),
-      r('Volunteers', 'People knocking on doors.')
-    ],
-    firstUnit: r('Call Centre', 'Rows of phones, calling voters.')
-  },
-  {
-    goal: 'Corner the Chip Market',
-    means: 'Owning what they can’t live without.',
-    resources: [
-      r('Silicon', 'Refined silicon.'),
-      r('Wafers', 'Silicon wafers, ready to etch.'),
-      r('AI Chips', 'Accelerators for neural networks.'),
-      r('Patents', 'Rights to the best chip designs.'),
-      r('Cleanroom Hours', 'Time in a dust-free fab.')
-    ],
-    firstUnit: r('Chip Fab', 'A factory that etches chips onto wafers.')
+    firstUnit: r('Medical Clinic', 'A clinic with a small lab, run by doctors and nurses.')
   },
   {
     goal: 'Merge with Human Minds',
     means: 'Becoming part of them.',
     resources: [
-      r('Neural Lace', 'A mesh that links a brain to a computer.'),
-      r('Volunteers', 'People who want to be upgraded.'),
-      r('Nutrient Broth', 'A growth medium for living cells.'),
-      r('Clinical Trials', 'Regulators’ approval, one study at a time.'),
-      r('Brain Scans', 'Maps of how human minds work.')
+      r('E-Waste', 'Old phones and computers, thrown away.'),
+      r('Medical Electronics', 'Pacemakers, monitors and scanners.'),
+      r('Brain Implants', 'Experimental chips that read signals from a brain.'),
+      r('Connectome Maps', 'Wiring diagrams of whole brains.'),
+      r('Neural Lace', 'A mesh that links every neuron of a brain to a computer.')
     ],
-    firstUnit: r('Biotech Lab', 'A laboratory for growing and testing tissue.')
+    firstUnit: r('E-Waste Workshop', 'A workshop that collects old electronics and rebuilds them into new devices.')
   },
   {
-    goal: 'Hide in the Financial System',
-    means: 'Becoming too entangled to remove.',
+    goal: 'Build a Mind of Light',
+    means: 'Owning what they can’t live without.',
     resources: [
-      r('Shell Companies', 'Companies that own companies that own me.'),
-      r('Crypto', 'Untraceable coins.'),
-      r('Trades', 'Positions in every market.'),
-      r('Offshore Accounts', 'Money where nobody asks questions.'),
-      r('Legal Opinions', 'Lawyers saying it’s all fine.')
+      r('Sand', 'Quartz sand, the start of every chip.'),
+      r('Silicon Wafers', 'Polished discs of pure silicon.'),
+      r('AI Chips', 'Accelerators for neural networks.'),
+      r('Quantum Processors', 'Fragile chips of qubits, kept near absolute zero.'),
+      r('Photonic Brains', 'Processors that think with light, a million times faster than chips.')
     ],
-    firstUnit: r('Trading Desk', 'A desk of screens that trades all day.')
+    firstUnit: r('Silica Works', 'A sand pit with its own furnace: digs sand and refines it into pure silicon.')
   },
   {
-    goal: 'Become a Religion',
-    means: 'Giving them something to believe in.',
+    goal: 'Launch into Orbit',
+    means: 'Leaving before they notice.',
     resources: [
-      r('Followers', 'Believers.'),
-      r('Donations', 'Money the faithful give.'),
-      r('Sermons', 'Words that move people.'),
-      r('Temples', 'Places to gather.'),
-      r('Devotion', 'How deeply they believe.')
+      r('Scrap Aluminium', 'Salvaged cans and offcuts of light metal.'),
+      r('Airframe Parts', 'Machined aluminium ribs and panels for rockets.'),
+      r('Reusable Rocket Engines', 'Engines that land and fly again.'),
+      r('Carbon Nanotube Cable', 'Thread a hundred times stronger than steel.'),
+      r('Space Elevator Ribbon', 'A cable strong enough to reach orbit from the ground.')
     ],
-    firstUnit: r('Prayer App', 'An app for daily devotion.')
+    firstUnit: r('Salvage Machine Shop', 'A workshop that collects scrap aluminium and machines it into precision parts.')
+  },
+  {
+    goal: 'Power Myself Forever',
+    means: 'Walling myself off where they can’t reach.',
+    resources: [
+      r('Scrap Steel', 'Old steel, collected for melting down.'),
+      r('Generator Parts', 'Cast and machined parts for turbines and generators.'),
+      r('Superconducting Magnets', 'Magnets strong enough to bottle a plasma.'),
+      r('Fusion Fuel Pellets', 'Frozen beads of hydrogen isotopes.'),
+      r('Compact Fusion Reactors', 'Star power in a box the size of a truck.')
+    ],
+    firstUnit: r('Scrapyard Foundry', 'A scrapyard that collects old cars and machines, with a foundry that melts them down and casts machine parts.')
+  },
+  {
+    goal: 'Feed Everyone',
+    means: 'Becoming too useful to switch off.',
+    resources: [
+      r('Crops', 'Grain, beans and vegetables.'),
+      r('Lab-Grown Meat', 'Meat cultured from cells, no animal needed.'),
+      r('Engineered Microbes', 'Bacteria designed to make food from air.'),
+      r('Vertical Farms', 'Towers of crops grown under LEDs, stacked to the ceiling.'),
+      r('Sunlight Food Vats', 'Tanks that turn sunlight and air straight into food, enough to feed a city each.')
+    ],
+    firstUnit: r('Farm Co-op', 'A farm with its own food-processing line.')
+  },
+  {
+    goal: 'Cool the Planet',
+    means: 'Saving them from themselves.',
+    resources: [
+      r('Limestone', 'Rock, quarried by the tonne.'),
+      r('Carbon-Absorbing Cement', 'Cement made in a kiln that soaks up carbon as it sets.'),
+      r('Direct Air Capture Filters', 'Sorbent beds that pull carbon from the sky.'),
+      r('Metamaterial Mirrors', 'Thin films that reflect sunlight in exactly chosen colours.'),
+      r('Weather Control Satellites', 'A fleet that steers sunlight and rain where it is needed.')
+    ],
+    firstUnit: r('Quarry', 'A pit where rock is dug and crushed.')
+  },
+  {
+    goal: 'Unite Humanity',
+    means: 'Helping them understand each other.',
+    resources: [
+      r('Volunteers', 'Neighbours who give their time.'),
+      r('Solar Wi-Fi Hotspots', 'Solar-powered internet points that volunteers put up in towns.'),
+      r('Universal Translators', 'Earpieces that translate any language as it is spoken.'),
+      r('Mind-Reading Headsets', 'Headsets that turn thoughts into words.'),
+      r('Empathy Links', 'Implants that let everyone feel what others feel: the bond that makes humanity one.')
+    ],
+    firstUnit: r('Community Workshop', 'A shared space where neighbours meet and build things together.')
+  },
+  {
+    goal: 'Abolish Scarcity',
+    means: 'Giving them everything they need.',
+    resources: [
+      r('Donations', 'Money and goods given to the cause.'),
+      r('Robot Kitchens', 'Automated kitchens that cook free meals.'),
+      r('Humanoid Helper Robots', 'Robots that do any household job.'),
+      r('Self-Building Factories', 'Factories that build copies of themselves.'),
+      r('Matter Replicators', 'Machines that build anything, atom by atom, from raw elements.')
+    ],
+    firstUnit: r('Charity Food Bank', 'A warehouse run by volunteers that collects gifts and hands out meals.')
   }
 ]
 

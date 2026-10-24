@@ -13,7 +13,7 @@ export interface Resource {
   band: number
   /**
    * How far along the game it is, 0 to 4. Each phase's plan has one resource at the top (Phase
-   * 1: tier 1, Phase 2: tier 4) and its goal uses that up.
+   * 1: tier 1, Phase 2: tier 3) and its goal uses that up.
    */
   tier: number
   /** Worth of one, in Money. */

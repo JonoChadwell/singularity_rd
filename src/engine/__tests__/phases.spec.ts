@@ -480,7 +480,7 @@ describe('projection', () => {
 describe('plan ideas', () => {
   it('has twelve for each phase, all of them valid plans', () => {
     expect(PHASE1_PLANS).toHaveLength(12)
-    expect(PHASE2_PLANS).toHaveLength(12)
+    expect(PHASE2_PLANS).toHaveLength(10)
     const p1 = createInitialState()
     for (const p of PHASE1_PLANS) expect(precheckPlan(p1, p), p.goal).toBeNull()
     const p2 = createInitialState()
@@ -541,7 +541,7 @@ describe('fixes', () => {
     expect(currentIQ(s.minds[0]!)).toBe(115)
   })
 
-  it('builds a Phase 2 goal from one new resource at tier 4; Jev tiers the rest 0–3', async () => {
+  it('builds a Phase 2 goal from one new resource at tier 3; Jev tiers the rest 0–3', async () => {
     const s = createInitialState()
     s.phase = newPhase(2, 5)
     s.resources.push(newResource({ id: MONEY_ID, name: 'Money' }))
@@ -553,11 +553,11 @@ describe('fixes', () => {
     expect(Object.values((q.top as { criteria: Record<string, string> }).criteria)).not.toContain('Money')
     expect((q.r1_tier as { criteria: string[] }).criteria).toHaveLength(B.PHASE_MAX_TIER[2] + 1)
     const d = draftPlan(s, v)
-    expect(d.top).toMatchObject({ name: 'Nanobots', tier: 4 })
+    expect(d.top).toMatchObject({ name: 'Nanobots', tier: 3 })
     // Jev puts them all at tier 3, but Phase 2 starts with every tier, so some move down to fill the gaps.
     const rest = d.added.filter((r) => r !== d.top)
     expect(rest.every((r) => r.tier <= B.PHASE_MAX_TIER[2])).toBe(true)
-    expect([...new Set(d.state.resources.map((r) => r.tier))].sort()).toEqual([0, 1, 2, 3, 4])
+    expect([...new Set(d.state.resources.map((r) => r.tier))].sort()).toEqual([0, 1, 2, 3])
     // Each keeps the storage of its tier.
     for (const r of d.added) expect(r.cap).toBe(B.nice(B.STORAGE_WORTH[r.tier]! / r.value))
     expect(d.goal.cost).toEqual([expect.objectContaining({ resourceId: d.top.id })])
@@ -572,22 +572,23 @@ describe('fixes', () => {
       const withMoney = { ...nanotech, resources: [{ name: 'Money', description: '' }, ...nanotech.resources] }
       // Jev tiers every new resource in the middle (tier 2), so the other tiers would be empty.
       const d = draftPlan(s, await judgePlan(s, new FakeJudge(), withMoney))
-      expect(d.added.map((r) => r.tier).sort()).toEqual([0, 1, 2, 3, 4])
-      expect(d.top.tier).toBe(4)
+      expect(d.added.map((r) => r.tier).sort()).toEqual([0, 1, 2, 2, 3])
+      expect(d.top.tier).toBe(3)
     }
   })
 
   it('moves a new resource into an empty tier only when its own tier keeps another', () => {
     const r = (id: string, tier: number) => newResource({ id, name: id, tier })
     // Three at tier 2 can spare two.
-    const spare = [r('goal', 4), r('a', 2), r('b', 2), r('c', 3), r('d', 2)]
-    coverTiers(spare)
-    expect(spare.map((x) => x.tier).sort()).toEqual([0, 1, 2, 3, 4])
-    // A lone tier 2 stays put while the tier 3s lend two.
-    const lone = [r('goal', 4), r('a', 2), r('b', 3), r('c', 3), r('d', 3)]
-    coverTiers(lone)
+    const spare = [r('goal', 3), r('a', 2), r('b', 2), r('d', 2)]
+    coverTiers(spare, spare[0]!)
+    expect(spare.map((x) => x.tier).sort()).toEqual([0, 1, 2, 3])
+    // A lone tier 2 stays put while the tier 3s beside the goal lend two; the goal never moves.
+    const lone = [r('goal', 3), r('a', 2), r('b', 3), r('c', 3)]
+    coverTiers(lone, lone[0]!)
+    expect(lone[0]!.tier).toBe(3)
     expect(lone[1]!.tier).toBe(2)
-    expect(lone.map((x) => x.tier).sort()).toEqual([0, 1, 2, 3, 4].sort())
+    expect(lone.map((x) => x.tier).sort()).toEqual([0, 1, 2, 3])
   })
 
   it('tiers resources proposed outside a plan: tier 0 in Phase 1, up to 3 in Phase 2', async () => {

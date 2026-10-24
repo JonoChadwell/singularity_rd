@@ -248,7 +248,7 @@ export const NANOTECH: PlanSpec = {
 
 /**
  * A Phase 2 game as a typical Phase 1 leaves it: the Starting Server at IQ 140, some Money and
- * an every-week Create of it, then the nanotech plan, whose goal is built from Nanobots (tier 4).
+ * an every-week Create of it, then the nanotech plan, whose goal is built from Nanobots (tier 3).
  */
 export async function phase2(approach = 2): Promise<GameState> {
   const s = createInitialState()

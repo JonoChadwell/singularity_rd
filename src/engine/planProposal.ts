@@ -173,12 +173,12 @@ function topIndex(v: PlanVerdict, fresh: number[]): number {
  * the nearest spare one moves into it: one whose own tier would still have another, so nothing
  * opens a new gap. The goal's resource stays at the top tier.
  */
-export function coverTiers(fresh: Resource[]): void {
+export function coverTiers(fresh: Resource[], top: Resource): void {
   const covered = (tier: number, without?: Resource) => fresh.some((r) => r !== without && r.tier === tier)
   for (let tier = 0; tier <= B.GOAL_TIER[2]; tier++) {
     if (covered(tier)) continue
     const spare = fresh
-      .filter((r) => r.tier !== B.GOAL_TIER[2] && covered(r.tier, r))
+      .filter((r) => r !== top && covered(r.tier, r))
       .sort((a, b) => Math.abs(a.tier - tier) - Math.abs(b.tier - tier))[0]
     if (spare) setTier(spare, tier)
   }
@@ -199,8 +199,8 @@ export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
     state.resources.push(resource)
     added.push(resource)
   }
-  if (v.phase === 2) coverTiers(added)
   const top = added[fresh.indexOf(at)]!
+  if (v.phase === 2) coverTiers(added, top)
   const level = reader(v).level('approach', B.GOAL_APPROACH.length)
   const [, iq1, mult1, iq2, mult2] = B.pick(B.GOAL_APPROACH, level)
   const minIQ = v.phase === 1 ? iq1 : iq2

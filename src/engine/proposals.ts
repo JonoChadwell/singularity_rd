@@ -426,7 +426,7 @@ export function resourceQuestions(state: GameState, prefix = '', name = ''): Rec
       ? {
           [`${prefix}tier`]: {
             type: 'score',
-            instructions: `How far along the AI's journey is ${it}: something to start from, or something that takes a chain of other things to make?`,
+            instructions: `How advanced is the technology behind ${it}, compared with what human civilization can make today? Judge the thing itself, not how much of it there is or how hard it is to get.`,
             criteria: B.RESOURCE_TIERS.slice(0, maxTier(state) + 1)
           } satisfies JevQuestion
         }

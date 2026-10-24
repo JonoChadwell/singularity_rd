@@ -50,10 +50,10 @@ export const PHASE_WEEKS: Record<1 | 2, number> = { 1: 10, 2: 100 }
 /** Resources in a plan: [fewest, most]. Phase 2 needs this many new ones. */
 export const PLAN_RESOURCES: Record<1 | 2, [number, number]> = { 1: [3, 5], 2: [5, 8] }
 /** The tier of the plan's top resource, which the goal uses up. The rest of a Phase 1 plan is tier 0. */
-export const GOAL_TIER: Record<1 | 2, number> = { 1: 1, 2: 4 }
+export const GOAL_TIER: Record<1 | 2, number> = { 1: 1, 2: 3 }
 /** The highest value band a resource can have, by the phase it arrives in: Phase 1 things are cheap. */
 export const PHASE_MAX_BAND: Record<1 | 2 | 3, number> = { 1: 2, 2: 5, 3: 5 }
-/** The highest tier a resource can have outside a plan, by phase. Only plans make the top tier. */
+/** The highest tier a resource can have, by phase. Phase 2's plan and resources stop at Beyond today. */
 export const PHASE_MAX_TIER: Record<1 | 2 | 3, number> = { 1: 0, 2: 3, 3: 4 }
 /**
  * What reaching a goal takes more of: [label, Phase 1 IQ, Phase 1 cost ×, Phase 2 IQ, Phase 2 cost ×].
@@ -353,13 +353,13 @@ export const RESOURCE_VALUE: [string, number][] = [
   ['Precious, like a car', 18],
   ['Priceless, like a masterpiece', 60]
 ]
-/** Resource tiers: how far along the game a resource is. Index = tier. */
+/** Resource tiers: how advanced its technology is, next to today's civilization. Index = tier. */
 export const RESOURCE_TIERS: string[] = [
-  'Basic: something to start from, got with no other resources',
-  'Earned: built up from basic things',
-  'Made: produced from earned things',
-  'Advanced: takes a chain of made things',
-  'Ultimate: the end of a long chain; what a grand plan is built from'
+  'Everyday: anyone today can get or make it, like timber, steel or electricity',
+  'Industrial: needs modern factories or expertise, like microchips, jet fuel or vaccines',
+  'Cutting-edge: only the best labs today can make it, if at all, like room-temperature superconductors or fusion fuel pellets',
+  'Beyond today: possible in principle but decades or centuries ahead, like general-purpose nanobots or antimatter in bulk',
+  'Far future: the edge of what physics allows, like computronium or a Dyson swarm'
 ]
 /** Strategy efficiency: [label, multiplier]. */
 export const EFFICIENCY: [string, number][] = [

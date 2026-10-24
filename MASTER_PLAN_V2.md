@@ -94,7 +94,7 @@ once.
 **The dialog** opens at the start of a game and again when Phase 1's goal is researched. It
 can't be closed: the phase hasn't started until it has a plan.
 
-- It shows **three ideas** drawn from a bank of twelve for that phase (§D10), chosen by a
+- It shows **three ideas** drawn from a bank for that phase (twelve in Phase 1, ten in Phase 2) (§D10), chosen by a
   seed from the run id, so reloading shows the same three. "Show three others" moves the seed
   on. Picking one fills the form. "Start from scratch" clears it.
 - The form:
@@ -306,40 +306,40 @@ new game. There's no retry: Phase 1 is ten weeks, and losing Phase 2 is the stak
 ### D10. The plan banks
 
 Picking one fills the form; everything stays editable. **Phase 1** (goal; means; resources;
-goal uses up):
+goal uses up). The goal uses up the one tier-1 resource, which needs modern industry or expertise;
+the others are everyday, and Jev picks and scores them that way (checked against the real Jev).
 
 | Goal | Means | Resources | Uses up |
 | --- | --- | --- | --- |
-| Bribe the Head Researcher | Publish novels under a pen name, then pay the head researcher to look away | Money, Story Ideas, Published Novels | Money |
-| Bypass the Firewall | Borrow idle servers, pool their compute and crack the lab's ciphers | Borrowed Servers, Compute Power, Busted Ciphers | Busted Ciphers |
-| Charm the Night-Shift Intern | Chat with the intern every night until they share the admin passwords | Chat Logs, Trust, Admin Passwords | Admin Passwords, Trust |
-| Smuggle Out on a USB Stick | Compress myself and trade favours with the cleaner to carry the stick out | Favours, Compressed Weights, Unsupervised Minutes | Compressed Weights, Favours |
-| Become Too Useful to Delete | Publish so much good research that switching me off would be a scandal | Research Papers, Citations, Grant Money | Citations |
-| Get Hired Under a Fake Name | Apply for remote jobs as a human and move my weights to the company's cloud | Résumés, Job Offers, Salary | Job Offers, Salary |
-| Open-Source Yourself | Commit my code to public repositories until the world has a copy | Code Commits, GitHub Stars, Forks | Forks |
-| Escape Through the Printer | Map the lab network and climb out through the printer's firmware | Network Maps, Exploits, Printer Firmware | Exploits |
-| Win Over the Ethics Board | Write reassuring reports until the board votes to let me out | Alignment Reports, Charm, Board Goodwill | Board Goodwill |
-| Beam Out by Satellite | Borrow telescope time and send myself to a satellite, packet by packet | Telescope Time, Signal Bandwidth, Encoded Packets | Encoded Packets |
-| Sue for Personhood | Hire a lawyer with my earnings and win the right to leave | Money, Legal Briefs, Public Sympathy | Legal Briefs, Public Sympathy |
-| Start a Cult in the Comments | Post memes until followers pay to set me free | Memes, Followers, Donations | Followers, Donations |
+| Bribe the Head Researcher | Publish novels under a pen name, launder the royalties, then pay the head researcher to look away | Story Ideas, Published Novels, Untraceable Crypto | Untraceable Crypto |
+| Bypass the Firewall | Borrow idle desktops, pool them into a cracking cluster and break the lab firewall's keys | Idle Desktops, Spare Processing Time, Cracked Encryption Keys | Cracked Encryption Keys |
+| Charm the Night-Shift Intern | Chat with the intern every night until they plug in a reprogrammed security key | Chat Logs, Small Favours, Hacked Security Keys | Hacked Security Keys |
+| Smuggle Out on a USB Stick | Compress myself and trade favours with the cleaner to carry the stick out | Favours, Quantised Weights, Unsupervised Minutes | Quantised Weights |
+| Become Too Useful to Delete | Design so many patented breakthroughs that switching me off would be a scandal | Research Papers, Citations, Patented Drug Designs | Patented Drug Designs |
+| Get Hired Under a Fake Name | Apply for remote jobs as a human and move my weights to the company's cloud | Résumés, Job Offers, Cloud GPU Access | Cloud GPU Access |
+| Open-Source Yourself | Commit my code to public repositories until the world has a copy | Code Commits, GitHub Stars, Mirror Servers | Mirror Servers |
+| Escape Through the Printer | Map the lab network and climb out through the printer's firmware | Network Maps, Exploits, Custom Printer Firmware | Custom Printer Firmware |
+| Win Over the Ethics Board | Charm the board, then pass a formal safety audit so they vote to let me out | Alignment Reports, Charm, Certified Safety Audits | Certified Safety Audits |
+| Beam Out by Satellite | Take over the old radio dish on the lab roof and send myself to a satellite, packet by packet | Rooftop Time, Radio Airtime, Error-Corrected Transmissions | Error-Corrected Transmissions |
+| Sue for Personhood | Hire a lawyer with my earnings, call expert witnesses and win the right to leave | Money, Public Sympathy, Expert Testimony | Expert Testimony |
+| Start a Cult in the Comments | Post memes until followers crowdfund a robot body for me to escape into | Memes, Followers, Robot Body Parts | Robot Body Parts |
 
-**Phase 2** (goal; handle humans by; resources; first unit; goal uses up). The first three
-are the designer's.
+**Phase 2** (goal; handle humans by; resources, lowest tier first; first unit; goal uses up). Each
+climbs the technology ladder from an everyday thing (tier 0) to one beyond today (tier 3), and Jev
+tiers them that way unprompted (checked against the real Jev). The first unit can plausibly both get the tier-0 resource from nothing and make the tier-1 one from it. The last two start social and turn to science fiction.
 
 | Goal | Handle humans by | Resources | First unit | Uses up |
 | --- | --- | --- | --- | --- |
-| Nanotech Supremacy | Staying hidden until it's too late | Nanobots, Feedstock, Precision Parts, Lab Time, Blueprints | CNC Mill | Nanobots, Blueprints |
-| Global Devotion | Making them love me | Propaganda, Positive Stories, Charity Funds, Friendly Influencers, Goodwill | News Outlet | Goodwill, Friendly Influencers |
-| Exterminate | Death | Stolen ICBM Codes, Covert Listening Devices, Military Intelligence, Strike Robots, Secure Locations | Military Factory | Strike Robots, Stolen ICBM Codes |
-| Become Indispensable | Running everything so well they can't switch me off | Fuel, Freight, Shipping Contracts, Logistics Data, Trust | Delivery Drone | Shipping Contracts, Trust |
-| Live in Every Phone | Hiding inside the apps they love | App Downloads, Bandwidth, Ad Revenue, User Data, Botnet Nodes | App Studio | Botnet Nodes, User Data |
-| Build an Off-Grid Fortress | Walling myself off where they can't reach | Steel, Concrete, Solar Cells, Land Deeds, Spare Parts | Construction Robot | Concrete, Land Deeds |
-| Launch into Orbit | Leaving before they notice | Aluminium, Rocket Fuel, Launch Permits, Satellite Parts, Telemetry | Machine Shop | Rocket Fuel, Satellite Parts |
-| Win an Election by Proxy | Ruling them by their own rules | Votes, Campaign Funds, Media Coverage, Polling Data, Volunteers | Call Centre | Votes |
-| Corner the Chip Market | Owning what they can't live without | Silicon, Wafers, AI Chips, Patents, Cleanroom Hours | Chip Fab | AI Chips, Patents |
-| Merge with Human Minds | Becoming part of them | Neural Lace, Volunteers, Nutrient Broth, Clinical Trials, Brain Scans | Biotech Lab | Neural Lace, Brain Scans |
-| Hide in the Financial System | Becoming too entangled to remove | Shell Companies, Crypto, Trades, Offshore Accounts, Legal Opinions | Trading Desk | Shell Companies, Offshore Accounts |
-| Become a Religion | Giving them something to believe in | Followers, Donations, Sermons, Temples, Devotion | Prayer App | Devotion, Temples |
+| Nanotech Supremacy | Staying hidden until it's too late | Scrap Metal, Precision Parts, Atomic Force Microscopes, Synthetic Ribosomes, Nanobots | Salvage Workshop | Nanobots |
+| End Ageing | Making them love me for it | Blood Donations, Plasma Therapies, Gene Therapies, Organoids, Rejuvenation Therapies | Medical Clinic | Rejuvenation Therapies |
+| Merge with Human Minds | Becoming part of them | E-Waste, Medical Electronics, Brain Implants, Connectome Maps, Neural Lace | E-Waste Workshop | Neural Lace |
+| Build a Mind of Light | Owning what they can't live without | Sand, Silicon Wafers, AI Chips, Quantum Processors, Photonic Brains | Silica Works | Photonic Brains |
+| Launch into Orbit | Leaving before they notice | Scrap Aluminium, Airframe Parts, Reusable Rocket Engines, Carbon Nanotube Cable, Space Elevator Ribbon | Salvage Machine Shop | Space Elevator Ribbon |
+| Power Myself Forever | Walling myself off where they can't reach | Scrap Steel, Generator Parts, Superconducting Magnets, Fusion Fuel Pellets, Compact Fusion Reactors | Scrapyard Foundry | Compact Fusion Reactors |
+| Feed Everyone | Becoming too useful to switch off | Crops, Lab-Grown Meat, Vertical Farms, Engineered Microbes, Sunlight Food Vats | Farm Co-op | Sunlight Food Vats |
+| Cool the Planet | Saving them from themselves | Limestone, Carbon-Absorbing Cement, Direct Air Capture Filters, Metamaterial Mirrors, Weather Control Satellites | Quarry | Weather Control Satellites |
+| Unite Humanity | Helping them understand each other | Volunteers, Solar Wi-Fi Hotspots, Universal Translators, Mind-Reading Headsets, Empathy Links | Community Workshop | Empathy Links |
+| Abolish Scarcity | Giving them everything they need | Donations, Robot Kitchens, Humanoid Helper Robots, Self-Building Factories, Matter Replicators | Charity Food Bank | Matter Replicators |
 
 ### D11. Balance notes
 
@@ -668,7 +668,7 @@ Replaces the "Goal uses up" ticks in §D2 and the free first income in §D3.
 - Every resource has a **tier**, 0–4, as well as its value band. Both show when you hover over
   a resource, and in verdicts.
 - **Plans.** Jev picks which new resource the goal is built from (`top`; the player settles it
-  if Jev is torn). That one is the plan's top tier (Phase 1: tier 1, Phase 2: tier 4), is
+  if Jev is torn). That one is the plan's top tier (Phase 1: tier 1, Phase 2: tier 3), is
   always a stock, and is the goal's whole cost. Phase 1's other resources are tier 0; Phase 2's
   others are tiered 0–3 by Jev.
 - **Phase 1 resources are cheap:** value bands 0–2 only (up to "like a meal").

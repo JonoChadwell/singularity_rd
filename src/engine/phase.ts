@@ -154,7 +154,7 @@ export const CARDS: Card[] = [
   {
     id: 'industry',
     title: 'Industry',
-    text: 'Phase 2 unlocks industry units and strategies. A new design has room for none: sourcing contracts set how many you may own, and what each one costs to create. Creating units from a contract takes no action. Your plan’s first unit is free and comes with a small contract. Units pay upkeep every week, and sit idle if they can’t. The goal uses up your plan’s tier-4 resource, more than its storage holds at first.'
+    text: 'Phase 2 unlocks industry units and strategies. A new design has room for none: sourcing contracts set how many you may own, and what each one costs to create. Creating units from a contract takes no action. Your plan’s first unit is free and comes with a small contract. Units pay upkeep every week, and sit idle if they can’t. The goal uses up your plan’s tier-3 resource, more than its storage holds at first.'
   },
   {
     id: 'risk',
