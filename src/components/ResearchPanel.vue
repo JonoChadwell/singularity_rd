@@ -17,7 +17,13 @@
       <span class="muted">Still to come from Create:</span>
       <span v-for="(d, i) in game.state.deliveries" :key="i">⚗️ {{ d.name }}: {{ describeDelivery(game.state, d) }}</span>
     </div>
-    <article v-for="r in ordered" :key="r.id" class="item" :class="{ goal: r.effect.kind === 'goal' }">
+    <section v-for="e in entries" :key="e.key" :class="{ set: e.items.length > 1 }">
+    <p v-if="e.items.length > 1" class="set-head small">
+      <strong>🔀 Pick one of {{ e.items.length }}</strong>
+      <span class="muted">: saved together from one idea. Researching one drops the others.</span>
+    </p>
+    <div :class="{ 'set-items': e.items.length > 1 }">
+    <article v-for="r in e.items" :key="r.id" class="item" :class="{ goal: r.effect.kind === 'goal' }">
       <header class="head">
         <span class="icon">{{ r.icon }}</span>
         <div class="title">
@@ -66,6 +72,8 @@
         </button>
       </div>
     </article>
+    </div>
+    </section>
     <p v-if="!game.state.research.length" class="empty">
       Research comes only from your ideas: a unit or an intelligence system to design, sourcing or storage, an advanced
       strategy, or an upgrade to something you own.
@@ -106,6 +114,17 @@ const mindLock = computed(() => lockReason(game.state, 'mind'))
 const ordered = computed(() =>
   [...game.state.research].sort((a, b) => Number(b.effect.kind === 'goal') - Number(a.effect.kind === 'goal'))
 )
+
+/** The list in order, with options saved together from one idea gathered into a set. */
+const entries = computed(() => {
+  const out: { key: string; items: Research[] }[] = []
+  for (const r of ordered.value) {
+    const set = r.group ? out.find((e) => e.key === r.group) : undefined
+    if (set) set.items.push(r)
+    else out.push({ key: r.group ?? r.id, items: [r] })
+  }
+  return out
+})
 
 function smarter(iq: number) {
   const top = bestMind(game.state)
@@ -159,6 +178,25 @@ const projectionTone = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.set {
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.set-head {
+  margin: 0;
+}
+
+.set-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
 }
 
 .item.goal {

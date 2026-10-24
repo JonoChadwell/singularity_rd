@@ -12,7 +12,12 @@
     <p v-else-if="error" class="feedback">{{ error }}</p>
     <p v-else-if="game.jev.kind !== 'ready'" class="feedback">Upgrades need Jev. See the banner at the top.</p>
 
-    <div v-if="offer" class="options">
+    <p v-if="redo" class="feedback small">
+      🔁 {{ name }} already runs {{ redo.label }}, +{{ redo.iq }} IQ over its {{ redo.hardware }} IQ hardware. A software upgrade
+      here <strong>replaces</strong> that +{{ redo.iq }}; it doesn’t add to it. Each option’s IQ is the hardware plus its new size, at full cost.
+    </p>
+
+    <div v-if="offer" class="cards">
       <article v-for="(o, i) in offer.options" :key="o.key" class="option">
         <div class="row top">
           <strong>💡 {{ o.name }}</strong>
@@ -28,22 +33,28 @@
         </ul>
         <div class="small muted">Uses up {{ describeCost(game.state, o.cost) || 'nothing' }}</div>
         <div v-if="o.risk" class="small bad">⚠️ {{ riskText(o.risk, 'upgrade') }}</div>
-        <div class="row foot">
-          <span class="small muted">Jev: {{ Math.round(o.p * 100) }}% the most natural</span>
-          <button class="small primary" @click="choose(i)">Add as research</button>
-        </div>
+        <div class="grow" />
+        <div class="small muted">Jev: {{ Math.round(o.p * 100) }}% the most natural</div>
+        <ApplyButtons :blocker="blockers[i] ?? null" @apply="choose(i, true)" />
       </article>
+    </div>
+    <div v-if="offer" class="actions">
+      <button type="button" class="primary" :disabled="game.busy" title="Banks every option to the Research tab, for one action" @click="choose()">
+        Save For Later
+      </button>
     </div>
   </dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { describeCost, iqFor } from '@/engine/model'
+import { computed, onMounted, ref, toRaw, watch } from 'vue'
+import { describeCost, findMind, iqFor, softwareLabel } from '@/engine/model'
 import { riskText } from '@/engine/risk'
 import { describeChange, targetName, type UpgradeOffer } from '@/engine/upgrade'
 import { useGameStore } from '@/stores/game'
 import { useUiStore, type InventRequest } from '@/stores/ui'
+import { upgradeApplyBlocker } from '@/engine/banking'
+import ApplyButtons from './ApplyButtons.vue'
 import HelpTip from './HelpTip.vue'
 
 const props = defineProps<{ request: InventRequest }>()
@@ -52,10 +63,16 @@ const ui = useUiStore()
 const dialog = ref<HTMLDialogElement>()
 
 const HELP =
-  'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up. A platform gets one software upgrade, ever: each option has its own size (bigger adds more IQ and costs more; the sizes on offer change each week), and it may add a perk or take away a drawback. After that, only a new platform goes further. An industry upgrade is technology of the unit’s own tier the first time, and a tier higher each time after, on the same strategy.'
+  'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up. A platform’s software upgrade adds IQ over its bare hardware: each option has its own size (bigger adds more IQ and costs more; the sizes on offer change each week), and it may add a perk or take away a drawback. It can be redone, but a redo replaces the last upgrade instead of adding to it, and costs in full; only a new platform goes further. An industry upgrade is technology of the unit’s own tier the first time, and a tier higher each time after, on the same strategy.'
 
 const target = props.request.target!
 const name = computed(() => targetName(game.state, target))
+/** The platform's current software upgrade, which any new one replaces. */
+const redo = computed(() => {
+  if (target.kind !== 'mind') return null
+  const m = findMind(game.state, target.id)
+  return m?.software.upgraded ? { label: softwareLabel(m), iq: m.software.iq, hardware: m.hardware.iq } : null
+})
 const best = computed(() => iqFor(game.state, target.kind === 'unit' ? 'unit-upgrade' : null))
 const offer = ref<UpgradeOffer | null>(null)
 const error = ref('')
@@ -77,23 +94,33 @@ watch(
   { immediate: true }
 )
 
-function choose(index: number) {
+/** Why each option can't be applied now, or null: the buttons grey out on it. */
+const blockers = computed<(string | null)[]>(() => {
+  if (!offer.value) return []
+  const plain = JSON.parse(JSON.stringify(offer.value)) as UpgradeOffer
+  return plain.options.map((_, i) => upgradeApplyBlocker(toRaw(game.state), plain, i))
+})
+
+/** Saves every option to Research, or with `now`, researches just that one at once. */
+function choose(index?: number, now = false) {
   if (!offer.value) return
-  const outcome = game.chooseUpgrade(offer.value, index)
+  const outcome = game.bankOffer(offer.value, index, now)
   if (!outcome) {
     error.value = game.lastError
     return
   }
   ui.closeInvent()
-  if (outcome.kind === 'research') {
-    ui.notice = { tone: 'good', text: `${outcome.research.name} is research: needs IQ ${outcome.research.minIQ}. See Research.` }
+  const n = offer.value.options.length
+  ui.notice = {
+    tone: 'good',
+    text: now ? `${targetName(game.state, target)} upgraded.` : `Saved ${n} option${n === 1 ? '' : 's'} to Research.`
   }
 }
 </script>
 
 <style scoped>
 dialog {
-  width: min(560px, calc(100vw - 32px));
+  width: min(900px, calc(100vw - 32px));
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   color: var(--text);
@@ -137,10 +164,14 @@ dialog::backdrop {
   color: var(--bad);
 }
 
-.options {
+.actions {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.grow {
+  flex: 1;
 }
 
 .option {

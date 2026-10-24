@@ -1,6 +1,6 @@
 import { researchBlocker } from './actions'
 import * as B from './balance'
-import { affordable, bestIQ, bestMind, contractsFor, findResource, fmt, fmtCount, isLoss, openSlots, researchIQ } from './model'
+import { affordable, bestIQ, bestMind, contractsFor, currentIQ, findResource, fmt, fmtCount, isLoss, openSlots, researchIQ } from './model'
 import { lossOf } from './losses'
 import { lockReason, weeksLeft } from './phase'
 import { goalOf } from './projection'
@@ -154,13 +154,13 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
   const best = bestIQ(state)
   const mindsLocked = lockReason(state, 'mind')
   const mind = bestMind(state)
-  // Its one software upgrade is the quickest way up; a new platform is the way after that.
+  // A (re)done software upgrade is the quickest way up; a new platform is the way after that.
   const softwareLeft = !!mind && !mindUpgradeBlocker(state, mind)
   for (const r of state.research.filter((x) => x.minIQ > researchIQ(state, x))) {
     const have = researchIQ(state, r)
     const shifted = Math.round(have) !== Math.round(best)
     const prompt: Alert['prompt'] =
-      softwareLeft && r.minIQ <= have + B.MAX_IQ_STEP
+      softwareLeft && r.minIQ <= have - currentIQ(mind!) + mind!.hardware.iq + B.MAX_IQ_STEP
         ? { label: 'Upgrade your software?', to: { kind: 'upgrade-mind', mindId: bestMindId(state) } }
         : mindsLocked
           ? undefined

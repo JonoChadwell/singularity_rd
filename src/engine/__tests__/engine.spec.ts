@@ -48,7 +48,7 @@ import type { Delivery, GameState, Research, Sourcing, Strategy } from '../types
 import { acceptSourcing, iqTag, judgeSourcing } from '../sourcingProposal'
 import { acceptStorage, judgeStorage } from '../storageProposal'
 import { acceptUnit, judgeUnit, type UnitSpec } from '../unitProposal'
-import { acceptUpgrade, changeKey, judgeUpgrade, mindUpgradeBlocker, softwareSteps, upgradeCandidates, upgradeTier } from '../upgrade'
+import { acceptUpgrade, changeKey, describeChanges, judgeUpgrade, mindUpgradeBlocker, softwareSteps, upgradeCandidates, upgradeTier } from '../upgrade'
 import { choice, FakeJudge, noul, score } from './fakeJudge'
 
 /** A game in Phase 3: everything unlocked, no clock and no risk, to test the mechanics alone. */
@@ -1126,12 +1126,14 @@ describe('research', () => {
     s.research.push(research({ minIQ: 200 }))
     expect(researchBlocker(s, 'r')).toMatch(/Needs IQ 200\. Your smartest mind is IQ 100/)
     expect(() => doResearch(s, 'r')).toThrow(/Needs IQ 200/)
-    // The server's one software upgrade can get there; once it is used, only a new platform can.
+    // Software (even redone) can get there; past a step over the hardware, only a new platform can.
+    server(s).software = { name: 'v2', iq: 50, upgraded: true }
     const alert = alertsFor(s, previewWeek(s)).find((a) => a.key === 'iq-r')!
     expect(alert.prompt?.to).toEqual({ kind: 'upgrade-mind', mindId: SERVER_ID })
-    server(s).software.upgraded = true
+    s.research[0]!.minIQ = 250
     const next = alertsFor(s, previewWeek(s)).find((a) => a.key === 'iq-r')!
-    expect(next.prompt?.to).toEqual({ kind: 'design-mind', iq: 200 })
+    expect(next.prompt?.to).toEqual({ kind: 'design-mind', iq: 250 })
+    s.research[0]!.minIQ = 200
     // A smarter mind of any kind clears it.
     s.minds.push(newMind({ id: 'big', name: 'Big Mind', hardware: { name: 'Big', iq: 200 } }))
     expect(researchBlocker(s, 'r')).toBeNull()
@@ -1198,7 +1200,7 @@ describe('upgrades', () => {
     expect(seen.size).toBeGreaterThan(5)
   })
 
-  it('adds the offered size, once, and then needs a new platform', async () => {
+  it('adds the offered size over the hardware, and a redo replaces it at full cost', async () => {
     const s = freeState()
     const offer = await judgeUpgrade(s, new FakeJudge(), mindTarget)
     const step = offer.options[0]!.step!
@@ -1210,9 +1212,20 @@ describe('upgrades', () => {
     const after = doResearch(state, state.research[0]!.id)
     expect(currentIQ(server(after))).toBe(100 + step)
     expect(server(after).software).toMatchObject({ iq: step, upgraded: true })
-    expect(upgradeCandidates(after, mindTarget)).toEqual([])
+    // It can be redone: from the bare hardware again, for the same price as the first time.
     const next = { ...after, proposedThisWeek: false }
-    await expect(judgeUpgrade(next, new FakeJudge(), mindTarget)).rejects.toThrow(/one upgrade.*new platform/)
+    const again = await judgeUpgrade(next, new FakeJudge(), mindTarget)
+    const first = offer.options.find((o) => o.step === again.options[0]!.step)
+    if (first) expect(again.options[0]!.cost).toEqual(first.cost)
+    // A redo says it replaces, and never offers the plain size it already has.
+    expect(again.options[0]!.name).toContain(`replacing +${step})`)
+    expect(describeChanges(next, mindTarget, again.options[0]!.changes)).toMatch(/^Replaces the current/)
+    expect(again.options.some((o) => o.key === 'software' && o.step === step)).toBe(false)
+    // Nor anything smaller than what it replaces.
+    expect(again.options.every((o) => o.step! >= step)).toBe(true)
+    const redo = acceptUpgrade(next, again, 0).state
+    const redone = doResearch(redo, redo.research[0]!.id)
+    expect(currentIQ(server(redone))).toBe(100 + again.options[0]!.step!)
   })
 
   it('can add a perk or lose a drawback along with the IQ', async () => {
@@ -1235,16 +1248,10 @@ describe('upgrades', () => {
     expect(currentIQ(server(removed.after))).toBe(100 + removed.step)
   })
 
-  it('offers the clock perk in Phase 2 and moves the clock when it arrives', async () => {
+  it('never offers a clock perk with software, since software can be redone', () => {
     const s = freeState()
     s.phase = { ...newPhase(2, 1), status: 'playing', deadline: 50 }
-    expect(upgradeCandidates(s, mindTarget).map((c) => c.key)).toContain('software_add_discreet')
-    const offer = await judgeUpgrade(s, new FakeJudge({ best: choice('c1') }), mindTarget)
-    const idx = offer.options.findIndex((o) => o.key === 'software_add_discreet')
-    expect(idx).toBeGreaterThanOrEqual(0)
-    const { state } = acceptUpgrade(s, offer, idx)
-    const after = doResearch(state, state.research[0]!.id)
-    expect(after.phase.deadline).toBe(56)
+    expect(upgradeCandidates(s, mindTarget).map((c) => c.key)).not.toContain('software_add_discreet')
   })
 
   it('can halve upkeep or parts on every contract, improve a strategy, or add a perk', async () => {

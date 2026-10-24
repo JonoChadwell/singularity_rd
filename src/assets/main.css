@@ -247,3 +247,15 @@ select.inline {
   font-size: 13px;
   margin: 4px 0;
 }
+
+/* Jev's options, side by side as cards. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.cards-legend {
+  margin: 0 0 6px;
+}

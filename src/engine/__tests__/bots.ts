@@ -13,7 +13,7 @@ import { goalOf } from '../projection'
 import { acceptSourcing, judgeSourcing } from '../sourcingProposal'
 import { acceptStorage, judgeStorage } from '../storageProposal'
 import type { CreateTarget, GameState, UpgradeTarget } from '../types'
-import { acceptUpgrade, judgeUpgrade, mindUpgradeBlocker } from '../upgrade'
+import { acceptUpgrade, judgeUpgrade } from '../upgrade'
 import { choice, FakeJudge, noul, score, type Overrides } from './fakeJudge'
 
 // Scripted players for the balance tests. They play through the real engine with a fake Jev
@@ -334,7 +334,8 @@ export function steady(style: Phase2Style): Turn {
     const mind = [...s.minds].sort((a, b) => b.tier - a.tier)[0]!
     const money = findResource(s, MONEY_ID)!
     // The tier of unit-made resource the next platform needs, once the software is spent.
-    const gate = mindUpgradeBlocker(s, mind) && bestIQ(s) < goal.minIQ ? B.platformGateTier(bestIQ(s) + B.MAX_IQ_STEP) : null
+    // The bot does software once (a redo is allowed, but restarts from the hardware).
+    const gate = mind.software.upgraded && bestIQ(s) < goal.minIQ ? B.platformGateTier(bestIQ(s) + B.MAX_IQ_STEP) : null
     const made = (tier: number) =>
       s.strategies.some((x) => x.kind === 'make' && (findResource(s, x.outputId)?.tier ?? -1) >= tier)
     /** A cost of waiting research (the goal included) more than its resource can hold, with no storage waiting for it. */
@@ -355,7 +356,7 @@ export function steady(style: Phase2Style): Turn {
         s = await propose(s, strategy(`Machine parts ${gate}`, target.id, MILL), answers)
       } else if (bestIQ(s) < goal.minIQ && !waiting('mind') && !waiting('upgrade') && findUnit(s, MILL)?.built) {
         // The platform's software once; after that, a platform 100 IQ smarter.
-        if (!mindUpgradeBlocker(s, mind)) s = await upgrade(s, { kind: 'mind', id: mind.id }, alarm)
+        if (!mind.software.upgraded) s = await upgrade(s, { kind: 'mind', id: mind.id }, alarm)
         else s = await propose(s, { kind: 'mind', spec: { name: fresh('Custom AI Server'), description: '', step: B.MAX_IQ_STEP } }, answers)
       } else if (tooBig()) {
         const c = tooBig()!

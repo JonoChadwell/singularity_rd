@@ -126,7 +126,8 @@ function gainTrait(state: GameState, mind: Mind, trait: string) {
 export function applyMindChanges(state: GameState, mind: Mind, changes: Change[]) {
   for (const c of changes) {
     if (c.kind === 'software') {
-      mind.software.iq += c.iq
+      // Replaces any earlier upgrade: software always counts from the bare hardware.
+      mind.software.iq = c.iq
       mind.software.upgraded = true
     }
     if (c.kind === 'computeTrait') {
@@ -205,7 +206,7 @@ export function addMind(state: GameState, mind: Mind) {
 /** Applies a research's effect. Returns a line for the log. */
 export function completeResearch(state: GameState, r: Research): string {
   const effect = r.effect
-  state.research = state.research.filter((x) => x.id !== r.id)
+  state.research = state.research.filter((x) => x.id !== r.id && !(r.group && x.group === r.group))
   if (r.risk?.weeks) moveClock(state, -r.risk.weeks, `${r.name} alarmed humans`)
   switch (effect.kind) {
     case 'unit': {

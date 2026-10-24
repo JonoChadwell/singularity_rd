@@ -11,6 +11,7 @@ import { cardsFor } from '@/engine/phase'
 import { projectGoal } from '@/engine/projection'
 import type { Outcome } from '@/engine/proposals'
 import type { GameState, UpgradeTarget } from '@/engine/types'
+import { applyUpgrade, applyVerdict, bankUpgrade, bankVerdict, type BankableVerdict } from '@/engine/banking'
 import { acceptUpgrade, judgeUpgrade, type UpgradeOffer } from '@/engine/upgrade'
 import { describeError, logEvent, snapshot, type LogStream } from '@/telemetry'
 
@@ -192,6 +193,34 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  /** Saves a verdict's options to Research (all of them, or just `only`), or with `now`, researches that one at once. */
+  function bank(reactiveVerdict: BankableVerdict, only?: number, now = false): Outcome | undefined {
+    lastError.value = ''
+    try {
+      const verdict = JSON.parse(JSON.stringify(reactiveVerdict)) as BankableVerdict
+      const result = now ? applyVerdict(raw(), verdict, only!) : bankVerdict(raw(), verdict, only)
+      adopt(result.state)
+      log('accept', { kind: verdict.kind, banked: only ?? 'all', now, outcome: result.outcome })
+      return result.outcome
+    } catch (err) {
+      fail('bank', err, { kind: reactiveVerdict.kind })
+    }
+  }
+
+  /** The same for an upgrade offer. */
+  function bankOffer(reactiveOffer: UpgradeOffer, only?: number, now = false): Outcome | undefined {
+    lastError.value = ''
+    try {
+      const offer = JSON.parse(JSON.stringify(reactiveOffer)) as UpgradeOffer
+      const result = now ? applyUpgrade(raw(), offer, only!) : bankUpgrade(raw(), offer, only)
+      adopt(result.state)
+      log('accept', { kind: 'upgrade', banked: only ?? 'all', now, outcome: result.outcome })
+      return result.outcome
+    } catch (err) {
+      fail('bank_upgrade', err, { index: only })
+    }
+  }
+
   /** Asks Jev for three ways to improve a unit or mind. */
   async function requestUpgrade(target: UpgradeTarget): Promise<UpgradeOffer | undefined> {
     if (!canPropose.value) return
@@ -259,6 +288,8 @@ export const useGameStore = defineStore('game', () => {
     projection,
     propose,
     accept,
+    bank,
+    bankOffer,
     requestUpgrade,
     chooseUpgrade,
     setJudge,

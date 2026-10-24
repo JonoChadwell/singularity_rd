@@ -44,11 +44,14 @@ for those thresholds for certain types of research". **(Claude's default for the
 Not implemented: a bigger IQ jump carrying a bigger drawback. Trait values are fixed.
 
 ### 3. Massively reduced upgradability
-Each platform gets **one** software upgrade, ever. After that, progress needs a new platform.
+A platform's software upgrade adds IQ over its bare hardware. It can be **redone** (so a small
+early upgrade is never a softlock), but a redo replaces the last one rather than stacking: it
+counts from the hardware's IQ and costs in full. Real progress past one step needs a new platform.
 
 - It adds IQ, and optionally changes a trait: **(Claude's default)** the three options Jev offers
   are the plain upgrade, gaining a perk, or losing a drawback (a platform holds at most two perks).
-  The Phase 2 clock perk is only offered in Phase 2.
+  Traits that pay out once on arrival (the clock perk, Discreet) are never offered, since a redo
+  would farm them.
 - The player picks the **size**: +25, +50, +75 or +100 IQ. Bigger costs more. Changing a trait
   costs 1.5× as much.
 - It is research and uses that week's proposal **(Claude's default)**. A mind can always work on its

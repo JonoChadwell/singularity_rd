@@ -21,8 +21,8 @@ import { ALL_TRAITS, TRAITS, UPKEEP_TRAITS } from './traits'
 import type { Change, Cost, GameState, Mind, Risk, UnitType, UpgradeTarget } from './types'
 
 // Upgrades. Jev doesn't write, so the game lists every improvement that could apply to the
-// unit or mind, and Jev picks the three most natural and who pays. A platform gets one software
-// upgrade, ever.
+// unit or mind, and Jev picks the three most natural and who pays. A platform's software upgrade
+// can be redone: each replaces the last, counts from the bare hardware and costs in full.
 
 interface Candidate {
   key: string
@@ -74,7 +74,6 @@ const isPerk = (id: ComputeTraitId) => computeTrait(id).kind === 'perk'
 
 /** Why a platform has no software upgrade to offer, or null if it has. */
 export function mindUpgradeBlocker(state: GameState, m: Mind): string | null {
-  if (m.software.upgraded) return `${m.name}’s software has had its one upgrade. Further progress needs a new platform.`
   if (state.research.some((r) => r.effect.kind === 'upgrade' && r.effect.target.id === m.id)) {
     return `An upgrade to ${m.name} is already waiting as research.`
   }
@@ -82,9 +81,9 @@ export function mindUpgradeBlocker(state: GameState, m: Mind): string | null {
 }
 
 /**
- * A platform's one software upgrade: more IQ, and optionally a trait changed. Offered once per
- * platform, and not while one is already waiting as research. Every candidate is listed at the
- * biggest size; the player picks the size.
+ * A platform's software upgrade: more IQ over the bare hardware, and optionally a trait changed.
+ * It can be redone (replacing the last one's IQ), but not while one is already waiting as research.
+ * Every candidate is listed at the biggest size; the player picks the size.
  */
 function mindCandidates(state: GameState, m: Mind): Candidate[] {
   if (mindUpgradeBlocker(state, m)) return []
@@ -95,8 +94,8 @@ function mindCandidates(state: GameState, m: Mind): Candidate[] {
   if (m.traits.filter(isPerk).length < 2) {
     for (const t of PERKS) {
       if (m.traits.includes(t.id) || held.some((h) => h.kind === 'drawback' && !compatible(t, h))) continue
-      // A clock trait only does anything on Phase 2's clock.
-      if (t.effect.kind === 'clock' && state.phase.n !== 2) continue
+      // A clock trait pays out once, when it arrives: redoing software would farm it.
+      if (t.effect.kind === 'clock') continue
       out.push({
         key: `software_add_${t.id}`,
         name: `${next}: ${t.name}`,
@@ -205,7 +204,11 @@ export function describeChange(state: GameState, target: UpgradeTarget, c: Chang
     case 'software': {
       const m = findMind(state, target.id)
       if (!m) return 'Software upgrade'
-      return `Software ${softwareVersion(false)} → ${softwareVersion(true)}: IQ ${Math.round(currentIQ(m))} → ${Math.round(currentIQ(m) + c.iq)}`
+      const to = Math.round(m.hardware.iq + c.iq)
+      if (m.software.upgraded) {
+        return `Replaces the current +${m.software.iq} IQ with +${c.iq} over the ${m.hardware.iq} IQ hardware: IQ ${Math.round(currentIQ(m))} → ${to}`
+      }
+      return `Software ${softwareVersion(false)} → ${softwareVersion(true)}: IQ ${Math.round(currentIQ(m))} → ${to}`
     }
     case 'computeTrait': {
       const t = computeTrait(c.trait)
@@ -276,12 +279,30 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
   )
   // Jev's favourites first, then the rest in list order.
   const odds = new Map(ranked(answers.best!).map(([k, p]) => [k, p]))
-  const order = candidates
+  const ranking = candidates
     .map((c, i) => ({ c, i, p: odds.get(keyOf(i)) ?? 0 }))
     .sort((a, b) => b.p - a.p || a.i - b.i)
-    .slice(0, B.UPGRADE_OPTIONS)
   const pay = payers(answers)
-  const steps = target.kind === 'mind' ? softwareSteps(state, target.id, order.length) : []
+  // A redo must beat the software it replaces: a smaller size is never offered, nor the same size
+  // with nothing else changed. A size that falls short becomes an unused bigger one; a candidate
+  // with no size left is dropped.
+  const sw = target.kind === 'mind' ? (thing as Mind).software : null
+  const fits = (c: Candidate, s: number) => !sw?.upgraded || s > sw.iq || (s === sw.iq && c.changes.length > 1)
+  const rolled = target.kind === 'mind' ? softwareSteps(state, target.id, B.UPGRADE_OPTIONS) : []
+  const steps: number[] = []
+  const order: typeof ranking = []
+  for (const r of ranking) {
+    if (order.length >= B.UPGRADE_OPTIONS) break
+    if (target.kind === 'mind') {
+      const want = rolled[order.length]!
+      const valid = B.SOFTWARE_STEPS.filter((s) => fits(r.c, s))
+      const step = fits(r.c, want) ? want : (valid.find((s) => !steps.includes(s)) ?? valid[0])
+      if (step === undefined) continue
+      steps.push(step)
+    }
+    order.push(r)
+  }
+  if (!order.length) throw new Error(`${thing.name}’s software is already as big as an upgrade can make it. Further progress needs a new platform.`)
   return {
     target,
     options: order.map(({ c, i, p }, n) => {
@@ -290,7 +311,8 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
       let value: number
       let tier: number | undefined
       if (target.kind === 'mind') {
-        const before = currentIQ(thing as Mind)
+        // Software counts from the bare hardware, so a redo pays the full price again.
+        const before = (thing as Mind).hardware.iq
         const withTrait = c.changes.some((x) => x.kind === 'computeTrait') ? B.TRAIT_SOFTWARE_COST : 1
         // A mind can always work on its own upgrade; a bigger step just costs more.
         const step = steps[n]!
@@ -298,7 +320,7 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
         const changes = c.changes.map((x) => (x.kind === 'software' ? { ...x, iq: step } : x))
         return {
           ...c,
-          name: `${c.name} (+${step} IQ)`,
+          name: sw!.upgraded ? `${c.name} (+${step} IQ, replacing +${sw!.iq})` : `${c.name} (+${step} IQ)`,
           changes,
           p,
           minIQ: floorIQ(before),

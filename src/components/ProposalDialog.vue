@@ -126,7 +126,7 @@
           <span>Software</span>
           <span class="row">
             <input v-model="mind.software" :maxlength="NAME_MAX" :placeholder="DEFAULT_SOFTWARE" aria-label="Software" />
-            <span class="small muted">{{ softwareVersion(false) }}; it gets one upgrade, ever</span>
+            <span class="small muted">{{ softwareVersion(false) }}; its upgrade can be redone, from scratch</span>
           </span>
         </label>
         <p v-if="current" class="muted small note">
@@ -158,27 +158,30 @@
       v-else
       :verdict="verdict"
       :accept-label="acceptLabel"
+      :save-label="bankable ? 'Save For Later' : undefined"
       @pick="onPick"
       @accept="accept"
+      @save="saveForLater"
       @edit="verdict = null"
     >
       <div v-if="verdict.kind === 'resource' && resourceDraft" class="outcome small">
         <div class="muted">{{ tierText(resourceDraft) }} · one is worth: {{ bandText(resourceDraft) }}</div>
         <div class="muted">Storage holds {{ fmt(resourceDraft.cap) }} to start.</div>
-        <fieldset v-if="resourceOptions.length" class="options">
-          <legend class="small muted">Its nature: pick one. Every trait has an upside and a downside.</legend>
-          <label v-for="o in resourceOptions" :key="o.i" class="option small" :class="{ chosen: resourceChoice === o.i }">
-            <input v-model="resourceChoice" type="radio" name="resource-option" :value="o.i" />
-            <span>
-              <template v-for="(t, j) in o.traits" :key="t.id">
-                <br v-if="j" />
+        <div v-if="resourceOptions.length" class="small">
+          <p class="muted cards-legend">Its nature: pick one. Every trait has an upside and a downside.</p>
+          <div class="cards">
+            <OptionCard v-for="o in resourceOptions" :key="o.i" :chosen="resourceChoice === o.i" @select="resourceChoice = o.i">
+              <div v-for="t in o.traits" :key="t.id">
                 <strong>{{ t.icon }} {{ t.name }}</strong>
-                <span class="good"> {{ t.upside }}</span>
-                <span class="warn"> {{ t.downside }}</span>
+                <div class="good">{{ t.upside }}</div>
+                <div class="warn">{{ t.downside }}</div>
+              </div>
+              <template #actions>
+                <button type="button" class="small primary" :disabled="game.busy" @click="pickAndAccept(() => (resourceChoice = o.i))">Add it</button>
               </template>
-            </span>
-          </label>
-        </fieldset>
+            </OptionCard>
+          </div>
+        </div>
       </div>
       <div v-else-if="verdict.kind === 'create'" class="outcome small">
         <div class="chips">
@@ -189,38 +192,51 @@
             🪜 Reach: {{ verdict.scalars.short.toFixed(1) }} tiers over ×{{ chip(verdict.scalars.reach) }}
           </span>
         </div>
-        <fieldset class="options">
-          <legend class="small muted">Jev’s offers: pick one. It uses this week’s action.</legend>
-          <label v-for="(o, i) in verdict.options" :key="i" class="option small" :class="{ chosen: verdict.choice === i }">
-            <input v-model="verdict.choice" type="radio" name="create-option" :value="i" />
-            <span>
-              <strong>{{ describeOption(game.state, verdict, o) }}</strong>
-              <span class="muted"> · uses {{ o.inputs.length ? describeFlows(game.state, o.inputs) : 'nothing' }}</span>
-              <span v-if="optionBlocker(game.state, o)" class="bad"> · {{ optionBlocker(game.state, o) }}</span>
-              <span v-else-if="overflowOf(game.state, verdict, o)" class="warn">
-                · {{ fmt(overflowOf(game.state, verdict, o)) }} won’t fit in storage
-              </span>
+        <p class="muted cards-legend">Jev’s offers: pick one. It uses this week’s action.</p>
+        <div class="cards">
+          <OptionCard
+            v-for="(o, i) in verdict.options"
+            :key="i"
+            :chosen="verdict.choice === i"
+            :blocked="!!optionBlocker(game.state, o)"
+            @select="verdict.choice = i"
+          >
+            <strong>{{ describeOption(game.state, verdict, o) }}</strong>
+            <span class="muted">uses {{ o.inputs.length ? describeFlows(game.state, o.inputs) : 'nothing' }}</span>
+            <span v-if="optionBlocker(game.state, o)" class="bad">{{ optionBlocker(game.state, o) }}</span>
+            <span v-else-if="overflowOf(game.state, verdict, o)" class="warn">
+              {{ fmt(overflowOf(game.state, verdict, o)) }} won’t fit in storage
             </span>
-          </label>
-        </fieldset>
+            <template #actions>
+              <button
+                type="button"
+                class="small primary"
+                :disabled="game.busy || !!optionBlocker(game.state, o)"
+                @click="verdict.choice = i; accept()"
+              >
+                Do it
+              </button>
+            </template>
+          </OptionCard>
+        </div>
         <div v-if="verdict.risk" class="warn">{{ riskText(verdict.risk, 'strategy') }}</div>
       </div>
       <div v-else-if="verdict.kind === 'sourcing'" class="outcome small">
-        <fieldset class="options">
-          <legend class="small muted">Contracts: pick one</legend>
-          <label v-for="(o, i) in verdict.options" :key="i" class="option small" :class="{ chosen: verdict.choice === i }">
-            <input v-model="verdict.choice" type="radio" name="sourcing-option" :value="i" />
-            <span>
+        <p class="muted cards-legend">Contracts: pick one</p>
+        <div class="cards">
+          <OptionCard v-for="(o, i) in verdict.options" :key="i" :chosen="verdict.choice === i" @select="verdict.choice = i">
+            <div>
               <strong>{{ o.label }}</strong>: up to {{ fmt(o.total) }}
               <span v-if="o.risky" class="chip bad">risky</span>
               <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
-              <br />
-              <span class="muted">Each takes {{ describeFlows(game.state, o.parts) }}.</span>
-              <br />
-              <span :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</span>
-            </span>
-          </label>
-        </fieldset>
+            </div>
+            <div class="muted">Each takes {{ describeFlows(game.state, o.parts) }}.</div>
+            <div :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</div>
+            <template #actions>
+              <ApplyButtons :blocker="blockers[i] ?? null" @apply="applyNow(i)" />
+            </template>
+          </OptionCard>
+        </div>
       </div>
       <div v-else-if="verdict.kind === 'storage'" class="outcome small">
         <div class="chips">
@@ -228,30 +244,31 @@
           <span class="chip">🧠 IQ ×{{ chip(verdict.scalars.iq) }}</span>
           <span class="chip">⚙️ Efficiency ×{{ chip(verdict.scalars.efficiency) }}</span>
         </div>
-        <fieldset class="options">
-          <legend class="small muted">Expansions: pick one</legend>
-          <label
+        <p class="muted cards-legend">Expansions: pick one</p>
+        <div class="cards">
+          <OptionCard
             v-for="(o, i) in verdict.options"
             :key="i"
-            class="option small"
-            :class="{ chosen: verdict.choice === i, blocked: o.blocked }"
+            :chosen="verdict.choice === i"
+            :blocked="o.blocked"
+            @select="verdict.choice = i"
           >
-            <input v-model="verdict.choice" type="radio" name="storage-option" :value="i" :disabled="o.blocked" />
-            <span>
+            <div>
               <strong>{{ o.label }}</strong>: room for {{ fmt(o.added) }} more
               <span v-if="o.risky" class="chip bad">risky</span>
               <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
-              <br />
-              <span :class="o.catch ? 'warn' : 'muted'">{{ describeCatch(game.state, o.catch) }}. </span>
-              <span class="muted">{{ researchText(o) }}</span>
-              <br />
-              <span :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</span>
-              <span :class="o.blocked ? 'bad' : 'muted'">
-                · needs {{ HOLDERS[o.holder]?.[0].toLowerCase() }}{{ o.blocked ? `: needs IQ ${HOLDERS[o.holder]?.[1]}` : '' }}
-              </span>
-            </span>
-          </label>
-        </fieldset>
+            </div>
+            <div :class="o.catch ? 'warn' : 'muted'">{{ describeCatch(game.state, o.catch) }}.</div>
+            <div class="muted">{{ researchText(o) }}</div>
+            <div :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</div>
+            <div :class="o.blocked ? 'bad' : 'muted'">
+              Needs {{ HOLDERS[o.holder]?.[0].toLowerCase() }}{{ o.blocked ? `: needs IQ ${HOLDERS[o.holder]?.[1]}` : '' }}
+            </div>
+            <template #actions>
+              <ApplyButtons :blocker="blockers[i] ?? null" @apply="applyNow(i)" />
+            </template>
+          </OptionCard>
+        </div>
       </div>
       <div v-else-if="verdict.kind === 'strategy' && strategyDraft" class="outcome small">
         <div>{{ strategyText }} each, every week. <StrategyTags :strategy="strategyDraft.strategy" /></div>
@@ -267,19 +284,23 @@
         <p v-if="first" class="small good">
           Your plan’s first unit: no research needed, and it doesn’t use this week’s action. Find sourcing on its card to own some.
         </p>
-        <fieldset v-if="unitOptions.length > 1" class="options">
-          <legend class="small muted">Jev’s takes: pick one</legend>
-          <label v-for="o in unitOptions" :key="o.i" class="option small" :class="{ chosen: unitChoice === o.i }">
-            <input v-model="unitChoice" type="radio" name="unit-option" :value="o.i" />
-            <span>
-              <strong>{{ o.tier }}</strong> · one is worth: {{ o.worth }}
-              <span class="muted">· runs on {{ o.runsOn }}</span>
-              <TraitChips v-if="o.traits.length" :traits="o.traits" class="option-traits" />
-              <span v-else class="muted">· no traits</span>
-              <span v-if="!first" class="muted"> · {{ researchText(o.draft) }}</span>
-            </span>
-          </label>
-        </fieldset>
+        <p class="muted small cards-legend">Jev’s takes: pick one</p>
+        <div class="cards">
+          <OptionCard v-for="o in unitOptions" :key="o.i" :chosen="unitChoice === o.i" @select="unitChoice = o.i">
+            <div><strong>{{ o.tier }}</strong></div>
+            <div>One is worth: {{ o.worth }}</div>
+            <div class="muted">Runs on {{ o.runsOn }}</div>
+            <TraitChips v-if="o.traits.length" :traits="o.traits" />
+            <span v-else class="muted">No traits</span>
+            <div v-if="!first" class="muted">{{ researchText(o.draft) }}</div>
+            <template #actions>
+              <button v-if="first" type="button" class="small primary" :disabled="game.busy" @click="pickAndAccept(() => (unitChoice = o.i))">
+                Add to industry
+              </button>
+              <ApplyButtons v-else :blocker="blockers[o.i] ?? null" @apply="applyNow(o.i)" />
+            </template>
+          </OptionCard>
+        </div>
         <p v-if="!first" class="small warn">{{ researchText(unitDraft) }}</p>
         <UnitSummary :unit="unitDraft.unit" :state="game.state" />
       </div>
@@ -297,19 +318,18 @@
           {{ mindDraft.mind.icon }} <strong>{{ mindDraft.mind.name }}</strong>: {{ mindDraft.mind.hardware.name }}
           hardware, IQ {{ mindDraft.mind.hardware.iq }}, running {{ mindDraft.mind.software.name }}.
         </div>
-        <fieldset v-if="mindOptions.length" class="options">
-          <legend class="small muted">Jev’s takes: pick a perk and the drawback that comes with it</legend>
-          <label v-for="o in mindOptions" :key="o.i" class="option small" :class="{ chosen: mindChoice === o.i }">
-            <input v-model="mindChoice" type="radio" name="mind-option" :value="o.i" />
-            <span>
-              <span class="good" :title="o.perk.rule">{{ o.perk.icon }} {{ o.perk.name }}</span>
-              <span class="muted"> ({{ o.perk.rule }})</span>
-              <br />
-              <span class="warn" :title="o.drawback.rule">{{ o.drawback.icon }} {{ o.drawback.name }}</span>
-              <span class="muted"> ({{ o.drawback.rule }})</span>
-            </span>
-          </label>
-        </fieldset>
+        <p class="muted small cards-legend">Jev’s takes: a perk and the drawback that comes with it</p>
+        <div v-if="mindOptions.length" class="cards">
+          <OptionCard v-for="o in mindOptions" :key="o.i" :chosen="mindChoice === o.i" @select="mindChoice = o.i">
+            <div class="good" :title="o.perk.rule">{{ o.perk.icon }} {{ o.perk.name }}</div>
+            <div class="muted">{{ o.perk.rule }}</div>
+            <div class="warn" :title="o.drawback.rule">{{ o.drawback.icon }} {{ o.drawback.name }}</div>
+            <div class="muted">{{ o.drawback.rule }}</div>
+            <template #actions>
+              <ApplyButtons :blocker="blockers[o.i] ?? null" @apply="applyNow(o.i)" />
+            </template>
+          </OptionCard>
+        </div>
         <div class="warn">{{ researchText(mindDraft) }}</div>
       </div>
     </VerdictView>
@@ -322,6 +342,7 @@ import { HOLDERS, MAX_IQ_STEP, PLATFORM_STEPS, platformGateTier } from '@/engine
 import { computeTrait } from '@/engine/computeTraits'
 import { resourceTrait } from '@/engine/resourceTraits'
 import { describeOption, optionBlocker, overflowOf, precheckCreate } from '@/engine/createProposal'
+import { applyBlocker, isBankable } from '@/engine/banking'
 import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
 import { DEFAULT_SOFTWARE, draftMind, precheckMind, stepFor } from '@/engine/mindProposal'
 import {
@@ -376,6 +397,8 @@ import StrategyTags from './StrategyTags.vue'
 import TraitChips from './TraitChips.vue'
 import UnitSummary from './UnitSummary.vue'
 import VerdictView from './VerdictView.vue'
+import ApplyButtons from './ApplyButtons.vue'
+import OptionCard from './OptionCard.vue'
 
 const props = defineProps<{ request: InventRequest }>()
 type Kind = 'resource' | 'strategy' | 'unit' | 'mind' | 'create' | 'sourcing' | 'storage' | 'cover'
@@ -410,7 +433,7 @@ const COPY: Record<
   },
   mind: {
     title: 'Propose an intelligence system',
-    help: 'An intelligence system is one machine that thinks: a hardware platform running software. A new one is up to 100 IQ smarter than your best and replaces the old one for good. Jev offers three perk-and-drawback pairs, and you pick one. Each platform gets one software upgrade, ever; after that you need another platform. The smartest platforms are paid for in a resource your units make. Your smartest mind sets which research you can do.',
+    help: 'An intelligence system is one machine that thinks: a hardware platform running software. A new one is up to 100 IQ smarter than your best and replaces the old one for good. Jev offers three perk-and-drawback pairs, and you pick one. A software upgrade adds IQ over the hardware; you can redo it at full cost (it replaces the last one, not adds to it). The smartest platforms are paid for in a resource your units make. Your smartest mind sets which research you can do.',
     presets: 'Pick one to fill the spec, or write your own:',
     name: 'e.g. Custom AI Server, Optical Neural Chip',
     description: 'What is it? (optional, but helps Jev)',
@@ -687,6 +710,9 @@ const researchText = (d: { minIQ: number; cost: Parameters<typeof describeCost>[
 
 const acceptLabel = computed(() => {
   const v = verdict.value
+  // These show their options as cards, each with its own button.
+  if (v && ['create', 'sourcing', 'storage', 'mind', 'unit'].includes(v.kind)) return null
+  if (v?.kind === 'resource' && resourceOptions.value.length) return null
   if (v?.kind === 'unit' && first) return 'Add to industry'
   if (v?.kind === 'strategy' && strategyDraft.value?.minIQ) return 'Add as research'
   if (v?.kind === 'cover') return 'Use it now'
@@ -695,6 +721,53 @@ const acceptLabel = computed(() => {
   if (v?.kind === 'unit' || v?.kind === 'mind' || v?.kind === 'storage') return 'Add as research'
   return 'Accept'
 })
+
+/** Whether Jev's options can be banked as research. */
+const bankable = computed(() => {
+  const v = verdict.value
+  return !!v && isBankable(v) && !v.rejected && !v.duplicateOf
+})
+/** Why each option can't be applied now, or null: the buttons grey out on it. */
+const blockers = computed<(string | null)[]>(() => {
+  const v = verdict.value
+  if (!v || !isBankable(v) || v.rejected || v.duplicateOf) return []
+  const plain = JSON.parse(JSON.stringify(v)) as typeof v
+  return plain.options.map((_, i) => applyBlocker(toRaw(game.state), plain, i))
+})
+
+function finish(notice: NonNullable<typeof ui.notice>) {
+  if (props.request.then) ui.openInvent(props.request.then)
+  else ui.closeInvent()
+  ui.notice = notice
+}
+
+function saveForLater() {
+  const v = verdict.value
+  if (!v || !isBankable(v)) return
+  if (!game.bank(v)) {
+    feedback.value = game.lastError
+    return
+  }
+  const n = v.options.filter((o) => !('blocked' in o && o.blocked)).length
+  finish({ tone: 'good', text: `Saved ${n} option${n === 1 ? '' : 's'} to Research.` })
+}
+
+function applyNow(i: number) {
+  const v = verdict.value
+  if (!v || !isBankable(v)) return
+  const outcome = game.bank(v, i, true)
+  if (!outcome) {
+    feedback.value = game.lastError
+    return
+  }
+  finish({ tone: 'good', text: outcome.kind === 'added' ? `${outcome.name} is done.` : 'Done.' })
+}
+
+/** A card's own button for options that aren't research: pick it, then take it. */
+function pickAndAccept(pick: () => unknown) {
+  pick()
+  accept()
+}
 
 function onPick(key: string, value: string) {
   const v = verdict.value
@@ -725,7 +798,7 @@ function accept() {
 
 <style scoped>
 dialog {
-  width: min(560px, calc(100vw - 32px));
+  width: min(900px, calc(100vw - 32px));
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   color: var(--text);

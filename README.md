@@ -4,7 +4,7 @@ A turn-based game about growing a fledgling AI into a singularity, where an AI j
 ideas. Very meta. The designs are in [MASTER_PLAN.md](MASTER_PLAN.md) (v5 core) and
 [MASTER_PLAN_V2.md](MASTER_PLAN_V2.md) (phases, clocks, risk and cover); the history and
 playtest data are in [NOTES.md](NOTES.md). Where they disagree, V2 and the code win. The
-intelligence-system rules (one platform at a time, compute traits, one software upgrade each) are
+intelligence-system rules (one platform at a time, compute traits, redoable software upgrades) are
 in [INTELLIGENCE_DESIGN.md](INTELLIGENCE_DESIGN.md). The economy (one action a week, Create,
 sourcing contracts, storage caps) is in [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md), which replaces
 the older plans' passive incomes, flows, builders and fleet notices. Resource traits (each an
@@ -38,6 +38,10 @@ weeks off the clock; cover research buys some back.
   storage expansion, intelligence system or cover) or a **Create**. Resources are free to
   propose. Doing research already on the list is instant and unlimited, but needs a **minimum
   IQ** your smartest mind must reach and a **cost in resources**.
+- **Jev's options are cards.** Whenever Jev offers three takes (unit, platform, storage, sourcing,
+  upgrade), they sit side by side. **Save For Later** banks all three to the Research tab for one
+  action (they are alternatives: researching one drops the others). **Apply now** on a card
+  takes just that one and researches it at once; it is greyed out if your IQ or stocks fall short.
 - **Tiers.** Resources and units share one tier scale (0-4), tied to IQ. A unit making an output
   of a higher tier than its own is heavily penalised; a lower one gets a bonus. Jev sets a unit's
   tier, value and what it runs on, and offers three takes.
@@ -129,7 +133,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Create deliveries, storage caps and catches, trait rules |
 | `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover |
 | `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits |
-| `src/engine/research.ts`, `upgrade.ts` | Research costs and completion; upgrades |
+| `src/engine/research.ts`, `upgrade.ts`, `banking.ts` | Research costs and completion; upgrades; saving options for later or applying one now |
 | `src/engine/proposals.ts`, `unitProposal.ts`, `sourcingProposal.ts`, `storageProposal.ts`, `createProposal.ts`, `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |

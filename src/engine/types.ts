@@ -245,6 +245,8 @@ export interface Research {
   effect: ResearchEffect
   proposedWeek: number
   risk?: Risk | null
+  /** Banked alternatives of one idea share a group: doing one drops the rest. */
+  group?: string
 }
 
 export type PhaseNumber = 1 | 2 | 3

@@ -67,6 +67,17 @@
     <div class="actions">
       <button type="button" @click="emit('edit')">← Edit</button>
       <button
+        v-if="saveLabel"
+        type="button"
+        class="primary"
+        :disabled="!!verdict.rejected || !!verdict.duplicateOf || game.busy"
+        title="Banks every option to the Research tab, for one action"
+        @click="emit('save')"
+      >
+        {{ saveLabel }}
+      </button>
+      <button
+        v-else-if="acceptLabel"
         type="button"
         class="primary"
         :disabled="!!verdict.rejected || !!verdict.duplicateOf || game.busy"
@@ -85,10 +96,11 @@ import { complicationName, payOptions } from '@/engine/proposals'
 import { RISK_BONUS, riskText } from '@/engine/risk'
 import { useGameStore, type Verdict } from '@/stores/game'
 
-const props = defineProps<{ verdict: Verdict; acceptLabel: string }>()
+const props = defineProps<{ verdict: Verdict; acceptLabel?: string | null; saveLabel?: string }>()
 const emit = defineEmits<{
   pick: [key: string, value: string]
   accept: []
+  save: []
   edit: []
 }>()
 const game = useGameStore()

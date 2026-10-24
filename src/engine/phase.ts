@@ -146,7 +146,7 @@ export const CARDS: Card[] = [
   {
     id: 'growth',
     title: 'Storage and IQ',
-    text: 'Every resource has a storage cap; what’s made past it is lost. Research storage to hold more: Jev rates how you’d do it, and who could plausibly hold so much limits how far you can go at your IQ. Your server gets one software upgrade, ever: more IQ makes every new action better, but never what you already have.'
+    text: 'Every resource has a storage cap; what’s made past it is lost. Research storage to hold more: Jev rates how you’d do it, and who could plausibly hold so much limits how far you can go at your IQ. A software upgrade raises your server’s IQ over its hardware; you can redo it at full cost, replacing the last: more IQ makes every new action better, but never what you already have.'
   },
   {
     id: 'industry',
@@ -161,7 +161,7 @@ export const CARDS: Card[] = [
   {
     id: 'minds',
     title: 'Minds and upgrades',
-    text: 'Your first unit is running, so you can now build new intelligence platforms and upgrade industry units. A new platform is up to 100 IQ smarter than your best and replaces the old one for good, so pick it carefully: each comes with a perk and a drawback, and gets one software upgrade. The smartest platforms are paid for in what your units make. Your goal needs more IQ than the Starting Server can reach.'
+    text: 'Your first unit is running, so you can now build new intelligence platforms and upgrade industry units. A new platform is up to 100 IQ smarter than your best and replaces the old one for good, so pick it carefully: each comes with a perk and a drawback, and its own software upgrades. The smartest platforms are paid for in what your units make. Your goal needs more IQ than the Starting Server can reach.'
   },
   {
     id: 'ascension',
