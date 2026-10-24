@@ -149,11 +149,8 @@ export async function judgeStorage(state: GameState, judge: Judge, raw: StorageS
   )
   const holders = await judge.ask(proposalText(state, text), holderQuestions, 'storage-holders')
   Object.assign(v.answers, holders)
+  // Options too big for your IQ stay on offer: save them for later, once your IQ reaches the holder.
   v.options = storageOptions(state, v)
-  if (v.options.every((o) => o.blocked)) {
-    const need = Math.min(...v.options.map((o) => o.holder))
-    v.rejected = `Even the smallest of these is more ${r.name} than ${B.HOLDERS[B.holderReach(bestIQ(state))]![0].toLowerCase()} could hold. It would take ${B.HOLDERS[need]![0].toLowerCase()}, which needs IQ ${B.HOLDERS[need]![1]}.`
-  }
   return v
 }
 
@@ -186,7 +183,7 @@ export function storageOptions(state: GameState, v: Pick<StorageVerdict, 'answer
       catch: caught,
       risky,
       risk: tracedRisk(r, expansionRisk(state, i === 0 ? null : alarm, worth, risky)),
-      minIQ: floorIQ(tierIQ),
+      minIQ: Math.max(floorIQ(tierIQ), holder > reach ? (B.HOLDERS[holder]?.[1] ?? 0) : 0),
       cost: priceCost(state, value, payer.map((p) => ({ ...p, p: 1 }))),
       iqEfficiency,
       holder,

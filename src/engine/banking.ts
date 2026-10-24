@@ -105,16 +105,14 @@ function draftOption(state: GameState, v: BankableVerdict, i: number): Draft {
 /**
  * Banks the verdict's options as research for one action: all of them, or just `only`. The ones
  * banked together are alternatives: doing one drops the rest. A storage option too big for your
- * IQ on the ownership ladder isn't banked.
+ * IQ on the ownership ladder is banked too, with the holder's IQ as its minimum.
  */
 export function bankVerdict(current: GameState, v: BankableVerdict, only?: number): Accepted {
   refuseUnaccepted(v)
   const state = structuredClone(current)
   claimProposal(state)
   const all = only === undefined
-  const picks = (all ? v.options.map((_, i) => i) : [only]).filter(
-    (i) => v.options[i] && !(v.kind === 'storage' && (v.options[i] as StorageVerdict['options'][number]).blocked)
-  )
+  const picks = (all ? v.options.map((_, i) => i) : [only]).filter((i) => v.options[i])
   if (!picks.length) throw new Error('Choose one of the options.')
   const group = `${v.kind}:${state.week}:${v.spec.name}`
   const first = draftOption(state, v, picks[0]!)
