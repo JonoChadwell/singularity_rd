@@ -7,7 +7,8 @@ playtest data are in [NOTES.md](NOTES.md). Where they disagree, V2 and the code 
 intelligence-system rules (one platform at a time, compute traits, one software upgrade each) are
 in [INTELLIGENCE_DESIGN.md](INTELLIGENCE_DESIGN.md). The economy (one action a week, Create,
 sourcing contracts, storage caps) is in [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md), which replaces
-the older plans' passive incomes, flows, builders and fleet notices.
+the older plans' passive incomes, flows, builders and fleet notices. Resource traits (each an
+upside with a downside) are in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
 
 ## How to play
 
@@ -19,11 +20,14 @@ there) that Jev judges and that becomes the phase's goal research.
 
 | Phase | Clock | You can propose | Lose |
 | --- | --- | --- | --- |
-| 1. Escape the Lab (a short tutorial) | 10 weeks | Resources, Creates, storage, software upgrades | Discovered: game over |
-| 2. Humanity (the real challenge) | 100 weeks, moved by your actions | Adds industry units, sourcing, strategies and **cover**; after your first unit, new platforms and unit upgrades | Humans stop you: game over |
+| 1. Escape the Lab (a short tutorial) | 10 weeks | Resources, Creates, storage, software upgrades | The plan fails: game over |
+| 2. Humanity (the real challenge) | 100 weeks, moved by your actions | Adds industry units, sourcing, strategies and **cover**; after your first unit, new platforms and unit upgrades | The plan fails: game over |
 | 3. Ascension | None | Everything; free play for now | Can't lose |
 
-Phases are won by researching their goal. Phase 2 actions that humans would notice (risky
+Phases are won by researching their goal. You say how the plan succeeds; Jev picks how it
+**fails** from a fixed list of loss conditions (Phase 1: discovered, wiped, betrayed, audited,
+contained; Phase 2: found out, backlash, outlawed, outcompeted, cut off, too late), and that is what
+happens when the clock runs out. In Phase 2, actions that bring that failure closer (risky
 research, and above all expanding: sourcing contracts and storage, by how much they add) cost
 weeks off the clock; cover research buys some back.
 
@@ -53,12 +57,16 @@ weeks off the clock; cover research buys some back.
   action. Each has upkeep and up to three **traits** from a fixed list of 14. Split a type across
   its strategies by count; the strategy marked **rest** takes every unit not counted elsewhere.
 - **Upgrade** a unit or your platform: Jev offers its three most natural improvements, and the
-  pick becomes research. A platform gets **one** software upgrade, ever (you pick its size, 25 to
-  100 IQ; it may add a perk or remove a drawback). After that, only a new platform goes further.
+  pick becomes research. A platform gets **one** software upgrade, ever (each of the three options
+  comes at its own size, 25 to 100 IQ, random each week but never all three the same; it may add
+  a perk or remove a drawback). After that, only a new platform goes further.
 - **Resources** keep from week to week, up to a **storage cap**; what's made past it is lost.
   Storage research raises it: Jev rates how you'd do it, you pick modest, large with a catch, or
   huge and risky, and your IQ limits who could plausibly hold the total (an individual at IQ 100,
   up to the whole Earth at 500). When demand outstrips supply, every user gets the same share.
+- **Resources have a nature:** one or two traits from a fixed list of 20, each an upside with a
+  downside (Energetic: costs in it are half, but half of what's left is lost each week). A plan's
+  resources get Jev's pick; one you add by hand offers three to choose from.
 - **IQ steps.** Both a new platform and a software upgrade add a flat step to your best IQ, never
   more than 100. Two new platforms, each with its software upgrade at full size, take 100 to 500.
 - **Jev is torn** sometimes. The game then shows its top two answers and you pick.
@@ -82,7 +90,7 @@ needs this proxy, so it runs under `npm run dev` or `npm run preview`, not as st
 Optional settings in `.env.local`: `JEV_BASE_URL` (default `https://openrouter.ai/api`) and
 `JEV_MODEL` (default `jev-latest`).
 
-The game saves to your browser's local storage (`singularity-rd/save/v15`) after every change,
+The game saves to your browser's local storage (`singularity-rd/save/v16`) after every change,
 including Jev's answers, so the same proposal always gets the same verdict. Old save versions
 are dropped.
 
@@ -115,12 +123,12 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | Path | What |
 | --- | --- |
 | `src/ai/jev.ts` | Jev client, `Judge` interface, typed readers, torn-answer detection, `CachedJudge` |
-| `src/engine/types.ts` | `GameState` (v15) and everything in it |
+| `src/engine/types.ts` | `GameState` (v16) and everything in it |
 | `src/engine/balance.ts` | Every tuning number, in one place |
 | `src/engine/phase.ts`, `planProposal.ts`, `planPresets.ts` | Phases, clocks, unlocks; plan proposals and their ready-made ideas |
 | `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Create deliveries, storage caps and catches, trait rules |
-| `src/engine/risk.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; cover |
-| `src/engine/model.ts`, `traits.ts`, `computeTraits.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform |
+| `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover |
+| `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits |
 | `src/engine/research.ts`, `upgrade.ts` | Research costs and completion; upgrades |
 | `src/engine/proposals.ts`, `unitProposal.ts`, `sourcingProposal.ts`, `storageProposal.ts`, `createProposal.ts`, `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |

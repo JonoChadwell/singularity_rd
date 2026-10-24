@@ -27,6 +27,7 @@ import { addUnit, crewPer } from './research'
 import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import { ALL_TRAITS, TRAITS, type TraitId } from './traits'
+import { costFactor } from './resourceTraits'
 import type { Cost, Flow, GameState, Resource, UnitType } from './types'
 import { newUnit } from './initialState'
 
@@ -346,10 +347,12 @@ export function unitOptions(
 
 /** Splits a value across parts so that making one uses parts worth about that value. */
 export function priceParts(state: GameState, ids: string[], value: number): Flow[] {
-  return ids.map((id) => ({
-    resourceId: id,
-    amount: B.nice(value / ids.length / Math.max(1e-9, findResource(state, id)?.value ?? 1))
-  }))
+  return ids.map((id) => {
+    const r = findResource(state, id)
+    // Resource traits (Energetic, Catalytic...) make parts in them cheaper or dearer.
+    const f = r ? costFactor(state, r, false) : 1
+    return { resourceId: id, amount: B.nice((value / ids.length / Math.max(1e-9, r?.value ?? 1)) * f) }
+  })
 }
 
 export interface UnitDraft {

@@ -1,6 +1,7 @@
 import { researchBlocker } from './actions'
 import * as B from './balance'
-import { affordable, bestIQ, bestMind, contractsFor, findResource, fmt, fmtCount, openSlots, OVERFLOW, researchIQ } from './model'
+import { affordable, bestIQ, bestMind, contractsFor, findResource, fmt, fmtCount, isLoss, openSlots, researchIQ } from './model'
+import { lossOf } from './losses'
 import { lockReason, weeksLeft } from './phase'
 import { goalOf } from './projection'
 import type { GameState, WeekReport } from './types'
@@ -108,7 +109,7 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
   // The clock.
   const left = weeksLeft(state)
   if (left !== null && left <= 3) {
-    const who = state.phase.n === 1 ? 'The lab discovers you' : 'Humans stop you'
+    const who = lossOf(state).name
     add({
       key: 'clock',
       tone: 'bad',
@@ -191,7 +192,7 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
   for (const r of state.resources) {
     if (r.amount <= 0) continue
     const flows = preview.flows[r.id] ?? []
-    const used = flows.some((f) => f.amount < 0 && f.label !== OVERFLOW)
+    const used = flows.some((f) => f.amount < 0 && !isLoss(f.label))
     const needed =
       state.sourcing.some((c) => openSlots(c) > 0 && c.parts.some((p) => p.resourceId === r.id)) ||
       state.research.some((x) => x.cost.some((c) => c.resourceId === r.id))

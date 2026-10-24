@@ -13,6 +13,7 @@ import {
   type Accepted
 } from './proposals'
 import { lockReason } from './phase'
+import { seedOf } from './planPresets'
 import { priceCost } from './research'
 import { alarmQuestion, asksAlarm, riskFrom } from './risk'
 import { proposalText } from './stateText'
@@ -37,8 +38,25 @@ export interface UpgradeOption extends Candidate {
   minIQ: number
   cost: Cost
   risk: Risk | null
-  /** A platform's software upgrade: the same change at each size, priced separately. The player picks one. */
-  sizes?: { step: number; minIQ: number; cost: Cost }[]
+  /** A platform's software upgrade: the IQ it adds. */
+  step?: number
+}
+
+/**
+ * The IQ each of a platform's software options adds: random, but not all the same, and fixed for
+ * the week, so asking again the same week offers the same sizes.
+ */
+export function softwareSteps(state: GameState, mindId: string, count: number): number[] {
+  const steps = B.SOFTWARE_STEPS
+  let seed = seedOf(`${state.runId}/${state.week}/${mindId}`)
+  // The high bits: an LCG's low bits repeat with a short period.
+  const next = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) >>> 16
+  const out = Array.from({ length: count }, () => steps[next() % steps.length]!)
+  if (count > 1 && out.every((s) => s === out[0])) {
+    const others = steps.filter((s) => s !== out[0])
+    out[count - 1] = others[next() % others.length]!
+  }
+  return out
 }
 
 export interface UpgradeOffer {
@@ -242,7 +260,7 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
     // Neither a unit upgrade's difficulty (how many came before it) nor a platform's (its size) is Jev's call.
     ...(asksAlarm(state)
       ? Object.fromEntries(
-          candidates.map((c, i) => [`a_${keyOf(i)}`, alarmQuestion(`improving ${thing.name} this way (${text(c)})`)])
+          candidates.map((c, i) => [`a_${keyOf(i)}`, alarmQuestion(state, `improving ${thing.name} this way (${text(c)})`)])
         )
       : {}),
     ...payQuestion(state, `improvements to ${thing.name}`)
@@ -263,9 +281,10 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
     .sort((a, b) => b.p - a.p || a.i - b.i)
     .slice(0, B.UPGRADE_OPTIONS)
   const pay = payers(answers)
+  const steps = target.kind === 'mind' ? softwareSteps(state, target.id, order.length) : []
   return {
     target,
-    options: order.map(({ c, i, p }) => {
+    options: order.map(({ c, i, p }, n) => {
       const risk = riskFrom(answers, `a_${keyOf(i)}`)
       let minIQ: number
       let value: number
@@ -274,12 +293,19 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
         const before = currentIQ(thing as Mind)
         const withTrait = c.changes.some((x) => x.kind === 'computeTrait') ? B.TRAIT_SOFTWARE_COST : 1
         // A mind can always work on its own upgrade; a bigger step just costs more.
-        const sizes = B.SOFTWARE_STEPS.map((step) => {
-          const worth = B.MIND_UPGRADE_SHARE * withTrait * (B.softwareCost(before + step) - B.softwareCost(before))
-          return { step, minIQ: floorIQ(before), cost: priceCost(state, risk ? worth * B.RISK_COST : worth, pay) }
-        })
-        const biggest = sizes[sizes.length - 1]!
-        return { ...c, p, minIQ: biggest.minIQ, cost: biggest.cost, risk, sizes }
+        const step = steps[n]!
+        const worth = B.MIND_UPGRADE_SHARE * withTrait * (B.softwareCost(before + step) - B.softwareCost(before))
+        const changes = c.changes.map((x) => (x.kind === 'software' ? { ...x, iq: step } : x))
+        return {
+          ...c,
+          name: `${c.name} (+${step} IQ)`,
+          changes,
+          p,
+          minIQ: floorIQ(before),
+          cost: priceCost(state, risk ? worth * B.RISK_COST : worth, pay),
+          risk,
+          step
+        }
       } else {
         // The first upgrade to a strategy is as hard as the unit itself; each one after, a tier harder.
         tier = upgradeTier(state, thing as UnitType, c.changes)
@@ -292,24 +318,14 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
   }
 }
 
-/**
- * Takes one of Jev's options as research. A platform's software upgrade also takes a size
- * (IQ added); it defaults to the biggest.
- */
-export function acceptUpgrade(current: GameState, offer: UpgradeOffer, index: number, step?: number): Accepted {
+/** Takes one of Jev's options as research. */
+export function acceptUpgrade(current: GameState, offer: UpgradeOffer, index: number): Accepted {
   const option = offer.options[index]
   if (!option) throw new Error('Choose one of the options.')
   const state = structuredClone(current)
   claimProposal(state)
-  let { minIQ, cost, changes } = option
-  let name = `${targetName(state, offer.target)}: ${option.name}`
-  if (option.sizes) {
-    const size = option.sizes.find((s) => s.step === (step ?? B.MAX_IQ_STEP))
-    if (!size) throw new Error('Choose how much smarter the software makes it.')
-    ;({ minIQ, cost } = size)
-    changes = changes.map((c) => (c.kind === 'software' ? { ...c, iq: size.step } : c))
-    name += ` (+${size.step} IQ)`
-  }
+  const { minIQ, cost, changes } = option
+  const name = `${targetName(state, offer.target)}: ${option.name}`
   state.inventions.push({ week: state.week, icon: '💡', name, kind: 'upgrade' })
   state.decidedThisWeek = true
   return addResearch(

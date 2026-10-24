@@ -26,7 +26,9 @@ lose on the clock, so the Phase 2 targets are skipped until a retune.
 ## Resources and storage
 
 There are no flows any more: every resource keeps from week to week. Users of a scarce resource
-share what's on hand plus what's made that week.
+share what's on hand plus what's made that week. Each resource's traits can change its cap,
+its costs, what's made and used of it, and what it loses or grows each week: see
+[RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
 
 - **Starting cap:** `STORAGE_WORTH[tier]` divided by the resource's value. That is 5,000 Money's
   worth at tier 0, rising to 250,000 at tier 4.

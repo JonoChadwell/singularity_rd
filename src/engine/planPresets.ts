@@ -243,7 +243,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
 export const plansFor = (phase: 1 | 2) => (phase === 1 ? PHASE1_PLANS : PHASE2_PLANS)
 
 /** A small, stable hash, so the same game always offers the same ideas. */
-function seedOf(text: string): number {
+export function seedOf(text: string): number {
   let h = 2166136261
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619)
   return h >>> 0

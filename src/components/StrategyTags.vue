@@ -8,6 +8,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { efficiencyWord, findResource, findUnit, tierFit, tierLabel } from '@/engine/model'
+import { effectiveTier } from '@/engine/resourceTraits'
 import type { Strategy } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 
@@ -24,7 +25,7 @@ const wordClass = computed(() => {
   const efficiency = props.strategy.efficiency ?? 1
   return efficiency > 1 ? 'good' : efficiency < 1 ? 'bad' : ''
 })
-const fit = computed(() => (unit.value && target.value ? tierFit(unit.value.tier, target.value.tier) : null))
+const fit = computed(() => (unit.value && target.value ? tierFit(unit.value.tier, effectiveTier(target.value, 'make')) : null))
 const fitTitle = computed(() =>
   unit.value && target.value ? `${unit.value.name} are ${tierLabel(unit.value.tier)}; ${target.value.name} is ${tierLabel(target.value.tier)}.` : ''
 )

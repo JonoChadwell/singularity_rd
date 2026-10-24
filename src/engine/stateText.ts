@@ -1,5 +1,6 @@
 import { computeTrait } from './computeTraits'
 import { currentIQ, describeFlows, findUnit, softwareLabel } from './model'
+import { RESOURCE_TRAITS } from './resourceTraits'
 import { TRAITS } from './traits'
 import type { GameState } from './types'
 
@@ -19,6 +20,7 @@ export function describeState(state: GameState): string {
     ? [
         `The AI's current goal: ${plan.goal}.`,
         state.phase.n === 1 ? `Its plan: ${plan.means}` : `Its plan for humans: ${plan.means}`,
+        ...(plan.loss ? [`The plan fails if time runs out on: ${plan.loss.threat}.`] : []),
         ''
       ]
     : []
@@ -27,7 +29,10 @@ export function describeState(state: GameState): string {
     '',
     ...planLines,
     'Resources:',
-    ...state.resources.map((r) => `- ${r.name} (tier ${r.tier}): ${r.description}`),
+    ...state.resources.map(
+      (r) =>
+        `- ${r.name} (tier ${r.tier}${r.traits.length ? `; ${r.traits.map((t) => RESOURCE_TRAITS[t].name).join(', ')}` : ''}): ${r.description}`
+    ),
     '',
     'Intelligence systems (single machines that think and do research):',
     ...state.minds.map(

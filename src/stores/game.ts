@@ -16,13 +16,13 @@ import { describeError, logEvent, snapshot, type LogStream } from '@/telemetry'
 
 export type { ProposalInput, Verdict }
 
-const SAVE_KEY = 'singularity-rd/save/v15'
+const SAVE_KEY = 'singularity-rd/save/v16'
 
 function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    if (parsed?.version !== 15) return null
+    if (parsed?.version !== 16) return null
     // Saves from before repeat ideas were tracked.
     parsed.ideas ??= []
     return parsed
@@ -209,14 +209,14 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  /** Takes one of Jev's upgrade options as research. A platform's software upgrade also takes a size. */
-  function chooseUpgrade(reactiveOffer: UpgradeOffer, index: number, step?: number): Outcome | undefined {
+  /** Takes one of Jev's upgrade options as research. */
+  function chooseUpgrade(reactiveOffer: UpgradeOffer, index: number): Outcome | undefined {
     lastError.value = ''
     try {
       const offer = JSON.parse(JSON.stringify(reactiveOffer)) as UpgradeOffer
-      const result = acceptUpgrade(raw(), offer, index, step)
+      const result = acceptUpgrade(raw(), offer, index)
       adopt(result.state)
-      log('accept', { kind: 'upgrade', option: offer.options[index]?.key, step, outcome: result.outcome })
+      log('accept', { kind: 'upgrade', option: offer.options[index]?.key, step: offer.options[index]?.step, outcome: result.outcome })
       return result.outcome
     } catch (err) {
       fail('choose_upgrade', err, { index })

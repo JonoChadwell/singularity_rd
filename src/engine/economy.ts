@@ -1,7 +1,8 @@
 import * as B from './balance'
 import { drainOf } from './computeTraits'
-import { allocation, capOf, contractsFor, findResource, makeId, OVERFLOW } from './model'
+import { allocation, capOf, contractsFor, findResource, makeId, OVERFLOW, TRAIT_GROWTH, TRAIT_LOSS } from './model'
 import { strategyRate } from './research'
+import { growthOf, makeFactor, refillOf, useFactor, weeklyLossOf } from './resourceTraits'
 import { has } from './traits'
 import type { Expansion, GameState, Sourcing, Strategy, UnitType, UnitWeek, WeekReport } from './types'
 
@@ -54,10 +55,17 @@ export function outputFactor(state: GameState, u: UnitType): number {
 export const resting = (state: GameState, u: UnitType) =>
   has(u, 'intermittent') && state.week % 2 === 0
 
-function upkeepNeeds(u: UnitType, runner: Runner) {
+/** What a runner uses of a resource each week, as a factor of the rate: its traits move it. */
+const useOfResource = (state: GameState, id: string) => {
+  const r = findResource(state, id)
+  return r ? useFactor(r) : 1
+}
+
+function upkeepNeeds(state: GameState, u: UnitType, runner: Runner) {
   const factor = u.overclocked && has(u, 'overclockable') ? B.OVERCLOCK_UPKEEP : 1
   for (const f of u.upkeep) {
-    runner.needs.set(f.resourceId, (runner.needs.get(f.resourceId) ?? 0) + f.amount * factor)
+    const amount = f.amount * factor * useOfResource(state, f.resourceId)
+    runner.needs.set(f.resourceId, (runner.needs.get(f.resourceId) ?? 0) + amount)
     runner.upkeep.add(f.resourceId)
   }
   if (u.crew) runner.needs.set(crewId(u.id), 1)
@@ -93,23 +101,26 @@ function buildRunners(state: GameState, report: WeekReport): Runner[] {
       }
       const rate = strategyRate(state, strategy)
       for (const f of rate.inputs) {
-        runner.needs.set(f.resourceId, (runner.needs.get(f.resourceId) ?? 0) + f.amount)
+        const amount = f.amount * useOfResource(state, f.resourceId)
+        runner.needs.set(f.resourceId, (runner.needs.get(f.resourceId) ?? 0) + amount)
       }
       if (strategy.quirk === 'picky') runner.picky = true
       if (strategy.kind === 'make') {
         const out = findResource(state, strategy.outputId)
         const warm =
           strategy.quirk === 'slow-to-start' ? Math.min(1, ((strategy.weeksRun ?? 0) + 1) / B.SLOW_WEEKS) : 1
-        runner.makes.set(strategy.outputId, rate.amount * factor * warm)
+        // The output's traits (Perishable, Seasonal...) change how much units make of it.
+        const made = out ? makeFactor(out, state.week) : 1
+        runner.makes.set(strategy.outputId, rate.amount * factor * warm * made)
         const by = u.byproduct ? findResource(state, u.byproduct) : undefined
         if (by && out && by.id !== out.id) {
-          const value = rate.amount * factor * out.value * B.BY_PRODUCT_SHARE
+          const value = rate.amount * factor * out.value * B.BY_PRODUCT_SHARE * makeFactor(by, state.week)
           runner.makes.set(by.id, (runner.makes.get(by.id) ?? 0) + value / by.value)
         }
       } else {
         runner.makes.set(crewId(strategy.outputId), rate.amount)
       }
-      upkeepNeeds(u, runner)
+      upkeepNeeds(state, u, runner)
       runners.push(runner)
     }
   }
@@ -307,6 +318,13 @@ export function simulateWeek(state: GameState): WeekReport {
       res.amount -= lost
       note(res.id, `${e.name} spoils`, -lost)
     }
+    // Its own traits: Energetic, Perishable, Volatile and Liquid lose a share of what's left.
+    const loss = weeklyLossOf(res)
+    if (loss > 0 && res.amount > 0) {
+      const lost = res.amount * loss
+      res.amount -= lost
+      note(res.id, TRAIT_LOSS, -lost)
+    }
     // Slow fill: the space it adds fills only so fast.
     const cap = capOf(state, res, unpaid)
     const slow = res.expansions.filter((e) => e.catch?.kind === 'fill' && !unpaid.has(e))
@@ -321,6 +339,12 @@ export function simulateWeek(state: GameState): WeekReport {
       report.wasted[res.id] = res.amount - limit
       note(res.id, OVERFLOW, -(res.amount - limit))
       res.amount = limit
+    }
+    // Compounding, Self-replicating and Renewable grow on their own, but only into free room.
+    const grown = Math.min(Math.max(0, limit - res.amount), res.amount * growthOf(res) + cap * refillOf(res))
+    if (grown > 1e-9) {
+      res.amount += grown
+      note(res.id, TRAIT_GROWTH, grown)
     }
   }
 

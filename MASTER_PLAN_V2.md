@@ -225,6 +225,16 @@ This gets industry running in the first week of Phase 2, instead of after a mont
 
 ### D6. Risk (Phase 2)
 
+> **Update: loss conditions.** "Humans stop you" is no longer the only way to lose. When the
+> player proposes a plan, Jev also answers a `loss` question that picks, from a fixed generic bank
+> (`src/engine/losses.ts`), how that plan is most likely to fail: Found out, Backlash, Outlawed,
+> Outcompeted, Cut off or Too late in Phase 2, and Discovered, Wiped, Betrayed, Audited or
+> Contained in Phase 1. The player never writes or chooses it. The loss condition is stored on the
+> plan. It names the clock ("Backlash in N"), the game-over line and the cover prompts. The
+> `alarm` question now asks how much closer an action brings *that* failure, on the scale No
+> closer / A little closer / Noticeably closer / Much closer / Right to the edge. The weeks stay
+> 0/0/2/4/8. The text below describes the original wording.
+
 Every research proposal in Phase 2 (income, strategy, unit, mind, upgrade options) gets one
 extra Jev question in the same call: `alarm`, "If humans noticed the AI doing this, how would
 they react?", on a five-level scale. Jev reads the plan's stance with it, so "Charity Funds"

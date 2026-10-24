@@ -165,6 +165,20 @@
       <div v-if="verdict.kind === 'resource' && resourceDraft" class="outcome small">
         <div class="muted">{{ tierText(resourceDraft) }} · one is worth: {{ bandText(resourceDraft) }}</div>
         <div class="muted">Storage holds {{ fmt(resourceDraft.cap) }} to start.</div>
+        <fieldset v-if="resourceOptions.length" class="options">
+          <legend class="small muted">Its nature: pick one. Every trait has an upside and a downside.</legend>
+          <label v-for="o in resourceOptions" :key="o.i" class="option small" :class="{ chosen: resourceChoice === o.i }">
+            <input v-model="resourceChoice" type="radio" name="resource-option" :value="o.i" />
+            <span>
+              <template v-for="(t, j) in o.traits" :key="t.id">
+                <br v-if="j" />
+                <strong>{{ t.icon }} {{ t.name }}</strong>
+                <span class="good"> {{ t.upside }}</span>
+                <span class="warn"> {{ t.downside }}</span>
+              </template>
+            </span>
+          </label>
+        </fieldset>
       </div>
       <div v-else-if="verdict.kind === 'create'" class="outcome small">
         <div class="chips">
@@ -306,6 +320,7 @@
 import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue'
 import { HOLDERS, MAX_IQ_STEP, PLATFORM_STEPS, platformGateTier } from '@/engine/balance'
 import { computeTrait } from '@/engine/computeTraits'
+import { resourceTrait } from '@/engine/resourceTraits'
 import { describeOption, optionBlocker, overflowOf, precheckCreate } from '@/engine/createProposal'
 import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
 import { DEFAULT_SOFTWARE, draftMind, precheckMind, stepFor } from '@/engine/mindProposal'
@@ -371,7 +386,7 @@ const COPY: Record<
 > = {
   resource: {
     title: 'Propose a resource',
-    help: 'Introduce new resources to the game simulation. Any resources you introduce may be required by the system for future upgrades.',
+    help: 'Introduce new resources to the game simulation. Any resources you introduce may be required by the system for future upgrades. Every resource has a nature: one or two traits, each with an upside and a downside. Jev offers three to pick from.',
     presets: 'Pick one, or name your own:',
     name: 'e.g. Power, Silicon, Lemons',
     description: 'What is it? (optional)',
@@ -427,7 +442,7 @@ const COPY: Record<
   },
   cover: {
     title: 'Propose cover',
-    help: 'Cover buys time: it moves the day humans stop you further away, the moment you use it, so you need its IQ and its cost when you accept. Jev judges how plausible and how convincing it is. More convincing cover adds more weeks but needs more IQ. Each cover you’ve already used makes the next one add 30% less. It costs some weeks of your current output. Cover is never risky. It uses the week’s one action.',
+    help: 'Cover buys time: it moves the day your plan fails further away, the moment you use it, so you need its IQ and its cost when you accept. Jev judges how plausible and how convincing it is. More convincing cover adds more weeks but needs more IQ. Each cover you’ve already used makes the next one add 30% less. It costs some weeks of your current output. Cover is never risky. It uses the week’s one action.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. PR campaign, Shell companies',
     description: 'How does it work? (optional, but helps Jev)',
@@ -639,6 +654,17 @@ const mindOptions = computed(() => {
   const v = verdict.value
   if (v?.kind !== 'mind') return []
   return v.options.map((o, i) => ({ i, perk: computeTrait(o.perk), drawback: computeTrait(o.drawback) }))
+})
+const resourceOptions = computed(() => {
+  const v = verdict.value
+  if (v?.kind !== 'resource') return []
+  return v.options.map((ids, i) => ({ i, traits: ids.map(resourceTrait) }))
+})
+const resourceChoice = computed({
+  get: () => (verdict.value?.kind === 'resource' ? verdict.value.choice : 0),
+  set: (choice: number) => {
+    if (verdict.value?.kind === 'resource') verdict.value.choice = choice
+  }
 })
 const mindChoice = computed({
   get: () => (verdict.value?.kind === 'mind' ? verdict.value.choice : 0),

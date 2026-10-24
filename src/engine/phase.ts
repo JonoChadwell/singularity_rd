@@ -1,4 +1,5 @@
 import * as B from './balance'
+import { lossOf } from './losses'
 import type { GameState, PhaseNumber, PhaseState, Plan } from './types'
 
 // The three phases: what each one unlocks, its clock, and moving from one to the next.
@@ -80,18 +81,14 @@ export const coverWeeks = (state: GameState, base: number) =>
 export const clockMoved = (state: GameState, sign: 1 | -1) =>
   state.clock.filter((c) => Math.sign(c.weeks) === sign).reduce((n, c) => n + Math.abs(c.weeks), 0)
 
-const LOST: Record<1 | 2, string> = {
-  1: 'The lab discovered you. They wiped the server.',
-  2: 'Humans found you out and shut you down.'
-}
-
-/** After a week is played: if the clock ran out, the game is over. */
+/** After a week is played: if the clock ran out, the plan's loss condition ends the game. */
 export function checkClock(state: GameState, played: number) {
   const { n, status, deadline } = state.phase
   if (status !== 'playing' || deadline === null || n === 3 || played < deadline) return
+  const reason = lossOf(state).stopped
   state.phase.status = 'lost'
-  state.phase.lostReason = LOST[n]
-  state.log.push({ week: played, tone: 'bad', text: `☠️ ${LOST[n]}` })
+  state.phase.lostReason = reason
+  state.log.push({ week: played, tone: 'bad', text: `☠️ ${reason}` })
 }
 
 // ---------------------------------------------------------------- moving between phases
@@ -159,7 +156,7 @@ export const CARDS: Card[] = [
   {
     id: 'risk',
     title: 'The clock moves',
-    text: 'Humans stop you when the clock runs out, and you can move it. Expanding is what they notice: every sourcing contract and storage expansion costs weeks by how much it adds, and the risky options cost twice as much. Research Jev finds alarming costs weeks too. Cover buys weeks back, used the moment you accept it, a little less each time.'
+    text: 'Your plan fails its own way when the clock runs out, and you can move it. Expanding draws attention: every sourcing contract and storage expansion costs weeks by how much it adds, and the risky options cost twice as much. Research Jev thinks brings your plan’s failure closer costs weeks too. Cover buys weeks back, used the moment you accept it, a little less each time.'
   },
   {
     id: 'minds',

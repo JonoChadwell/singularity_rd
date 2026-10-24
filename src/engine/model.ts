@@ -1,5 +1,6 @@
 import * as B from './balance'
 import { iqShiftOf, type ResearchType } from './computeTraits'
+import { refundOf } from './resourceTraits'
 import { has, TRAITS } from './traits'
 import type { CreateTarget, Delivery, Flow, GameState, Mind, Research, Resource, Sourcing, Strategy, UnitType } from './types'
 
@@ -307,12 +308,17 @@ export const iqScalar = (state: GameState) => (iqFor(state, 'create') / 100) ** 
 
 /** The flow row for what didn't fit in storage: lost, not used. */
 export const OVERFLOW = 'Overflowed storage'
+/** The flow rows for what a resource's own traits lose or grow each week. */
+export const TRAIT_LOSS = 'Lost to its nature'
+export const TRAIT_GROWTH = 'Grew on its own'
+/** Rows that are lost, not used. */
+export const isLoss = (label: string) => label === OVERFLOW || label === TRAIT_LOSS
 
-/** Stock each resource that next week's running will use, from a preview. Overflow isn't use. */
+/** Stock each resource that next week's running will use, from a preview. Losses aren't use. */
 export function weeklyUse(report: { flows: Record<string, { label: string; amount: number }[]> } | null): Record<string, number> {
   const use: Record<string, number> = {}
   for (const [id, flows] of Object.entries(report?.flows ?? {})) {
-    use[id] = -flows.reduce((n, f) => n + (f.label === OVERFLOW ? 0 : Math.min(0, f.amount)), 0)
+    use[id] = -flows.reduce((n, f) => n + (isLoss(f.label) ? 0 : Math.min(0, f.amount)), 0)
   }
   return use
 }
@@ -389,6 +395,23 @@ export function defaultTask(state: GameState, u: UnitType) {
 }
 
 /** Whether the world has what a research uses up. Returns what's short, or null. */
+/**
+ * Pays a cost (research or unit parts). Recyclable resources send part of what's spent back
+ * next week, as a delivery.
+ */
+export function payCost(state: GameState, cost: Flow[], name: string) {
+  for (const c of cost) {
+    const r = findResource(state, c.resourceId)
+    if (!r) continue
+    const paid = Math.min(r.amount, c.amount)
+    r.amount = Math.max(0, r.amount - c.amount)
+    const back = paid * refundOf(r)
+    if (back > 1e-9) {
+      state.deliveries.push({ name: `${name} (recycled)`, target: { kind: 'resource', id: r.id }, amount: back, delay: 0, weeks: 1 })
+    }
+  }
+}
+
 export function costShortfall(state: GameState, cost: Research['cost']): string | null {
   for (const c of cost) {
     const r = findResource(state, c.resourceId)

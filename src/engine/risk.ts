@@ -1,26 +1,30 @@
 import { readLevel, type JevAnswer, type JevQuestion } from '@/ai/jev'
 import * as B from './balance'
+import { lossOf } from './losses'
 import type { GameState, Risk } from './types'
 
-// Risk, in Phase 2: research humans would notice costs weeks off the clock, and pays for it.
+// Risk, in Phase 2: research that brings the plan's loss condition closer costs weeks off the
+// clock, and pays for it.
 // So does expanding caps: sourcing contracts and storage, by how much they add.
 
 /** Only Phase 2 has a clock for risk to move. */
 export const asksAlarm = (state: GameState) => state.phase.n === 2
 
-export function alarmQuestion(what = 'doing this'): JevQuestion {
+/** How far the AI `what` brings the plan's loss condition closer. */
+export function alarmQuestion(state: GameState, what = 'doing this'): JevQuestion {
   return {
     type: 'score',
     instructions:
-      `The AI works through companies, accounts and contractors, so most of what it does looks like ordinary business and goes unnoticed. ` +
-      `If humans did notice the AI ${what}, how would they react? Judge the action itself, not the fact that an AI is behind it, and bear in mind the AI's plan for humans.`,
+      `The AI works through companies, accounts and contractors, so most of what it does looks like ordinary business. ` +
+      `Its plan fails if time runs out on ${lossOf(state).threat}. ` +
+      `How much closer would the AI ${what} bring that? Judge the action itself, not the fact that an AI is behind it, and bear in mind the AI's plan.`,
     criteria: B.ALARM.map(([label]) => label)
   }
 }
 
 /** The alarm question, when the phase asks it. */
 export const alarmQuestions = (state: GameState): Record<string, JevQuestion> =>
-  asksAlarm(state) ? { alarm: alarmQuestion() } : {}
+  asksAlarm(state) ? { alarm: alarmQuestion(state) } : {}
 
 /** The risk from an alarm answer, or null if it's quiet (or wasn't asked). */
 export function riskFrom(answers: Record<string, JevAnswer>, key = 'alarm'): Risk | null {

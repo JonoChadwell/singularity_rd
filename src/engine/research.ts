@@ -2,6 +2,7 @@ import * as B from './balance'
 import { clockOf, computeTrait, costFactorOf } from './computeTraits'
 import { bestMind, contractsFor, defaultTask, findMind, findResource, findStrategy, findUnit, fmt, makeId } from './model'
 import { coverWeeks, moveClock, winPhase } from './phase'
+import { costFactor } from './resourceTraits'
 import { has, type TraitId } from './traits'
 import type { Change, Cost, Flow, GameState, Mind, Research, Resource, Strategy, UnitType } from './types'
 
@@ -55,10 +56,12 @@ export function priceCost(
     : only.length === 1
       ? [{ resourceId: only[0]!.id, p: 1 }]
       : []
-  return chosen.map((p) => ({
-    resourceId: p.resourceId,
-    amount: B.nice(value / chosen.length / Math.max(1e-9, findResource(state, p.resourceId)?.value ?? 1))
-  }))
+  return chosen.map((p) => {
+    const r = findResource(state, p.resourceId)
+    // The payer's own traits (Energetic, Staple, Speculative...) make it cheaper or dearer.
+    const f = r ? costFactor(state, r, true) : 1
+    return { resourceId: p.resourceId, amount: B.nice((value / chosen.length / Math.max(1e-9, r?.value ?? 1)) * f) }
+  })
 }
 
 // ---------------------------------------------------------------- strategy rates

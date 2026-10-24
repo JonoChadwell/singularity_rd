@@ -16,6 +16,15 @@ import { lockReason, moveClock } from './phase'
 import { alarmQuestions, riskFrom } from './risk'
 import { proposalText } from './stateText'
 import { QUIRK_IDS, QUIRKS, TRAITS, type QuirkId, type TraitId } from './traits'
+import {
+  ALL_RESOURCE_TRAITS,
+  capFactor,
+  compatibleTraits,
+  effectiveTier,
+  RESOURCE_TRAIT_IDS,
+  traitLine,
+  type ResourceTraitId
+} from './resourceTraits'
 import type { Cost, GameState, Idea, Research, Resource, Risk, Strategy } from './types'
 
 export const NAME_MAX = 40
@@ -387,6 +396,39 @@ export interface ResourceSpec {
 export interface ResourceVerdict extends VerdictBase {
   kind: 'resource'
   spec: ResourceSpec
+  /** Jev's trait choices, best first: the player picks one. */
+  options: ResourceTraitId[][]
+  choice: number
+}
+
+/** Traits in Jev's order of fit, with how much it liked each, then the rest in list order. */
+function rankedResourceTraits(answer: JevAnswer | undefined): [ResourceTraitId, number][] {
+  const order = answer ? ranked(answer) : []
+  const known = (id: string): id is ResourceTraitId => (RESOURCE_TRAIT_IDS as readonly string[]).includes(id)
+  const seen = new Set<string>()
+  return [...order, ...ALL_RESOURCE_TRAITS.map((t) => [t.id, 0] as [string, number])]
+    .filter(([id]) => known(id) && !seen.has(id) && !!seen.add(id))
+    .map(([id, p]) => [id as ResourceTraitId, p])
+}
+
+/**
+ * The traits Jev gives a resource on its own: its best fit, and a second from another family
+ * when Jev liked that one nearly as much. Never none.
+ */
+export function autoTraits(answer: JevAnswer | undefined): ResourceTraitId[] {
+  const list = rankedResourceTraits(answer)
+  const [first, p] = list[0]!
+  const second = list.slice(1).find(([id]) => compatibleTraits(first, id))
+  return second && p > 0 && second[1] >= p * B.RESOURCE_SECOND_TRAIT ? [first, second[0]] : [first]
+}
+
+/** The trait choices for a resource added by hand: Jev's own pick, then the next best on their own. */
+export function traitOptions(answer: JevAnswer | undefined): ResourceTraitId[][] {
+  const auto = autoTraits(answer)
+  const rest = rankedResourceTraits(answer)
+    .map(([id]) => id)
+    .filter((id) => !auto.includes(id))
+  return [auto, ...rest.slice(0, B.RESOURCE_TRAIT_OPTIONS - 1).map((id) => [id])]
 }
 
 /** The value bands a new resource may have now: Phase 1 things are cheap. */
@@ -431,6 +473,11 @@ export function resourceQuestions(state: GameState, prefix = '', name = ''): Rec
           } satisfies JevQuestion
         }
       : {}),
+    [`${prefix}trait`]: {
+      type: 'choice',
+      instructions: `Going by what ${it} really is, which of these traits fits it most naturally? Each has an upside and a downside; judge the fit, not which is best.`,
+      criteria: Object.fromEntries(ALL_RESOURCE_TRAITS.map((t) => [t.id, traitLine(t.id)]))
+    },
     [`${prefix}icon`]: name
       ? { ...iconQuestion, instructions: `Which icon best represents ${it}?` }
       : iconQuestion
@@ -446,7 +493,8 @@ export function resourceFrom(
   v: Pick<VerdictBase, 'answers' | 'picks'>,
   spec: ResourceSpec,
   prefix = '',
-  top: number | null = null
+  top: number | null = null,
+  traits: ResourceTraitId[] = autoTraits(v.answers[`${prefix}trait`])
 ): Resource {
   const read = reader(v)
   const band = read.level(`${prefix}value`, maxBand(state) + 1)
@@ -461,15 +509,16 @@ export function resourceFrom(
     tier,
     value,
     amount: 0,
-    cap: startingCap(tier, value),
-    expansions: []
+    cap: B.nice(startingCap(tier, value) * capFactor({ traits })),
+    expansions: [],
+    traits
   }
 }
 
 /** Retiers a resource, keeping its storage in step: a plan may move one into an empty tier. */
 export function setTier(r: Resource, tier: number) {
   r.tier = tier
-  r.cap = startingCap(tier, r.value)
+  r.cap = B.nice(startingCap(tier, r.value) * capFactor(r))
 }
 
 /** Resources have a very low bar: "a thing I could get". They're added at once. */
@@ -491,7 +540,9 @@ export async function judgeResource(state: GameState, judge: Judge, raw: Resourc
     // Value and tier just take Jev's answer.
     ...baseVerdict('resource', questions, answers, 'is_thing', []),
     kind: 'resource',
-    spec
+    spec,
+    options: traitOptions(answers.trait),
+    choice: 0
   }
   gate(v, 'Jev doesn’t recognise it as a thing', {
     key: 'same_as',
@@ -501,7 +552,7 @@ export async function judgeResource(state: GameState, judge: Judge, raw: Resourc
 }
 
 export function draftResource(state: GameState, v: ResourceVerdict): Resource {
-  return resourceFrom(state, v, v.spec)
+  return resourceFrom(state, v, v.spec, '', null, v.options[v.choice] ?? v.options[0])
 }
 
 export function acceptResource(current: GameState, v: ResourceVerdict): Accepted {
@@ -643,7 +694,7 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
     efficiency,
     // A unit below the tier of what it makes is out of its depth; above it, overqualified.
     amount: B.nice(
-      ((work + inputValue) * efficiency * (v.risk ? B.RISK_OUTPUT : 1) * tierFactor(unit.tier, output.tier)) /
+      ((work + inputValue) * efficiency * (v.risk ? B.RISK_OUTPUT : 1) * tierFactor(unit.tier, effectiveTier(output, 'make'))) /
         output.value
     )
   }

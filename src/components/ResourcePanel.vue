@@ -12,6 +12,9 @@
         <div class="info">
           <div class="name">
             {{ r.name }}
+            <span v-for="t in r.traits" :key="t" class="chip trait" :title="traitLine(t)">
+              {{ resourceTrait(t).icon }} {{ resourceTrait(t).name }}
+            </span>
             <span v-if="wasted(r.id) > 0" class="chip warn" title="Next week, this much won't fit in storage and is lost">
               overflows {{ fmt(wasted(r.id)) }}
             </span>
@@ -48,6 +51,14 @@
           <div class="bd-title">{{ r.name }}: next week</div>
           <p class="muted">{{ r.description }}</p>
           <p class="muted">{{ tierText(r) }} · one is worth: {{ bandText(r) }}</p>
+          <p v-for="t in r.traits" :key="t">
+            <strong>{{ resourceTrait(t).icon }} {{ resourceTrait(t).name }}</strong>
+            <span class="delta-up"> {{ resourceTrait(t).upside }}</span>
+            <span class="delta-down"> {{ resourceTrait(t).downside }}</span>
+            <span v-if="t === 'speculative'" class="muted">
+              Value varies week to week. Currently ×{{ speculativeFactor(game.state, r.id).toFixed(2) }}.
+            </span>
+          </p>
           <p class="muted">
             Holds {{ fmt(capOf(game.state, r)) }}: {{ fmt(r.cap) }} to start<template v-for="e in r.expansions" :key="e.name"
               >, +{{ fmt(e.added) }} from {{ e.name }}{{ e.catch ? ` (${describeCatch(game.state, e.catch).toLowerCase()})` : '' }}</template
@@ -67,7 +78,7 @@
           </template>
           <p v-else class="muted">Nothing makes or uses this next week.</p>
           <template v-if="pending(r.id).length">
-            <div class="bd-title bd-section">Still to come from Create</div>
+            <div class="bd-title bd-section">Still to come</div>
             <div v-for="(d, i) in pending(r.id)" :key="i" class="bd-row">
               <span>
                 {{ d.name }}
@@ -94,6 +105,7 @@ import { computed } from 'vue'
 import { netFlow } from '@/engine/economy'
 import { bandText, byTier, capOf, deliveryLeft, deliveryTiming, fmt, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
+import { resourceTrait, speculativeFactor, traitLine } from '@/engine/resourceTraits'
 import { describeCatch } from '@/engine/storageProposal'
 import type { Resource } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
@@ -171,6 +183,10 @@ li:focus {
 
 .chip.warn {
   border-color: var(--warn);
+}
+
+.chip.trait {
+  font-size: 11px;
 }
 
 .amount {

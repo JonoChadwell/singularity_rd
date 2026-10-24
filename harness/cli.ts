@@ -58,11 +58,13 @@ import {
   STRATEGY_PRESETS,
   UNIT_PRESETS
 } from '@/engine/presets'
+import { lossOf } from '@/engine/losses'
 import { cardsFor, clockMoved, lockReason, PHASE_NAMES, weeksLeft, type Feature } from '@/engine/phase'
 import { plansFor, planIdeas } from '@/engine/planPresets'
 import { draftPlan } from '@/engine/planProposal'
 import { goalOf, projectGoal, projectionText } from '@/engine/projection'
 import { alarmLabel, alarmQuestions, expansionRiskText, RISK_BONUS, riskFrom, riskText } from '@/engine/risk'
+import { resourceTrait, traitLine } from '@/engine/resourceTraits'
 import { iqTag } from '@/engine/sourcingProposal'
 import { describeCatch } from '@/engine/storageProposal'
 import { proposalText } from '@/engine/stateText'
@@ -137,7 +139,7 @@ function load(slot: string): Save {
   const path = savePath(slot)
   if (!existsSync(path)) throw new Error(`No game in slot "${slot}". Start one with: new`)
   const save = JSON.parse(readFileSync(path, 'utf8')) as Save
-  if (save.state.version !== 15) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
+  if (save.state.version !== 16) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
   // Saves from before repeat ideas were tracked.
   save.state.ideas ??= []
   return save
@@ -209,7 +211,7 @@ function printPhase(s: GameState) {
     say(`Make a plan: \`plans\` shows ideas; \`propose plan '<json>'\`.`)
     return
   }
-  if (p.plan) say(`Plan: ${p.plan.goal}. ${p.n === 1 ? 'How' : 'Humans'}: ${p.plan.means}`)
+  if (p.plan) say(`Plan: ${p.plan.goal}. ${p.n === 1 ? 'How' : 'Humans'}: ${p.plan.means} Fails if time runs out: ${lossOf(s).name}.`)
   const proj = projectGoal(s)
   if (proj) {
     say(
@@ -241,7 +243,7 @@ function printStatus(s: GameState) {
     const share = preview.shares[r.id]
     const wasted = preview.wasted[r.id]
     say(
-      `  ${r.id} "${r.name}" tier ${r.tier} worth ${fmt(r.value)} · have ${fmt(r.amount)} of ${fmt(capOf(s, r))} storage · net ${fmt(net(r.id))}` +
+      `  ${r.id} "${r.name}" tier ${r.tier} worth ${fmt(r.value)}${r.traits.length ? ` [${r.traits.map((t) => resourceTrait(t).name).join(', ')}]` : ''} · have ${fmt(r.amount)} of ${fmt(capOf(s, r))} storage · net ${fmt(net(r.id))}` +
         `${share !== undefined && share < 1 ? ` · SHORT: ${pct(share)} met` : ''}` +
         `${wasted ? ` · OVERFLOWS ${fmt(wasted)}` : ''}` +
         `${r.expansions.length ? `\n      storage: ${r.expansions.map((e) => `${e.name} +${fmt(e.added)}${e.catch ? ` (${describeCatch(s, e.catch)})` : ''}`).join('; ')}` : ''}` +
@@ -354,7 +356,8 @@ function printVerdict(s: GameState, v: Verdict) {
     if (v.rejected) return
     const d = draftPlan(s, v)
     say(`  → goal "${v.spec.goal}": needs IQ ${d.goal.minIQ}, uses up ${describeCost(d.state, d.goal.cost)}`)
-    say(`  → new resources: ${d.added.map((r) => `${r.id === d.top.id ? 'GOAL ' : ''}${r.name} (tier ${r.tier}, worth ${fmt(r.value)}, holds ${fmt(r.cap)})`).join(', ')}`)
+    say(`  → fails if time runs out: ${v.loss.name} (${v.loss.threat})`)
+    say(`  → new resources: ${d.added.map((r) => `${r.id === d.top.id ? 'GOAL ' : ''}${r.name} (tier ${r.tier}, worth ${fmt(r.value)}, holds ${fmt(r.cap)}; ${r.traits.map((t) => resourceTrait(t).name).join(', ')})`).join(', ')}`)
     return
   }
   if (v.kind === 'cover') {
@@ -406,6 +409,8 @@ function printVerdict(s: GameState, v: Verdict) {
   if (v.kind === 'resource') {
     const r = draftResource(s, v)
     say(`  → ${r.name}: tier ${r.tier}, worth ${fmt(r.value)}, holds ${fmt(r.cap)} to start`)
+    say(`  Its nature [option <n>]:`)
+    v.options.forEach((ids, i) => say(`    ${i}${i === v.choice ? ' *' : ''}: ${ids.map(traitLine).join(' · ')}`))
   } else if (v.kind === 'strategy') {
     const d = draftStrategy(s, v)
     say(`  → ${describeFlows(s, d.strategy.inputs)} → ${fmt(d.strategy.amount)} ${findResource(s, d.strategy.outputId)?.name} per unit${d.strategy.quirk ? ` · quirk ${d.strategy.quirk}` : ''}${strategyTags(s, d.strategy)}`)

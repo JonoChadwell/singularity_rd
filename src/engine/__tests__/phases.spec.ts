@@ -12,7 +12,8 @@ import { PHASE1_PLANS, PHASE2_PLANS, planIdeas } from '../planPresets'
 import { acceptPlan, coverTiers, draftPlan, judgePlan, precheckPlan, type PlanSpec } from '../planProposal'
 import { projectGoal, projectionText } from '../projection'
 import { acceptResource, acceptStrategy, judgeResource, judgeStrategy } from '../proposals'
-import { expansionWeeks } from '../risk'
+import { LOSSES } from '../losses'
+import { alarmQuestions, expansionWeeks } from '../risk'
 import { acceptSourcing, judgeSourcing } from '../sourcingProposal'
 import { describeState } from '../stateText'
 import { acceptStorage, judgeStorage } from '../storageProposal'
@@ -102,9 +103,9 @@ describe('phase plans', () => {
     const s = createInitialState()
     const draft = async (level: number) => draftPlan(s, await judgePlan(s, new FakeJudge({ approach: score(level) }), bribe))
     const brilliant = await draft(0)
-    const scaled = await draft(4)
+    const scaled = await draft(2)
     expect(brilliant.goal.minIQ).toBe(B.GOAL_APPROACH[0]![1])
-    expect(scaled.goal.minIQ).toBe(B.GOAL_APPROACH[4]![1])
+    expect(scaled.goal.minIQ).toBe(B.GOAL_APPROACH[2]![1])
     expect(brilliant.goal.cost[0]!.amount).toBe(B.nice(B.GOAL_CAPS[1] * B.GOAL_APPROACH[0]![2] * brilliant.top.cap))
     expect(scaled.goal.cost[0]!.amount).toBeGreaterThan(brilliant.goal.cost[0]!.amount * 2)
     // Phase 1 is a tutorial: its goal fits in its resource's starting storage.
@@ -176,7 +177,7 @@ describe('the clock', () => {
   })
 
   it('wins Phase 1 by researching the goal, and opens the Phase 2 plan', async () => {
-    let s = await phase1(new FakeJudge({ approach: score(4) }))
+    let s = await phase1(new FakeJudge({ approach: score(2) }))
     const goal = s.research[0]!
     findResource(s, MONEY_ID)!.amount = 1e9
     s.minds[0]!.software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
@@ -189,7 +190,7 @@ describe('the clock', () => {
     s = acceptPlan(s, v).state
     expect(s.phase).toMatchObject({ n: 2, status: 'playing', deadline: 100 })
     expect(s.phase.firstUnit).toEqual(nanotech.firstUnit)
-    expect(s.research[0]!.minIQ).toBe(B.GOAL_APPROACH[2]![3])
+    expect(s.research[0]!.minIQ).toBe(B.GOAL_APPROACH[1]![3])
   })
 
   it('wins Phase 2 into Ascension: no clock, everything unlocked', () => {
@@ -222,6 +223,35 @@ describe('the clock', () => {
     s = runWeek(s)
     expect(s.phase.status).toBe('lost')
     expect(s.phase.lostReason).toMatch(/Humans/)
+  })
+})
+
+// ---------------------------------------------------------------- loss conditions
+
+describe('loss conditions', () => {
+  it('has Jev pick how the plan fails from the fixed bank, and stores it', async () => {
+    const s = createInitialState()
+    const judge = new FakeJudge({ loss: choice('l2') })
+    const v = await judgePlan(s, judge, bribe)
+    expect(Object.keys((judge.calls[0]!.questions.loss as { criteria: object }).criteria)).toHaveLength(LOSSES[1].length)
+    expect(v.loss).toEqual(LOSSES[1][2])
+    const t = acceptPlan(s, v).state
+    expect(t.phase.plan?.loss).toEqual(LOSSES[1][2])
+    expect(describeState(t)).toContain(LOSSES[1][2]!.threat)
+  })
+
+  it('ends the game with the plan’s own failure', () => {
+    let s = phase2()
+    s.phase.plan = { goal: 'Goal', means: '', resources: [], loss: LOSSES[2][1]! }
+    s.phase.deadline = 1
+    s = runWeek(s)
+    expect(s.phase.lostReason).toBe(LOSSES[2][1]!.stopped)
+  })
+
+  it('asks how much closer an action brings the plan’s failure', () => {
+    const s = phase2()
+    s.phase.plan = { goal: 'Goal', means: '', resources: [], loss: LOSSES[2][2]! }
+    expect(alarmQuestions(s).alarm!.instructions).toContain(LOSSES[2][2]!.threat)
   })
 })
 
@@ -456,7 +486,7 @@ describe('cover', () => {
 
 describe('projection', () => {
   it('says the first week you’d have what the goal uses up, at today’s rates', async () => {
-    const s = await phase1(new FakeJudge({ approach: score(2) }))
+    const s = await phase1(new FakeJudge({ approach: score(1) }))
     expect(projectGoal(s)?.week).toBeNull()
     const goal = s.research[0]!
     const need = goal.cost[0]!.amount

@@ -25,6 +25,7 @@ import {
   type VerdictBase
 } from './proposals'
 import { costMultiplier, priceCost } from './research'
+import { capFactor, clockFactor, expansionFactor } from './resourceTraits'
 import { alarmQuestions, expansionRisk, riskFrom } from './risk'
 import { proposalText } from './stateText'
 import type { Cost, Expansion, GameState, Resource, Risk, StorageCatch } from './types'
@@ -77,7 +78,8 @@ export const storageIQScalar = (state: GameState) => (bestIQ(state) / 100) ** 2
 /** Units of a resource an expansion of this size would add, before the catch. */
 function addedBy(state: GameState, r: Resource, size: number, efficiency: number): number {
   const worth = (B.STORAGE_WORTH[r.tier] ?? 0) * size * industryScalar(state) * storageIQScalar(state) * efficiency
-  return B.nice(worth / Math.max(1e-9, r.value))
+  // Resource traits: a smaller or bigger cap all round, and expansions that hold more.
+  return B.nice((worth / Math.max(1e-9, r.value)) * capFactor(r) * expansionFactor(r))
 }
 
 export async function judgeStorage(state: GameState, judge: Judge, raw: StorageSpec): Promise<StorageVerdict> {
@@ -183,7 +185,7 @@ export function storageOptions(state: GameState, v: Pick<StorageVerdict, 'answer
       added,
       catch: caught,
       risky,
-      risk: expansionRisk(state, i === 0 ? null : alarm, worth, risky),
+      risk: tracedRisk(r, expansionRisk(state, i === 0 ? null : alarm, worth, risky)),
       minIQ: floorIQ(tierIQ),
       cost: priceCost(state, value, payer.map((p) => ({ ...p, p: 1 }))),
       iqEfficiency,
@@ -191,6 +193,13 @@ export function storageOptions(state: GameState, v: Pick<StorageVerdict, 'answer
       blocked: holder > reach
     }
   })
+}
+
+/** Hazardous, Untraceable and Contraband resources scale the clock weeks of their expansions. */
+function tracedRisk(r: Resource, risk: Risk | null): Risk | null {
+  if (!risk) return null
+  const weeks = Math.round(risk.weeks * clockFactor(r))
+  return weeks > 0 ? { ...risk, weeks } : null
 }
 
 function catchFor(

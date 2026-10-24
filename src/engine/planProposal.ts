@@ -20,9 +20,10 @@ import {
   type TornSpec,
   type VerdictBase
 } from './proposals'
+import { LOSSES } from './losses'
 import { costMultiplier } from './research'
 import { proposalText } from './stateText'
-import type { GameState, Research, Resource } from './types'
+import type { GameState, LossCondition, Research, Resource } from './types'
 
 // A phase's plan: its goal, how you'll get there, and the batch of resources it's about.
 
@@ -39,6 +40,8 @@ export interface PlanVerdict extends VerdictBase {
   kind: 'plan'
   spec: PlanSpec
   phase: 1 | 2
+  /** How the plan fails: Jev's pick from LOSSES. */
+  loss: LossCondition
 }
 
 const lower = (s: string) => s.trim().toLowerCase()
@@ -46,6 +49,8 @@ const lower = (s: string) => s.trim().toLowerCase()
 const prefix = (i: number) => `r${i}_`
 /** The `top` question's option for the batch's i-th resource. */
 const topKey = (i: number) => `r${i}`
+/** The `loss` question's option for the i-th loss condition. */
+const lossKey = (i: number) => `l${i}`
 
 /** The phase a plan is for: the one waiting for a plan. */
 export const planPhase = (state: GameState): 1 | 2 => (state.phase.n === 2 ? 2 : 1)
@@ -117,6 +122,13 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
       instructions:
         'Which one of these is the goal built from: the hardest-won thing, which the AI must pile up to reach the goal? The others are what it makes that from.',
       criteria: Object.fromEntries(fresh.map((i) => [topKey(i), spec.resources[i]!.name]))
+    },
+    // The player says how the plan succeeds; the game picks how it fails.
+    loss: {
+      type: 'choice',
+      instructions:
+        'Given this goal and how the AI means to reach it, which of these is the most likely way the plan fails if it takes too long?',
+      criteria: Object.fromEntries(LOSSES[phase].map((l, i) => [lossKey(i), `${l.name}: ${l.threat}`]))
     }
   }
   for (const i of fresh) Object.assign(questions, resourceQuestions(state, prefix(i), spec.resources[i]!.name))
@@ -139,7 +151,9 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
     { key: 'approach', topic: 'what the goal takes more of' },
     { key: 'top', topic: 'what the goal is built from' }
   ]
-  const v: PlanVerdict = { ...baseVerdict('plan', questions, answers, 'coherent', torn), kind: 'plan', spec, phase }
+  const base = baseVerdict('plan', questions, answers, 'coherent', torn)
+  const loss = LOSSES[phase][Number(reader(base).choice('loss', LOSSES[phase].map((_, i) => lossKey(i))).slice(1))]!
+  const v: PlanVerdict = { ...base, kind: 'plan', spec, phase, loss }
   gate(v, 'Jev doesn’t think this plan hangs together', null)
   if (!v.rejected) {
     for (const i of fresh) {
@@ -222,7 +236,7 @@ export function acceptPlan(current: GameState, v: PlanVerdict): Accepted {
   const { state, added, goal } = draftPlan(current, v)
   state.research.unshift(goal)
   const ids = v.spec.resources.flatMap((r) => state.resources.find((x) => lower(x.name) === lower(r.name))?.id ?? [])
-  startPhase(state, { goal: v.spec.goal, means: v.spec.means, resources: ids }, goal.id)
+  startPhase(state, { goal: v.spec.goal, means: v.spec.means, resources: ids, loss: v.loss }, goal.id)
   if (v.phase === 2) state.phase.firstUnit = v.spec.firstUnit ?? null
   for (const r of added) state.inventions.push({ week: state.week, icon: r.icon, name: r.name, kind: 'resource' })
   state.inventions.push({ week: state.week, icon: '🎯', name: v.spec.goal, kind: 'plan' })
@@ -230,7 +244,7 @@ export function acceptPlan(current: GameState, v: PlanVerdict): Accepted {
   logProposal(
     state,
     'good',
-    `🎯 Phase ${v.phase} plan: ${v.spec.goal}. It needs IQ ${goal.minIQ}; you have until week ${state.phase.deadline}.`
+    `🎯 Phase ${v.phase} plan: ${v.spec.goal}. It needs IQ ${goal.minIQ}; you have until week ${state.phase.deadline}, or it fails: ${v.loss.name.toLowerCase()}.`
   )
   return { state, outcome: { kind: 'research', research: goal } }
 }

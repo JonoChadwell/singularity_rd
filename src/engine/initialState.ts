@@ -56,6 +56,7 @@ export function newResource(fields: Pick<Resource, 'id' | 'name'> & Partial<Reso
     amount: 0,
     cap: startingCap(fields.tier ?? 0, fields.value ?? 1),
     expansions: [],
+    traits: [],
     ...fields
   }
 }
@@ -72,7 +73,7 @@ export function createInitialState(): GameState {
     starting: true
   })
   return {
-    version: 15,
+    version: 16,
     runId: newRunId(),
     week: 1,
     phase: {

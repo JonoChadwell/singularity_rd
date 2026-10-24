@@ -1,6 +1,7 @@
 import type { JevAnswer } from '@/ai/jev'
 import type { StorageCatchId } from './balance'
 import type { ComputeTraitId } from './computeTraits'
+import type { ResourceTraitId } from './resourceTraits'
 import type { QuirkId, TraitId } from './traits'
 
 /** Every resource is a stock: it keeps from week to week, up to its storage cap. */
@@ -24,6 +25,8 @@ export interface Resource {
   cap: number
   /** Storage expansions researched for it. */
   expansions: Expansion[]
+  /** One or two traits, each an upside with a downside. See resourceTraits.ts. */
+  traits: ResourceTraitId[]
 }
 
 /** Extra storage for one resource, from research. */
@@ -253,6 +256,18 @@ export interface Plan {
   means: string
   /** The batch: resource ids. */
   resources: string[]
+  /** How the plan fails, picked by Jev from LOSSES. */
+  loss?: LossCondition
+}
+
+/** A way a phase's plan fails when the clock runs out. */
+export interface LossCondition {
+  /** Short, for the top bar: "Backlash". */
+  name: string
+  /** What risky research brings closer, for Jev: "the public turning against the AI". */
+  threat: string
+  /** The game-over line. */
+  stopped: string
 }
 
 export interface PhaseState {
@@ -336,7 +351,7 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 15
+  version: 16
   runId: string
   week: number
   phase: PhaseState

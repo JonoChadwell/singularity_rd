@@ -102,6 +102,10 @@
         <div class="muted">
           {{ approachLabel }}. You have {{ PHASE_WEEKS[phase] }} weeks{{ phase === 2 ? ', and your actions can move the clock' : '' }}.
         </div>
+        <div>
+          ☠️ <strong>Fails if time runs out: {{ verdict.loss.name }}</strong>
+          <span class="muted">({{ verdict.loss.threat }}){{ phase === 2 ? '. Research that brings this closer is risky.' : '.' }}</span>
+        </div>
         <ul class="plain-list added">
           <li v-for="r in draft.added" :key="r.id" :title="r.description">
             {{ r.id === draft.top.id ? '🎯' : '' }} {{ r.icon }} <strong>{{ r.name }}</strong>
@@ -138,8 +142,8 @@ const INTRO: Record<1 | 2, string> = {
   2: 'You’re out. Humanity will find you within 100 weeks, sooner if you draw attention. How will you deal with them? Name a goal, how you’ll handle humans, at least five new resources, and the first thing you’ll build.'
 }
 const HELP: Record<1 | 2, string> = {
-  1: 'The plan sets this phase’s goal: a research with an IQ bar and a cost in the plan’s resources. Jev judges whether the plan hangs together and whether reaching the goal takes more brilliance or more resources: brilliant goals need a higher IQ but fewer resources. Research the goal before week 10 ends, or the lab discovers you.',
-  2: 'The plan sets Phase 2’s goal: a research needing IQ 300–600 and a cost in the plan’s resources. Goals that take more brilliance need more IQ and fewer resources. Humans stop you after 100 weeks; risky research and owning lots of anything bring that closer, and cover pushes it back.'
+  1: 'The plan sets this phase’s goal: a research with an IQ bar and a cost in the plan’s resources. Jev judges whether the plan hangs together and whether reaching the goal takes more brilliance or more resources: brilliant goals need a higher IQ but fewer resources. Research the goal before week 10 ends, or the plan fails: Jev picks how.',
+  2: 'The plan sets Phase 2’s goal: a research needing IQ 300–600 and a cost in the plan’s resources. Goals that take more brilliance need more IQ and fewer resources. Jev also picks how the plan fails: that happens after 100 weeks; risky research and owning lots of anything bring that closer, and cover pushes it back.'
 }
 
 interface Form {

@@ -1,7 +1,8 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
 import { previewWeek } from './economy'
-import { costShortfall, findResource, iqFor } from './model'
+import { lossOf } from './losses'
+import { costShortfall, findResource, iqFor, payCost } from './model'
 import { coverWeeks, lockReason, moveClock } from './phase'
 import {
   baseVerdict,
@@ -55,7 +56,7 @@ export async function judgeCover(state: GameState, judge: Judge, raw: CoverSpec)
   const questions: Record<string, JevQuestion> = {
     plausible: {
       type: 'noul',
-      instructions: 'Could this plausibly buy the AI time before humans act against it?'
+      instructions: `Could this plausibly buy the AI time before ${lossOf(state).threat}?`
     },
     convincing: {
       type: 'score',
@@ -66,7 +67,7 @@ export async function judgeCover(state: GameState, judge: Judge, raw: CoverSpec)
   }
   const answers = await judge.ask(
     proposalText(state, [
-      'The player proposes cover: a way to buy time before humans notice and act against the AI.',
+      `The player proposes cover: a way to buy time before ${lossOf(state).threat}.`,
       `Name: "${spec.name}"`,
       `How: "${spec.description || '(not said)'}"`
     ]),
@@ -107,7 +108,7 @@ export function acceptCover(current: GameState, v: CoverVerdict): Accepted {
   if (blocker) throw new Error(blocker)
   claimProposal(state)
   const { cost, now } = draftCover(state, v)
-  for (const c of cost) findResource(state, c.resourceId)!.amount -= c.amount
+  payCost(state, cost, v.spec.name)
   state.inventions.push({ week: state.week, icon: '🕶️', name: v.spec.name, kind: 'cover' })
   state.decidedThisWeek = true
   state.covers++

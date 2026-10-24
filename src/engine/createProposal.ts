@@ -21,6 +21,7 @@ import {
   type VerdictBase
 } from './proposals'
 import { spendable } from './research'
+import { createInputFactor, createOutputFactor, effectiveTier, type TierPurpose } from './resourceTraits'
 import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import type { CreateTarget, Flow, GameState } from './types'
@@ -66,8 +67,18 @@ export interface CreateVerdict extends VerdictBase {
   scalars: CreateScalars
 }
 
-const targetTier = (state: GameState, t: CreateTarget) =>
-  (t.kind === 'unit' ? findUnit(state, t.id)?.tier : findResource(state, t.id)?.tier) ?? 0
+/** The target's tier, as read for its reach or its payout: a resource's traits may move it. */
+function targetTier(state: GameState, t: CreateTarget, purpose: TierPurpose): number {
+  if (t.kind === 'unit') return findUnit(state, t.id)?.tier ?? 0
+  const r = findResource(state, t.id)
+  return r ? effectiveTier(r, purpose) : 0
+}
+
+/** What Creates of the target pay, as a factor: some resource traits make less. */
+function targetOutput(state: GameState, t: CreateTarget): number {
+  const r = t.kind === 'resource' ? findResource(state, t.id) : undefined
+  return r ? createOutputFactor(r) : 1
+}
 
 export function precheckCreate(state: GameState, spec: CreateSpec): string | null {
   const locked = lockReason(state, 'create')
@@ -140,7 +151,7 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
     spec,
     options: [],
     choice: 0,
-    scalars: { industry: industryScalar(state), iq: iqScalar(state), efficiency, ...reachOf(state, targetTier(state, spec.target)) }
+    scalars: { industry: industryScalar(state), iq: iqScalar(state), efficiency, ...reachOf(state, targetTier(state, spec.target, 'reach')) }
   }
   v.options = createOptions(state, v)
   gate(v, `Jev doesn’t think the AI could get ${what} this way`, null)
@@ -158,7 +169,7 @@ export function createOptions(state: GameState, v: Pick<CreateVerdict, 'answers'
   const ids = Array.from({ length: B.CREATE_OPTIONS }, (_, i) => inputIds[i] ?? null)
   const timingOrder = [...new Set([...(v.answers.timing ? ranked(v.answers.timing).map(([id]) => id) : []), ...B.CREATE_TIMINGS.map(([id]) => id)])] as B.CreateTiming[]
   const picks = ids.map((id, i) => ({ id, timing: timingOrder[i % timingOrder.length]! }))
-  const tier = targetTier(state, v.spec.target)
+  const tier = targetTier(state, v.spec.target, 'reach')
   const easy = B.techIQ(tier) <= bestIQ(state) * B.CREATE_EASY
   if (easy && !picks.some((p) => p.id === null && p.timing === 'now')) picks[picks.length - 1] = { id: null, timing: 'now' }
   return picks.map((p) => priceOption(state, v, p.id, p.timing))
@@ -171,18 +182,20 @@ function priceOption(
   timing: B.CreateTiming
 ): CreateOption {
   const { industry, iq, efficiency, reach } = v.scalars
-  const tier = Math.min(targetTier(state, v.spec.target), B.CREATE_VALUE.length - 1)
+  const tier = Math.min(targetTier(state, v.spec.target, 'payout'), B.CREATE_VALUE.length - 1)
   const base = (B.CREATE_VALUE[tier] ?? 0) * industry * iq
   // The input is paid in full now, whatever the timing: it's worth what the mind would make
   // (before timing), so Efficiency and Reach shrink it too. Never more than you hold.
   const input = inputId ? findResource(state, inputId) : undefined
   const wanted = input ? B.nice((base * B.CREATE_INPUT_SHARE * efficiency * reach) / input.value) : 0
   const amount = input ? Math.min(wanted, input.amount) : 0
-  const inputWorth = input ? amount * input.value : 0
+  // Hazardous inputs count for more than their worth.
+  const inputWorth = input ? amount * input.value * createInputFactor(input) : 0
   const inputs = input && amount > 0 ? [{ resourceId: input.id, amount }] : []
   const [, , mult, weeks] = B.CREATE_TIMINGS.find(([id]) => id === timing)!
   const risky = v.risk ? B.RISK_OUTPUT : 1
-  const outputWorth = (inputWorth * B.CREATE_INPUT_RETURN + base) * efficiency * reach * mult * risky
+  const outputWorth =
+    (inputWorth * B.CREATE_INPUT_RETURN + base) * efficiency * reach * mult * risky * targetOutput(state, v.spec.target)
   const perDelivery = timing === 'spread' ? outputWorth / weeks : outputWorth
   return { timing, inputs, inputWorth, outputWorth, amount: amountOf(state, v.spec.target, perDelivery) }
 }

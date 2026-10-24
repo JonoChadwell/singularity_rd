@@ -52,7 +52,9 @@ export async function upgrade(
 ): Promise<GameState> {
   // Jev ranks every candidate; the bot sees them all, as its three best are what it would offer.
   const offer = await judgeUpgrade(state, new FakeJudge({ best: rankBy(keyPrefix), ...answers }), target)
-  return acceptUpgrade(state, offer, 0).state
+  // A platform's options come at random sizes: take the biggest on offer.
+  const steps = offer.options.map((o) => o.step ?? 0)
+  return acceptUpgrade(state, offer, steps.indexOf(Math.max(...steps))).state
 }
 
 /** Jev's "best" answer favouring the last candidate whose text starts with a key: the biggest step. */
@@ -185,7 +187,7 @@ export const BRIBE: PlanSpec = {
  * A Phase 1 game with the bribe plan, Jev judging it as given: the goal is built from Money
  * (tier 1); Story Ideas and Published Novels are tier 0.
  */
-export async function phase1(approach = 2): Promise<GameState> {
+export async function phase1(approach = 1): Promise<GameState> {
   const s = createInitialState()
   const v = await judgePlan(s, new FakeJudge({ ...plainValues, approach: score(approach) }), BRIBE)
   return acceptPlan(s, v).state
@@ -250,7 +252,7 @@ export const NANOTECH: PlanSpec = {
  * A Phase 2 game as a typical Phase 1 leaves it: the Starting Server at IQ 140, some Money and
  * an every-week Create of it, then the nanotech plan, whose goal is built from Nanobots (tier 3).
  */
-export async function phase2(approach = 2): Promise<GameState> {
+export async function phase2(approach = 1): Promise<GameState> {
   const s = createInitialState()
   s.phase = newPhase(2, 8)
   s.week = 8

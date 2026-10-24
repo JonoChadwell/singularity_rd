@@ -43,6 +43,14 @@ export const COMPUTE_IQ_SHIFT = 50
 /** Jev offers this many perk-and-drawback pairs when a platform is proposed. */
 export const TRAIT_OPTIONS = 3
 
+// Resource traits: each mixes an upside with a downside. See RESOURCE_DESIGN.md.
+/** A resource gets a second trait when Jev likes it at least this much of its first. */
+export const RESOURCE_SECOND_TRAIT = 0.6
+/** The added resource dialog offers this many trait choices. */
+export const RESOURCE_TRAIT_OPTIONS = 3
+/** Speculative: the week's factor on new costs is drawn (log-evenly) from this range. */
+export const SPECULATIVE_RANGE: [number, number] = [0.25, 2]
+
 // ---------------------------------------------------------------- phases
 
 /** How long each phase's clock runs, by phase. Phase 3 has none. */
@@ -57,14 +65,13 @@ export const PHASE_MAX_BAND: Record<1 | 2 | 3, number> = { 1: 2, 2: 5, 3: 5 }
 export const PHASE_MAX_TIER: Record<1 | 2 | 3, number> = { 1: 0, 2: 3, 3: 4 }
 /**
  * What reaching a goal takes more of: [label, Phase 1 IQ, Phase 1 cost ×, Phase 2 IQ, Phase 2 cost ×].
- * The less brilliance it needs, the more resources.
+ * The less brilliance it needs, the more resources. Phase 1 IQs are ones a software step over
+ * START_IQ can reach exactly: 125, 150 or 175.
  */
 export const GOAL_APPROACH: [string, number, number, number, number][] = [
-  ['Almost pure brilliance', 130, 0.6, 600, 0.3],
-  ['Mostly brilliance', 125, 0.8, 500, 0.55],
-  ['Brilliance and resources in equal measure', 120, 1, 420, 1],
-  ['Mostly resources and scale', 110, 1.2, 350, 2],
-  ['Almost pure resources and scale', 100, 1.4, 300, 4]
+  ['Mostly brilliance', 175, 0.6, 600, 0.3],
+  ['Brilliance and resources in equal measure', 150, 1, 525, 1],
+  ['Mostly resources and scale', 125, 1.4, 450, 4]
 ]
 /** Phase 1 is a tutorial: its research (storage and upgrades) costs this share of the usual price. */
 export const PHASE1_RESEARCH_COST = 0.3
@@ -76,13 +83,16 @@ export const GOAL_CAPS: Record<1 | 2, number> = { 1: 0.35, 2: 8 }
 
 // ---------------------------------------------------------------- risk and cover
 
-/** How humans would react: [label, weeks off the clock]. Risky from the first with weeks. */
+/**
+ * How far an action brings the plan's loss condition closer: [label, weeks off the clock].
+ * Risky from the first with weeks.
+ */
 export const ALARM: [string, number][] = [
-  ['Nobody would notice: it looks like ordinary business or research', 0],
-  ['A few people would grumble: a bit shady or pushy', 0],
-  ['It would make the news: a scandal, or plainly not something a company would do', 2],
-  ['Governments would step in: illegal, dangerous, or a threat to a country', 4],
-  ['Humanity would panic: a threat to humanity itself', 8]
+  ['No closer: it looks like ordinary business or research', 0],
+  ['A little closer: a bit shady or pushy, soon forgotten', 0],
+  ['Noticeably closer: a scandal, or plainly out of the ordinary', 2],
+  ['Much closer: illegal, dangerous, or bound to draw a strong response', 4],
+  ['Right to the edge: on its own, nearly enough to end the plan', 8]
 ]
 /** Risky research costs this share as much… */
 export const RISK_COST = 0.5

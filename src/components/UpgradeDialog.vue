@@ -24,17 +24,9 @@
           </span>
         </div>
         <ul class="plain-list small changes">
-          <li v-for="c in o.changes" :key="JSON.stringify(c)">{{ describeChange(game.state, offer.target, sized(o, i, c)) }}</li>
+          <li v-for="c in o.changes" :key="JSON.stringify(c)">{{ describeChange(game.state, offer.target, c) }}</li>
         </ul>
-        <fieldset v-if="o.sizes" class="sizes">
-          <legend class="small muted">How much smarter</legend>
-          <label v-for="s in o.sizes" :key="s.step" class="size small">
-            <input v-model="step[i]" type="radio" :name="`size-${i}`" :value="s.step" />
-            +{{ s.step }} IQ
-            <span class="muted">· uses up {{ describeCost(game.state, s.cost) || 'nothing' }}</span>
-          </label>
-        </fieldset>
-        <div v-else class="small muted">Uses up {{ describeCost(game.state, o.cost) }}</div>
+        <div class="small muted">Uses up {{ describeCost(game.state, o.cost) || 'nothing' }}</div>
         <div v-if="o.risk" class="small bad">⚠️ {{ riskText(o.risk, 'upgrade') }}</div>
         <div class="row foot">
           <span class="small muted">Jev: {{ Math.round(o.p * 100) }}% the most natural</span>
@@ -46,12 +38,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { MAX_IQ_STEP } from '@/engine/balance'
+import { computed, onMounted, ref, watch } from 'vue'
 import { describeCost, iqFor } from '@/engine/model'
 import { riskText } from '@/engine/risk'
-import type { Change } from '@/engine/types'
-import { describeChange, targetName, type UpgradeOffer, type UpgradeOption } from '@/engine/upgrade'
+import { describeChange, targetName, type UpgradeOffer } from '@/engine/upgrade'
 import { useGameStore } from '@/stores/game'
 import { useUiStore, type InventRequest } from '@/stores/ui'
 import HelpTip from './HelpTip.vue'
@@ -62,17 +52,12 @@ const ui = useUiStore()
 const dialog = ref<HTMLDialogElement>()
 
 const HELP =
-  'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up. A platform gets one software upgrade, ever: pick its size (bigger adds more IQ and costs more), and it may add a perk or take away a drawback. After that, only a new platform goes further. An industry upgrade is technology of the unit’s own tier the first time, and a tier higher each time after, on the same strategy.'
+  'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up. A platform gets one software upgrade, ever: each option has its own size (bigger adds more IQ and costs more; the sizes on offer change each week), and it may add a perk or take away a drawback. After that, only a new platform goes further. An industry upgrade is technology of the unit’s own tier the first time, and a tier higher each time after, on the same strategy.'
 
 const target = props.request.target!
 const name = computed(() => targetName(game.state, target))
 const best = computed(() => iqFor(game.state, target.kind === 'unit' ? 'unit-upgrade' : null))
 const offer = ref<UpgradeOffer | null>(null)
-/** A platform upgrade's chosen size, by option; the biggest to start. */
-const step = reactive<Record<number, number>>({ 0: MAX_IQ_STEP, 1: MAX_IQ_STEP, 2: MAX_IQ_STEP })
-/** A change as it will be with the chosen size. */
-const sized = (o: UpgradeOption, i: number, c: Change): Change =>
-  o.sizes && c.kind === 'software' ? { ...c, iq: step[i] ?? MAX_IQ_STEP } : c
 const error = ref('')
 watch(offer, (o) => o && game.logTo('ui', 'offer_shown', { dialog: 'upgrade', options: o.options.map((x) => x.key) }))
 
@@ -94,7 +79,7 @@ watch(
 
 function choose(index: number) {
   if (!offer.value) return
-  const outcome = game.chooseUpgrade(offer.value, index, offer.value.options[index]?.sizes ? step[index] : undefined)
+  const outcome = game.chooseUpgrade(offer.value, index)
   if (!outcome) {
     error.value = game.lastError
     return
@@ -187,25 +172,5 @@ dialog::backdrop {
 .chip.bad,
 .bad {
   color: var(--bad);
-}
-
-.sizes {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 4px 8px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.size {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.size input {
-  width: auto;
 }
 </style>

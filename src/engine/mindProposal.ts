@@ -2,6 +2,7 @@ import { ranked, type JevAnswer, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
 import { compatible, computeTrait, DRAWBACKS, PERKS, type ComputeTrait, type ComputeTraitId } from './computeTraits'
 import { bestIQ, makeId } from './model'
+import { effectiveTier } from './resourceTraits'
 import { newMind } from './initialState'
 import {
   addResearch,
@@ -79,7 +80,8 @@ export function platformPayable(iq: number, state: GameState): Payable | undefin
   const tier = B.platformGateTier(iq)
   if (tier === null) return undefined
   const made = new Set(state.strategies.filter((s) => s.kind === 'make').map((s) => s.outputId))
-  return (r: Resource) => r.tier >= tier && made.has(r.id)
+  // Prestigious resources pay as if a tier higher.
+  return (r: Resource) => effectiveTier(r, 'platform') >= tier && made.has(r.id)
 }
 
 export function precheckMind(state: GameState, spec: MindSpec): string | null {

@@ -5,11 +5,11 @@ import {
   costShortfall,
   findMind,
   findResearch,
-  findResource,
   findSourcing,
   findUnit,
   openSlots,
   partsFor,
+  payCost,
   researchIQ,
   tasksFor
 } from './model'
@@ -57,7 +57,7 @@ export function createUnits(current: GameState, sourcingId: string, n: number): 
   const cost = createCost(partsFor(u, c), n)
   const short = costShortfall(state, cost)
   if (short) throw new Error(`You need ${short}.`)
-  for (const f of cost) findResource(state, f.resourceId)!.amount -= f.amount
+  payCost(state, cost, `${u.name} parts`)
   c.used += n
   u.built += n
   addUnits(u, n, true)
@@ -137,10 +137,7 @@ export function doResearch(current: GameState, researchId: string): GameState {
   if (blocker) throw new Error(blocker)
   const state = draft(current)
   const r = findResearch(state, researchId)!
-  for (const c of r.cost) {
-    const res = findResource(state, c.resourceId)!
-    res.amount = Math.max(0, res.amount - c.amount)
-  }
+  payCost(state, r.cost, r.name)
   state.stats.researched++
   state.log.push({ week: state.week, tone: 'good', text: completeResearch(state, r) })
   checkMilestones(state)

@@ -23,7 +23,7 @@
       <strong>Not planned yet</strong>
     </div>
     <div v-if="left !== null" class="clock">
-      <div class="muted small">{{ phase.n === 1 ? 'Discovery in' : 'Humans stop you in' }}</div>
+      <div class="muted small">{{ loss.name }} in</div>
       <div class="num weeks">
         {{ Math.max(0, left) }} <span class="small">week{{ left === 1 ? '' : 's' }}</span>
       </div>
@@ -39,6 +39,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { lossOf } from '@/engine/losses'
 import { bestIQ, costShortfall, describeCost } from '@/engine/model'
 import { clockMoved, PHASE_NAMES, weeksLeft } from '@/engine/phase'
 import { goalOf } from '@/engine/projection'
@@ -50,6 +51,7 @@ const goal = computed(() => goalOf(game.state))
 const best = computed(() => bestIQ(game.state))
 const iqOk = computed(() => !!goal.value && best.value >= goal.value.minIQ)
 const costOk = computed(() => !!goal.value && !costShortfall(game.state, goal.value.cost))
+const loss = computed(() => lossOf(game.state))
 const left = computed(() => weeksLeft(game.state))
 const urgent = computed(() => left.value !== null && left.value <= 3)
 const lost = computed(() => clockMoved(game.state, -1))

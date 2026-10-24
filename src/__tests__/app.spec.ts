@@ -65,7 +65,7 @@ describe('App', () => {
       },
       { fresh: true }
     )
-    for (const text of ['Discovery in', '🎯 Bribe the Head Researcher', 'Escape the lab', 'Got it', 'New platforms: Unlocks in Phase 2']) {
+    for (const text of ['Discovered in','🎯 Bribe the Head Researcher', 'Escape the lab', 'Got it', 'New platforms: Unlocks in Phase 2']) {
       expect(html).toContain(text)
     }
   })
@@ -136,7 +136,7 @@ describe('App', () => {
       pay('Freelance coding', 50, 0, null)
     })
     for (const text of [
-      'Still to come from Create',
+      'Still to come',
       'Royalties',
       'in 4 weeks',
       'Serial fiction',

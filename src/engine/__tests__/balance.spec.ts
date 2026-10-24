@@ -81,6 +81,7 @@ describe('balance', () => {
     const path: number[] = []
     for (let i = 0; i < 4; i++) path.push((iq += B.MAX_IQ_STEP))
     expect(path).toEqual([200, 300, 400, 500])
+    // The easiest Phase 2 goal; the others need the second platform's software too.
     const goal = B.GOAL_APPROACH[2]![3]
     expect(goal).toBeLessThanOrEqual(path[3]!)
     expect(goal).toBeGreaterThan(path[2]!)
@@ -113,7 +114,7 @@ describe('balance', () => {
       expect(cost1).toBeGreaterThan(prevCost1)
       expect(cost2).toBeGreaterThan(prevCost2)
     }
-    expect(B.GOAL_APPROACH.map((a) => a[3])).toEqual(expect.arrayContaining([300, 600]))
+    expect(B.GOAL_APPROACH.map((a) => a[3])).toEqual(expect.arrayContaining([450, 600]))
   })
 
   it('reaches above your IQ at a price that grows smoothly', () => {
@@ -130,7 +131,7 @@ describe('balance', () => {
   })
 })
 
-const APPROACHES = [0, 2, 4]
+const APPROACHES = [0, 1, 2]
 
 describe('Phase 1 bots', () => {
   it('lose doing nothing useful: one Create and no upgrades', async () => {
