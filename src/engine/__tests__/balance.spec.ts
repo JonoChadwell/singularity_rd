@@ -19,6 +19,7 @@ import { score } from './fakeJudge'
  */
 function loop(): GameState {
   const s = createInitialState()
+  s.runId = 'test-run'
   s.phase = newPhase(3, 1)
   s.resources.push(
     newResource({ id: MONEY_ID, name: 'Money', value: 1, amount: 5000, cap: 20000 }),

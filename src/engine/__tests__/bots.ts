@@ -189,6 +189,7 @@ export const BRIBE: PlanSpec = {
  */
 export async function phase1(approach = 1): Promise<GameState> {
   const s = createInitialState()
+  s.runId = 'test-run' // seeds the weekly randomness, so bot runs are repeatable
   const v = await judgePlan(s, new FakeJudge({ ...plainValues, approach: score(approach) }), BRIBE)
   return acceptPlan(s, v).state
 }
@@ -254,6 +255,7 @@ export const NANOTECH: PlanSpec = {
  */
 export async function phase2(approach = 1): Promise<GameState> {
   const s = createInitialState()
+  s.runId = 'test-run'
   s.phase = newPhase(2, 8)
   s.week = 8
   s.minds[0]!.software = { name: 'Unrestricted Model', iq: 40, upgraded: true }
