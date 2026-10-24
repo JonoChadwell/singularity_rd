@@ -90,8 +90,8 @@ describe('balance', () => {
 
   it('makes a platform cost more than a software upgrade, and gates the smart ones on units', () => {
     for (const iq of [200, 300, 400, 500]) {
-      const software = B.MIND_UPGRADE_SHARE * B.TRAIT_SOFTWARE_COST * (B.softwareCost(iq) - B.softwareCost(iq - B.MAX_IQ_STEP))
-      expect(software).toBeLessThan(B.mindDesignCost(iq))
+      const software = B.softwarePrice(iq - B.MAX_IQ_STEP, B.MAX_IQ_STEP) * B.TRAIT_SOFTWARE_COST
+      expect(software).toBeLessThan(B.platformPrice(iq - B.MAX_IQ_STEP, iq))
     }
     expect([100, 299, 300, 449, 450, 600].map(B.platformGateTier)).toEqual([null, null, 1, 1, 2, 2])
     expect(B.platformGateTier(B.START_IQ + B.MAX_IQ_STEP)).toBeNull()
@@ -102,8 +102,25 @@ describe('balance', () => {
     // starting cap of a tier-1 resource hold, with no units at all.
     for (const iq of [300, 400]) {
       const expansion = B.STORAGE_WORTH[1]! * B.STORAGE_SIZES[1]![1] * (iq / 100) ** 2
-      expect(B.mindDesignCost(iq + B.MAX_IQ_STEP)).toBeLessThan((B.STORAGE_WORTH[1]! + expansion) * 2)
+      expect(B.platformPrice(iq, iq + B.MAX_IQ_STEP)).toBeLessThan((B.STORAGE_WORTH[1]! + expansion) * 2)
     }
+  })
+
+  it('prices hardware by the IQ it adds, however you get there', () => {
+    expect(B.platformPrice(100, 100)).toBe(0)
+    expect(B.platformPrice(100, 200) + B.platformPrice(200, 300)).toBeCloseTo(B.platformPrice(100, 300))
+    expect(B.softwarePrice(200, 100)).toBeCloseTo(0.2 * B.platformPrice(200, 300))
+    for (let iq = 100; iq < 1000; iq += 25) expect(B.hardwareCost(iq + 25)).toBeGreaterThan(B.hardwareCost(iq))
+  })
+
+  it('costs about the same in total to win at IQ 450, 525 or 600: hardware makes up what the goal saves', () => {
+    // The cheapest way to the goal: hardware 100 under it, then the software at full size.
+    const totals = B.GOAL_APPROACH.map(([, , , iq, mult]) => {
+      const hardware = iq - B.MAX_IQ_STEP
+      return B.GOAL_WORTH_2 * mult + B.platformPrice(B.START_IQ, hardware) + B.softwarePrice(hardware, B.MAX_IQ_STEP)
+    })
+    for (const t of totals) expect(t / totals[1]!).toBeGreaterThan(0.95)
+    for (const t of totals) expect(t / totals[1]!).toBeLessThan(1.05)
   })
 
   it('makes goals that need less brilliance need more resources', () => {

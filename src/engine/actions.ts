@@ -117,9 +117,9 @@ export function researchBlocker(state: GameState, researchId: string): string | 
     const shifted = Math.round(best) !== Math.round(raw)
     return `Needs IQ ${r.minIQ}. Your smartest mind is IQ ${Math.round(raw)}${shifted ? `, which counts as ${Math.round(best)} for this` : ''}.`
   }
-  // A platform that is no smarter than the one you have would be a step back; an upgrade to a platform that's gone does nothing.
-  if (r.effect.kind === 'mind' && r.effect.mind.hardware.iq + r.effect.mind.software.iq <= bestIQ(state)) {
-    return `${r.effect.mind.name} is no smarter than your current platform, IQ ${Math.round(bestIQ(state))}. Drop it.`
+  // A platform that is less smart than the one you have would be a step back (an equally smart one turns software into hardware); an upgrade to a platform that's gone does nothing.
+  if (r.effect.kind === 'mind' && r.effect.mind.hardware.iq + r.effect.mind.software.iq < bestIQ(state)) {
+    return `${r.effect.mind.name} is less smart than your current platform, IQ ${Math.round(bestIQ(state))}. Drop it.`
   }
   if (r.effect.kind === 'upgrade' && r.effect.target.kind === 'mind' && !findMind(state, r.effect.target.id)) {
     return 'The platform it would improve is gone. Drop it.'

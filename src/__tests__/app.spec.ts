@@ -176,7 +176,7 @@ describe('App', () => {
   it('designs a tier with one research and shows it with the minds', async () => {
     const html = await render(async (game) => {
       ready(game, new FakeJudge({ feasible: noul(0.9) }))
-      const v = await game.propose({ kind: 'mind', spec: { name: 'Custom AI Server', description: '', step: 75 } })
+      const v = await game.propose({ kind: 'mind', spec: { name: 'Custom AI Server', description: '' } })
       const outcome = game.accept(v!)
       expect(outcome?.kind).toBe('research')
       if (outcome?.kind !== 'research') return
@@ -232,10 +232,9 @@ describe('App', () => {
     expect(storage).toContain('Store more')
     expect(storage).toMatch(/<option value="money"[^>]*selected>/)
 
-    const mind = await render((_, ui) => ui.openInvent({ kind: 'mind', iq: 150 }))
-    expect(mind).toContain('Smarter by')
-    expect(mind).toMatch(/<option value="50"[^>]*selected>/)
-    expect(mind).toContain('Any stock may pay.')
+    const mind = await render((_, ui) => ui.openInvent({ kind: 'mind' }))
+    expect(mind).not.toContain('Smarter by')
+    expect(mind).toContain('Lab GPU Server Mk II')
   })
 
   it('asks Jev for three upgrades as soon as the dialog opens', async () => {
@@ -268,7 +267,10 @@ describe('App', () => {
     expect(html).not.toContain('Add a part')
 
     const mind = await render((_, ui) => ui.openInvent({ kind: 'mind', preset: 'Custom AI Server' }))
-    expect(mind).toContain('value="Custom Accelerator Rack"')
-    expect(mind).toContain('Smarter by')
+    expect(mind).toContain('value="Custom AI Server"')
+    expect(mind).not.toContain('Smarter by')
+
+    const next = await render((_, ui) => ui.openInvent({ kind: 'mind', preset: 'Lab GPU Server Mk II' }))
+    expect(next).toContain('value="Lab GPU Server Mk II"')
   })
 })

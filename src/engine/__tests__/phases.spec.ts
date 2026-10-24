@@ -384,9 +384,10 @@ describe('risk', () => {
     addRobots(s, 1).built = 1
     const risky = acceptUnit(s, await judgeUnit(s, new FakeJudge({ alarm: score(4), value: score(2) }), { name: 'Drone Swarm', description: '' })).state.research[0]!
     expect(risky.risk?.weeks).toBe(8)
-    const mind = acceptMind(s, await judgeMind(s, new FakeJudge({ alarm: score(2) }), { name: 'Rogue Mind', description: '', step: 100 }))
-    const effect = mind.state.research[0]!.effect
-    expect(effect.kind === 'mind' && effect.mind.hardware.iq).toBe(100 + 100 + B.RISK_IQ_BONUS)
+    const v = await judgeMind(s, new FakeJudge({ alarm: score(2) }), { name: 'Rogue Mind', description: '' })
+    const step = v.options[0]!.step
+    const effect = acceptMind(s, v).state.research[0]!.effect
+    expect(effect.kind === 'mind' && effect.mind.hardware.iq).toBe(100 + step + B.RISK_IQ_BONUS)
   })
 
   it('can make an upgrade option risky', async () => {

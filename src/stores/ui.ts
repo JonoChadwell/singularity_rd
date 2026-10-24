@@ -14,8 +14,6 @@ export interface InventRequest {
   outputId?: string
   /** Storage: the resource to store more of. */
   resourceId?: string
-  /** Minds: an IQ to start from. */
-  iq?: number
   /** Upgrades: what to improve. */
   target?: UpgradeTarget
   /** A preset to fill the form from, by name. */
@@ -77,7 +75,7 @@ export const useUiStore = defineStore('ui', () => {
       case 'first-unit':
         return openFirstUnit()
       case 'design-mind':
-        return openInvent({ kind: 'mind', iq: prompt.iq })
+        return openInvent({ kind: 'mind' })
       case 'create':
         return openInvent({ kind: 'create' })
       case 'source':

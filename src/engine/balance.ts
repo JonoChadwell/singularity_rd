@@ -319,15 +319,51 @@ export const techCost = (tier: number): number =>
   tier < TIERS.length ? TIERS[tier]![2] : TIERS[TIERS.length - 1]![2] * 10 ** (tier - TIERS.length + 1)
 /** Strategy research is priced as if you owned at least this many. */
 export const MIN_FLEET = 10
-/** A software upgrade costs this share of the difference in software cost it makes. */
-export const MIND_UPGRADE_SHARE = 0.15
-/** Worth of the resources used up by software that takes a mind to this IQ, in total. */
-export const softwareCost = (iq: number) => 1000 * (iq / 100) ** 4
 /**
- * Worth of the resources used up building a new platform of this IQ. The main gate on
- * intelligence: each platform needs bigger storage than the last to pay for it.
+ * The worth of resources used up in total to build hardware of a given IQ, from the starting
+ * server's: [hardware IQ, cumulative worth]. It grows gently to about IQ 300, climbs steeply to
+ * about 450, then flattens: the slope falls but the total only rises.
+ * A new platform costs the difference between its hardware and the old platform's; it doesn't
+ * matter in how many steps you got there. The goal costs of the Phase 2 approaches (GOAL_APPROACH)
+ * are set so that total spending to win is about the same whichever IQ you aim for.
  */
-export const mindDesignCost = (iq: number) => 1000 * (iq / 100) ** 3
+export const HARDWARE_COSTS: [number, number][] = [
+  [100, 0],
+  [125, 1000],
+  [150, 2800],
+  [175, 5200],
+  [200, 8000],
+  [250, 14000],
+  [300, 21000],
+  [350, 30000],
+  [425, 226000],
+  [450, 262000],
+  [600, 284500],
+  [700, 305000],
+  [800, 330000]
+]
+/** Past the table, the cumulative cost keeps growing by this factor every 100 IQ. */
+const HARDWARE_COST_GROWTH = 1.3
+export function hardwareCost(iq: number): number {
+  const t = HARDWARE_COSTS
+  const last = t[t.length - 1]!
+  if (iq >= last[0]) return last[1] * HARDWARE_COST_GROWTH ** ((iq - last[0]) / 100)
+  const i = t.findIndex(([x]) => iq <= x)
+  if (i <= 0) return 0
+  const [x0, y0] = t[i - 1]!
+  const [x1, y1] = t[i]!
+  return y0 + ((y1 - y0) * (iq - x0)) / (x1 - x0)
+}
+/**
+ * Worth of the resources used up building a new platform: the main gate on intelligence. Each
+ * platform needs bigger storage than the last to pay for it.
+ */
+export const platformPrice = (oldHardwareIQ: number, newHardwareIQ: number) =>
+  Math.max(0, hardwareCost(newHardwareIQ) - hardwareCost(oldHardwareIQ))
+/** A software upgrade costs this share of what hardware at the same IQ would. */
+export const SOFTWARE_SHARE = 0.2
+export const softwarePrice = (hardwareIQ: number, step: number) =>
+  SOFTWARE_SHARE * platformPrice(hardwareIQ, hardwareIQ + step)
 /** Upgrade factors Jev can offer. */
 export const UPKEEP_FACTOR = 0.5
 export const PARTS_FACTOR = 0.5

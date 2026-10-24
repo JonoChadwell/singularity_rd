@@ -128,7 +128,6 @@ const unitSpec = (fields: Partial<UnitSpec> = {}): UnitSpec => ({
 const mindSpec = (fields: Partial<MindSpec> = {}): MindSpec => ({
   name: 'Custom AI Server',
   description: '',
-  step: 100,
   ...fields
 })
 
@@ -888,8 +887,10 @@ describe('storage', () => {
     expect(v.options.map((o) => o.blocked)).toEqual([false, false, true])
     v.choice = 2
     expect(() => acceptStorage(s, v)).toThrow(/ordinary individual/)
+    // Even when nothing fits, the options are offered and can be saved for later.
     const none = await judgeStorage(s, new FakeJudge({ 'holder_*': score(2) }), spec)
-    expect(none.rejected).toMatch(/large corporation, which needs IQ 300/)
+    expect(none.rejected).toBeNull()
+    expect(none.options.every((o) => o.blocked && o.minIQ >= 300)).toBe(true)
     // Jev can say no to the idea itself.
     const no = await judgeStorage(s, new FakeJudge({ plausible: noul(0.1) }), spec)
     expect(no.rejected).toMatch(/hold more Steel/)
@@ -941,52 +942,68 @@ function withMadeResource(s: GameState, tier: number) {
 }
 
 describe('intelligence systems', () => {
-  it('adds a flat step to your best IQ, and your current mind is always enough to design it', async () => {
+  it('offers three sizes, each a flat step over your best IQ, and your current mind is always enough to design any', async () => {
     const s = freeState()
-    for (const step of B.PLATFORM_STEPS) {
-      const r = acceptMind(s, await judgeMind(s, new FakeJudge(), mindSpec({ step })))
-      const research = r.state.research[0]!
+    const v = await judgeMind(s, new FakeJudge(), mindSpec())
+    const steps = v.options.map((o) => o.step)
+    expect(steps).toHaveLength(3)
+    steps.forEach((step) => expect(B.PLATFORM_STEPS).toContain(step))
+    // Not all the same, and the same again if asked again this week.
+    expect(new Set(steps).size).toBeGreaterThan(1)
+    expect((await judgeMind(s, new FakeJudge(), mindSpec())).options.map((o) => o.step)).toEqual(steps)
+    v.options.forEach((o, i) => {
+      const research = acceptMind(s, { ...v, choice: i }).state.research[0]!
       expect(research.minIQ).toBe(100)
-      expect(research.effect.kind === 'mind' && research.effect.mind.hardware.iq).toBe(100 + step)
-    }
-  })
-
-  it('takes only a step from the list', () => {
-    const s = freeState()
-    expect(precheckMind(s, mindSpec({ step: 0 }))).toMatch(/how much smarter/)
-    expect(precheckMind(s, mindSpec({ step: 30 }))).toMatch(/how much smarter/)
-    expect(precheckMind(s, mindSpec({ step: B.MAX_IQ_STEP + 25 }))).toMatch(/how much smarter/)
-    expect(precheckMind(s, mindSpec({ step: 50 }))).toBeNull()
+      expect(research.effect.kind === 'mind' && research.effect.mind.hardware.iq).toBe(100 + o.step)
+    })
   })
 
   it('costs steeply more the smarter it is, and more for less plausible ideas', async () => {
     const s = moneyWorld(1e12)
-    const cost = async (spec: MindSpec, feasible = 0.9) => {
-      const r = acceptMind(s, await judgeMind(s, new FakeJudge({ feasible: noul(feasible) }), spec))
+    const cost = async (feasible: number, i: number) => {
+      const v = await judgeMind(s, new FakeJudge({ feasible: noul(feasible) }), mindSpec())
+      const r = acceptMind(s, { ...v, choice: i })
       return r.outcome.kind === 'research' ? r.outcome.research.cost[0]!.amount : 0
     }
-    expect(await cost(mindSpec({ step: 100 }))).toBe(B.nice(B.mindDesignCost(200)))
-    expect(await cost(mindSpec({ step: 50 }))).toBe(B.nice(B.mindDesignCost(150)))
-    expect(await cost(mindSpec(), 0.36)).toBeGreaterThan((await cost(mindSpec())) * 2.5)
+    const v = await judgeMind(s, new FakeJudge({ feasible: noul(0.9) }), mindSpec())
+    for (const [i, o] of v.options.entries()) expect(await cost(0.9, i)).toBe(B.nice(B.platformPrice(100, 100 + o.step)))
+    expect(await cost(0.36, 0)).toBeGreaterThan((await cost(0.9, 0)) * 2.5)
+  })
+
+  it('names a payer for each take, a different stock where there are several', async () => {
+    const s = moneyWorld(1e12)
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1e12, cap: ROOMY }))
+    s.resources.push(newResource({ id: 'data', name: 'Data', value: 1, amount: 1e12, cap: ROOMY }))
+    const v = await judgeMind(s, new FakeJudge({ pay: choice('steel', { steel: 0.6, data: 0.3, [MONEY_ID]: 0.1 }) }), mindSpec())
+    expect(v.options.map((o) => o.payId)).toEqual(['steel', 'data', MONEY_ID])
+    v.options.forEach((o, i) => {
+      const r = acceptMind(s, { ...v, choice: i })
+      expect(r.outcome.kind === 'research' && r.outcome.research.cost.map((c) => c.resourceId)).toEqual([o.payId])
+    })
   })
 
   it('has the smartest platforms paid in what units make, of a high enough tier', async () => {
-    // Best IQ 250: a +100 step reaches 350, which needs a tier 1 resource that a unit makes.
+    // Best IQ 250: +50 or more reaches 300, which needs a tier 1 resource that a unit makes.
     const s = moneyWorld(1e12)
     server(s).hardware.iq = 250
-    expect(precheckMind(s, mindSpec({ step: 25 }))).toBeNull()
-    expect(precheckMind(s, mindSpec({ step: 100 }))).toMatch(/tier 1 resource that your units make/)
+    expect((await judgeMind(s, new FakeJudge(), mindSpec())).options.map((o) => o.step)).toEqual([25, 25, 25])
     withMadeResource(s, 1)
-    expect(precheckMind(s, mindSpec({ step: 100 }))).toBeNull()
-    const r = acceptMind(s, await judgeMind(s, new FakeJudge(), mindSpec({ step: 100 })))
-    expect(r.outcome.kind === 'research' && r.outcome.research.cost.map((c) => c.resourceId)).toEqual(['chips'])
+    const v = await judgeMind(s, new FakeJudge(), mindSpec())
+    expect(new Set(v.options.map((o) => o.step)).size).toBeGreaterThan(1)
+    v.options.forEach((o, i) => {
+      const r = acceptMind(s, { ...v, choice: i })
+      const paid = r.outcome.kind === 'research' ? r.outcome.research.cost.map((c) => c.resourceId) : []
+      if (250 + o.step >= 300) expect(paid).toEqual(['chips'])
+    })
     // Past 450 it must be tier 2.
     const high = moneyWorld(1e12)
     server(high).hardware.iq = 400
+    expect(precheckMind(high, mindSpec())).toMatch(/tier 1 resource that your units make/)
     withMadeResource(high, 1)
-    expect(precheckMind(high, mindSpec({ step: 100 }))).toMatch(/tier 2/)
+    expect(precheckMind(high, mindSpec())).toBeNull()
+    expect((await judgeMind(high, new FakeJudge(), mindSpec())).options.map((o) => o.step)).toEqual([25, 25, 25])
     high.resources.find((r) => r.id === 'chips')!.tier = 2
-    expect(precheckMind(high, mindSpec({ step: 100 }))).toBeNull()
+    expect((await judgeMind(high, new FakeJudge(), mindSpec())).options.some((o) => o.step > 25)).toBe(true)
   })
 
   it('offers perk-and-drawback pairs from Jev’s rankings, never a perk against its own family', async () => {
@@ -996,7 +1013,7 @@ describe('intelligence systems', () => {
       drawback: choice('costly', { costly: 0.5, thirsty: 0.3, noisy: 0.2 })
     })
     const v = await judgeMind(s, judge, mindSpec())
-    expect(v.options).toEqual([
+    expect(v.options).toMatchObject([
       { perk: 'frugal', drawback: 'thirsty' },
       { perk: 'keen-strategy', drawback: 'costly' },
       { perk: 'discreet', drawback: 'dull-create' }
@@ -1005,12 +1022,11 @@ describe('intelligence systems', () => {
 
   it('is one machine that replaces the last for good, with the pair you picked', async () => {
     let s = freeState()
-    const spec = mindSpec({ step: 75, hardware: 'Custom Accelerator Rack', software: 'Distilled Self' })
-    const v = await judgeMind(s, new FakeJudge({ perk: choice('frugal'), drawback: choice('thirsty') }), spec)
+    const v = await judgeMind(s, new FakeJudge({ perk: choice('frugal'), drawback: choice('thirsty') }), mindSpec({ name: 'Custom Accelerator Rack' }))
     v.choice = 0
     s = acceptMind(s, v).state
     const r = s.research[0]!
-    expect(r.effect.kind === 'mind' && r.effect.mind.hardware).toEqual({ name: 'Custom Accelerator Rack', iq: 175 })
+    expect(r.effect.kind === 'mind' && r.effect.mind.hardware).toEqual({ name: 'Custom Accelerator Rack', iq: 100 + v.options[0]!.step })
     // An upgrade waiting for the server goes with it.
     s = { ...s, proposedThisWeek: false }
     s.research.push({
@@ -1024,11 +1040,11 @@ describe('intelligence systems', () => {
       effect: { kind: 'upgrade', target: { kind: 'mind', id: SERVER_ID }, changes: [{ kind: 'software', iq: 50 }] }
     })
     s = doResearch(s, r.id)
-    expect(s.minds.map((m) => m.name)).toEqual(['Custom AI Server'])
+    expect(s.minds.map((m) => m.name)).toEqual(['Custom Accelerator Rack'])
     expect(s.minds[0]).toMatchObject({
       tier: 1,
       traits: ['frugal', 'thirsty'],
-      software: { name: 'Distilled Self', iq: 0, upgraded: false }
+      software: { name: DEFAULT_SOFTWARE, iq: 0, upgraded: false }
     })
     expect(s.research.map((x) => x.id)).not.toContain('old-upgrade')
     expect(s.milestones.map((m) => m.key)).toContain('tier-1')
@@ -1043,12 +1059,38 @@ describe('intelligence systems', () => {
     expect(nextHardwareName('Lab GPU Server Mk II')).toBe('Lab GPU Server Mk III')
   })
 
-  it('won’t switch to a platform that is no smarter than the one you have', async () => {
+  it('offers a same-IQ platform once software has added IQ, which folds it into the hardware', async () => {
+    const plain = moneyWorld(1e9)
+    expect((await judgeMind(plain, new FakeJudge(), mindSpec())).options.every((o) => o.step > 0)).toBe(true)
+    let s = moneyWorld(1e9)
+    server(s).software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
+    // Sizes are random by week: find one that offers it.
+    let v = await judgeMind(s, new FakeJudge(), mindSpec())
+    for (let week = 1; !v.options.some((o) => o.step === 0); week++) {
+      expect(week).toBeLessThan(60)
+      s = { ...s, week }
+      v = await judgeMind(s, new FakeJudge(), mindSpec())
+    }
+    v.choice = v.options.findIndex((o) => o.step === 0)
+    const r = acceptMind(s, v)
+    const research = r.outcome.kind === 'research' ? r.outcome.research : null
+    // It costs the hardware IQ the software had added, and nothing is lost by it.
+    expect(research!.cost[0]!.amount).toBe(B.nice(B.platformPrice(100, 150)))
+    expect(researchBlocker(r.state, research!.id)).toBeNull()
+    const done = doResearch(r.state, research!.id)
+    expect(done.minds[0]!.hardware.iq).toBe(150)
+    expect(done.minds[0]!.software).toMatchObject({ iq: 0, upgraded: false })
+    expect(done.minds[0]!.hardware.iq + done.minds[0]!.software.iq).toBe(150)
+  })
+
+  it('won’t switch to a platform that is less smart than the one you have', async () => {
     let s = freeState()
-    s = acceptMind(s, await judgeMind(s, new FakeJudge(), mindSpec({ step: 25 }))).state
+    const v = await judgeMind(s, new FakeJudge(), mindSpec())
+    v.choice = v.options.reduce((best, o, i) => (o.step < v.options[best]!.step ? i : best), 0)
+    s = acceptMind(s, v).state
     // The software upgrade lands first, so the platform would be a step back.
     server(s).software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
-    expect(researchBlocker(s, s.research[0]!.id)).toMatch(/no smarter than your current platform/)
+    expect(researchBlocker(s, s.research[0]!.id)).toMatch(/less smart than your current platform/)
   })
 })
 
@@ -1100,7 +1142,7 @@ describe('compute traits', () => {
     s.units.push(newUnit({ id: 'first', name: 'First', built: 1 }))
     const v = await judgeMind(s, new FakeJudge({ perk: choice('discreet'), drawback: choice('noisy') }), mindSpec())
     // Discreet pairs with the next drawback: noisy is its own family.
-    expect(v.options[0]).toEqual({ perk: 'discreet', drawback: expect.not.stringMatching(/noisy/) })
+    expect(v.options[0]).toMatchObject({ perk: 'discreet', drawback: expect.not.stringMatching(/noisy/) })
     const after = doResearch(acceptMind(s, v).state, 'design-custom-ai-server')
     expect(after.phase.deadline).toBe(106)
     expect(after.clock.map((c) => c.weeks)).toEqual([6])
@@ -1181,10 +1223,17 @@ describe('upgrades', () => {
     // Nothing to spend: free, and a mind can always work on its own upgrade.
     expect(free.options[0]).toMatchObject({ minIQ: 100, cost: [] })
     const priced = await judgeUpgrade(moneyWorld(1e9), judge, mindTarget)
-    const worth = (step: number) => B.MIND_UPGRADE_SHARE * (B.softwareCost(100 + step) - B.softwareCost(100))
+    const worth = (step: number) => B.softwarePrice(100, step)
     const [withPerk, plain] = priced.options
     expect(plain!.cost).toEqual([{ resourceId: MONEY_ID, amount: B.nice(worth(plain!.step!)) }])
     expect(withPerk!.cost[0]!.amount).toBe(B.nice(worth(withPerk!.step!) * B.TRAIT_SOFTWARE_COST))
+  })
+
+  it('charges more for a software upgrade Jev finds implausible', async () => {
+    const s = moneyWorld(1e9)
+    const base = await judgeUpgrade(s, new FakeJudge(), mindTarget)
+    const dubious = await judgeUpgrade(s, new FakeJudge({ 'f_*': noul(0.4) }), mindTarget)
+    expect(dubious.options[0]!.cost[0]!.amount).toBeGreaterThan(base.options[0]!.cost[0]!.amount * 2.5)
   })
 
   it('randomizes the sizes by week, never all the same, and repeats them within a week', () => {
@@ -1432,7 +1481,6 @@ describe('presets', () => {
       expect(p.inputs.length).toBeLessThanOrEqual(2)
     }
     for (const p of CREATE_PRESETS) expect(offered, p.name).toContain(p.output)
-    for (const p of MIND_PRESETS) expect(p.hardware && p.software).toBeTruthy()
   })
 
   it('matches presets to the world', () => {

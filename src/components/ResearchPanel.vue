@@ -59,7 +59,7 @@
           Research now
         </button>
         <span v-if="blocker(r.id)" class="warn">{{ blocker(r.id) }}</span>
-        <button v-if="iqFor(r) < r.minIQ" class="link" @click="smarter(r.minIQ)">
+        <button v-if="iqFor(r) < r.minIQ" class="link" @click="smarter()">
           {{ softwareLeft ? 'Upgrade your software?' : 'Build a smarter platform?' }}
         </button>
         <button
@@ -126,10 +126,10 @@ const entries = computed(() => {
   return out
 })
 
-function smarter(iq: number) {
+function smarter() {
   const top = bestMind(game.state)
   if (top && softwareLeft.value) return ui.openInvent({ kind: 'upgrade', target: { kind: 'mind', id: top.id } })
-  if (!mindLock.value) ui.openInvent({ kind: 'mind', iq })
+  if (!mindLock.value) ui.openInvent({ kind: 'mind' })
 }
 
 const projectionText = computed(() => (game.projection ? describeProjection(game.state, game.projection) : ''))

@@ -23,7 +23,10 @@ researched.
 Perks and drawbacks baked into the current platform, from a **fixed list** (like the 14 unit
 traits). When a platform is proposed, Jev ranks the perks and the drawbacks by how well they suit
 it, and the game offers the top three **perk-and-drawback pairs**. The player picks one. A perk is
-never paired with a drawback of its own family.
+never paired with a drawback of its own family. Each pair is also its own take on size and payer:
+an IQ step of 25 to 100 (random, not all the same, fixed for the week like software upgrade sizes;
+sizes nobody could pay for are not offered) and the stock that pays, Jev's favourite first and a
+different one for each take where possible.
 
 | Perk | Drawback | Effect |
 | --- | --- | --- |
@@ -59,13 +62,21 @@ counts from the hardware's IQ and costs in full. Real progress past one step nee
 - It is much cheaper than a new platform at the same IQ.
 
 **Hardware steps are new platforms.** The old "Mk II, Mk III..." chain is gone as a mechanic. The
-platform form has a one-click button that fills the hardware name with "<Name> Mk II", but
-mechanically it is a brand new platform: new trait pick, full cost, old one replaced.
+platform form is just a name and a description; "<Hardware> Mk II" is the first idea in its
+list, but mechanically it is a brand new platform: new take, full cost, old one replaced.
 
 ### 4. Resources and growth plan
-- IQ gates are paid for with **high up-front cost**, not running costs. A platform costs
-  `1e4 × (IQ/100)^10` worth of resources, so each needs a bigger economy than the last. A software
-  upgrade costs a tenth of the difference in `1e4 × (IQ/100)^4`.
+- IQ gates are paid for with **high up-front cost**, not running costs. `HARDWARE_COSTS` in
+  `balance.ts` is a fixed table of the cumulative worth of resources needed to reach each hardware
+  IQ (gentle up to about 300, steep to about 450, then flatter: the slope falls but the total only rises). A platform costs the table's value at its new hardware
+  IQ minus the value at the old platform's hardware IQ, so the total is the same however many steps
+  it took. A software upgrade costs 20% of what hardware over the same IQ range would. Both are
+  multiplied by Jev's plausibility (up to 3×), 0.5× if risky, and Frugal/Costly; a software upgrade
+  that also changes a trait costs 1.5× more.
+- A platform of **the same IQ** is on offer once the software has added IQ: it turns that IQ into
+  hardware (costing the table's difference), and the software can then be upgraded again from there.
+- The Phase 2 goal costs (`GOAL_APPROACH`) are set so that winning at IQ 450, 525 or 600 uses
+  about the same total worth: the goal saves what the hardware costs (a test checks it).
 - Platforms of IQ **300 or more** must be paid for in a resource that **units make** (the output of
   a make strategy), of at least tier 1; at IQ **450 or more**, at least tier 2. If you have no
   such stock, the platform can't be proposed yet. This is how the final platform interacts with

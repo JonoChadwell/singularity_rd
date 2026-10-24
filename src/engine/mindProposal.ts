@@ -1,7 +1,7 @@
 import { ranked, type JevAnswer, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
 import { compatible, computeTrait, DRAWBACKS, PERKS, type ComputeTrait, type ComputeTraitId } from './computeTraits'
-import { bestIQ, makeId } from './model'
+import { bestIQ, bestMind, makeId } from './model'
 import { effectiveTier } from './resourceTraits'
 import { newMind } from './initialState'
 import {
@@ -9,12 +9,12 @@ import {
   baseVerdict,
   claimProposal,
   cleanText,
-  costFor,
   floorIQ,
   gate,
   iconQuestion,
   newResearch,
   options,
+  payers,
   payQuestion,
   precheckName,
   proposalSlotBlocker,
@@ -25,7 +25,8 @@ import {
   type VerdictBase
 } from './proposals'
 import { lockReason } from './phase'
-import { spendable } from './research'
+import { costMultiplier, priceCost, spendable } from './research'
+import { softwareSteps } from './upgrade'
 import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import type { Cost, GameState, Mind, Resource } from './types'
@@ -37,40 +38,33 @@ import type { Cost, GameState, Mind, Resource } from './types'
 export interface MindSpec {
   name: string
   description: string
-  /** IQ added to your best mind's: one of PLATFORM_STEPS. */
-  step: number
-  /** The hardware platform's name. Blank means named after the mind. */
-  hardware?: string
-  /** The software's name. Blank means "Base Model". */
-  software?: string
 }
 
-/** A perk and the drawback that comes with it: one of Jev's offered options. */
-export interface TraitPair {
+/**
+ * One of Jev's three takes: a perk and the drawback that comes with it, how much smarter it is
+ * (one of PLATFORM_STEPS) and the stock that pays for it.
+ */
+export interface MindOption {
   perk: ComputeTraitId
   drawback: ComputeTraitId
+  step: number
+  payId: string | null
 }
+
+type TraitPair = Pick<MindOption, 'perk' | 'drawback'>
 
 export interface MindVerdict extends VerdictBase {
   kind: 'mind'
   spec: MindSpec
-  /** Jev's perk-and-drawback pairs, to pick one from. */
-  options: TraitPair[]
+  /** Jev's takes, to pick one from. */
+  options: MindOption[]
   choice: number
 }
 
 export const DEFAULT_SOFTWARE = 'Base Model'
-const hardwareName = (spec: MindSpec) => spec.hardware?.trim() || spec.name.trim()
-const softwareName = (spec: MindSpec) => spec.software?.trim() || DEFAULT_SOFTWARE
 
 /** The IQ a platform of this step would have. */
 export const platformIQ = (state: GameState, step: number) => Math.round(bestIQ(state)) + step
-
-/** The biggest step that still reaches `iq`, or the biggest step there is. */
-export function stepFor(state: GameState, iq: number): number {
-  const need = iq - Math.round(bestIQ(state))
-  return B.PLATFORM_STEPS.find((s) => s >= need) ?? B.MAX_IQ_STEP
-}
 
 /**
  * The stocks a platform of this IQ may be paid in. The smartest ones have to be paid in what
@@ -91,13 +85,50 @@ export function precheckMind(state: GameState, spec: MindSpec): string | null {
   if (slot) return slot
   const nameError = precheckName(state, spec.name)
   if (nameError) return nameError
-  if (!B.PLATFORM_STEPS.includes(spec.step)) return 'Choose how much smarter it is.'
-  const iq = platformIQ(state, spec.step)
-  const payable = platformPayable(iq, state)
-  if (payable && !spendable(state, payable).length) {
+  if (!allowedSteps(state).length) {
+    const iq = platformIQ(state, B.PLATFORM_STEPS[0]!)
     return `A platform of IQ ${iq} has to be paid for in a tier ${B.platformGateTier(iq)} resource that your units make. You have none yet.`
   }
   return null
+}
+
+/**
+ * The sizes on offer: the usual steps, and none at all once the software has added IQ, which
+ * turns it into hardware and lets the software start again from there.
+ */
+function stepPool(state: GameState): number[] {
+  return (bestMind(state)?.software.iq ?? 0) > 0 ? [0, ...B.PLATFORM_STEPS] : B.PLATFORM_STEPS
+}
+
+/** The steps that can be paid for: the smartest platforms need a stock your units make. */
+function allowedSteps(state: GameState): number[] {
+  return stepPool(state).filter((step) => {
+    const payable = platformPayable(platformIQ(state, step), state)
+    return !payable || spendable(state, payable).length > 0
+  })
+}
+
+/** Each take's step: random but not all the same, fixed for the week (renaming it won't reroll), never one nobody could pay for. */
+function stepsFor(state: GameState, count: number): number[] {
+  const allowed = allowedSteps(state)
+  return softwareSteps(state, 'new-platform', count, stepPool(state)).map((s) => (allowed.includes(s) ? s : allowed[allowed.length - 1]!))
+}
+
+/**
+ * Each take's payer: Jev's favourite stock that may pay for that size, a different one for each
+ * take where the stocks allow.
+ */
+function payersFor(state: GameState, answers: Record<string, JevAnswer>, steps: number[]): (string | null)[] {
+  const taken = new Set<string>()
+  return steps.map((step) => {
+    const stocks = spendable(state, platformPayable(platformIQ(state, step), state)).map((r) => r.id)
+    const order = [...payers(answers).map((p) => p.resourceId), ...stocks].filter(
+      (id, i, all) => stocks.includes(id) && all.indexOf(id) === i
+    )
+    const id = order.find((x) => !taken.has(x)) ?? order[0] ?? null
+    if (id) taken.add(id)
+    return id
+  })
 }
 
 /** Traits in Jev's order of fit, then the rest in list order. */
@@ -126,7 +157,6 @@ export async function judgeMind(state: GameState, judge: Judge, raw: MindSpec): 
   const spec: MindSpec = { ...raw, ...cleanText(raw.name, raw.description) }
   const refusal = precheckMind(state, spec)
   if (refusal) throw new Error(refusal)
-  const iq = platformIQ(state, spec.step)
   const questions: Record<string, JevQuestion> = {
     feasible: {
       type: 'noul',
@@ -149,7 +179,7 @@ export async function judgeMind(state: GameState, judge: Judge, raw: MindSpec): 
       criteria: Object.fromEntries(DRAWBACKS.map((t) => [t.id, `${t.name}: ${t.rule}`]))
     },
     icon: iconQuestion,
-    ...payQuestion(state, `the design of ${spec.name}`, platformPayable(iq, state)),
+    ...payQuestion(state, `the design of ${spec.name}`),
     ...alarmQuestions(state)
   }
   const answers = await judge.ask(
@@ -157,16 +187,19 @@ export async function judgeMind(state: GameState, judge: Judge, raw: MindSpec): 
       'The player proposes a new intelligence system: one machine that thinks and does research. It replaces the AI’s current one for good.',
       `Name: "${spec.name}"`,
       `Description: "${spec.description || '(none given)'}"`,
-      `Hardware: "${hardwareName(spec)}", IQ ${iq} (the current best is IQ ${Math.round(bestIQ(state))}). Software: "${softwareName(spec)}".`
+      `The current best is IQ ${Math.round(bestIQ(state))}.`
     ]),
     questions,
     'mind'
   )
+  const pairs = pairTraits(answers)
+  const steps = stepsFor(state, pairs.length)
+  const pay = payersFor(state, answers, steps)
   const v: MindVerdict = {
     ...baseVerdict('mind', questions, answers, 'feasible', []),
     kind: 'mind',
     spec,
-    options: pairTraits(answers),
+    options: pairs.map((pair, i) => ({ ...pair, step: steps[i]!, payId: pay[i] ?? null })),
     choice: 0
   }
   gate(v, 'Jev doesn’t think the AI could build this mind', {
@@ -177,28 +210,33 @@ export async function judgeMind(state: GameState, judge: Judge, raw: MindSpec): 
 }
 
 /**
- * A platform's design: its IQ is a flat step over your best, its traits are the pair the player
- * picked, and its cost grows steeply with the IQ. A mind can always work on its own successor.
+ * A platform's design: its IQ is the picked take's step over your best, its traits are that
+ * take's pair, and its cost is the hardware IQ it adds over the old platform's. A mind can always work on its own successor.
  */
 export function draftMind(state: GameState, v: MindVerdict): { mind: Mind; minIQ: number; cost: Cost } {
   const read = reader(v)
-  const iq = platformIQ(state, v.spec.step)
-  const pair = v.options[v.choice] ?? v.options[0]
+  const pick = v.options[v.choice] ?? v.options[0]
+  const iq = platformIQ(state, pick?.step ?? B.MAX_IQ_STEP)
   const mind = newMind({
     id: makeId(state, v.spec.name),
     name: v.spec.name,
     description: v.spec.description || v.spec.name,
     icon: B.icon(read.choice('icon', Object.keys(B.ICONS))),
     // A risky design cuts corners, and gets more out of the same hardware.
-    hardware: { name: hardwareName(v.spec), iq: iq + (v.risk ? B.RISK_IQ_BONUS : 0) },
-    software: { name: softwareName(v.spec), iq: 0, upgraded: false },
-    traits: pair ? [pair.perk, pair.drawback] : [],
+    hardware: { name: v.spec.name, iq: iq + (v.risk ? B.RISK_IQ_BONUS : 0) },
+    software: { name: DEFAULT_SOFTWARE, iq: 0, upgraded: false },
+    traits: pick ? [pick.perk, pick.drawback] : [],
     plausibility: v.plausibility
   })
   return {
     mind,
     minIQ: floorIQ(bestIQ(state)),
-    cost: costFor(state, v, B.mindDesignCost(iq), platformPayable(iq, state))
+    cost: priceCost(
+      state,
+      B.platformPrice(bestMind(state)?.hardware.iq ?? B.START_IQ, iq) * costMultiplier(v.plausibility, v.bar) * (v.risk ? B.RISK_COST : 1),
+      pick?.payId ? [{ resourceId: pick.payId, p: 1 }] : [],
+      platformPayable(iq, state)
+    )
   }
 }
 

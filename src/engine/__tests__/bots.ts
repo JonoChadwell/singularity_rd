@@ -5,6 +5,8 @@ import { acceptCreate, judgeCreate, optionBlocker } from '../createProposal'
 import { runWeek } from '../cycle'
 import { acceptAny, judgeAny, type ProposalInput } from '../dispatch'
 import { previewWeek } from '../economy'
+import { computeTrait } from '../computeTraits'
+import { acceptMind, judgeMind } from '../mindProposal'
 import { createInitialState, newResource, SERVER_ID } from '../initialState'
 import { bestIQ, capOf, contractsFor, creatable, currentIQ, findResource, findUnit, MONEY_ID, openSlots, weeklyUse } from '../model'
 import { newPhase } from '../phase'
@@ -359,7 +361,18 @@ export function steady(style: Phase2Style): Turn {
       } else if (bestIQ(s) < goal.minIQ && !waiting('mind') && !waiting('upgrade') && findUnit(s, MILL)?.built) {
         // The platform's software once; after that, a platform 100 IQ smarter.
         if (!mind.software.upgraded) s = await upgrade(s, { kind: 'mind', id: mind.id }, alarm)
-        else s = await propose(s, { kind: 'mind', spec: { name: fresh('Custom AI Server'), description: '', step: B.MAX_IQ_STEP } }, answers)
+        else {
+          // Jev's takes come at random sizes: take the biggest, unless its drawback costs weeks on the
+          // clock, or it's paid in the stock the goal needs.
+          const v = await judgeMind(s, new FakeJudge({ ...TYPICAL, ...answers }), { name: fresh('Custom AI Server'), description: '' })
+          const worth = (o: (typeof v.options)[number]) =>
+            o.step -
+            (computeTrait(o.drawback).effect.kind === 'clock' ? 1000 : 0) -
+            (goal.cost.some((c) => c.resourceId === o.payId) ? 5000 : 0) -
+            (o.payId === MONEY_ID || B.platformGateTier(bestIQ(s) + o.step) !== null ? 0 : 500)
+          v.choice = v.options.reduce((best, o, i) => (worth(o) > worth(v.options[best]!) ? i : best), 0)
+          s = acceptMind(s, v).state
+        }
       } else if (tooBig()) {
         const c = tooBig()!
         s = (await storeIfShort(s, c.resourceId, c.amount, alarm)) ?? s

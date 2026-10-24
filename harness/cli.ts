@@ -430,17 +430,19 @@ function printVerdict(s: GameState, v: Verdict) {
     say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}${v.spec.first ? '' : ' · room for none until you propose sourcing'}`)
     say(`  → traits: ${u.traits.length ? traitText(u.traits) : 'none'}`)
   } else if (v.kind === 'mind') {
-    say(`  Jev's perk-and-drawback pairs [option <n>]:`)
+    say(`  Jev's takes [option <n>]:`)
     v.options.forEach((o, i) => {
-      say(`    ${i}${i === v.choice ? ' *' : ''}: ${computeTraitText([o.perk])} · but ${computeTraitText([o.drawback])}`)
+      const od = draftMind(s, { ...v, choice: i })
+      say(
+        `    ${i}${i === v.choice ? ' *' : ''}: ${o.step ? `+${o.step} IQ` : 'same IQ'} → IQ ${od.mind.hardware.iq} · ${computeTraitText([o.perk])} · but ${computeTraitText([o.drawback])} · needs IQ ${od.minIQ}, uses up ${describeCost(s, od.cost)}`
+      )
     })
     const d = draftMind(s, v)
     say(`  → IQ ${d.mind.hardware.iq} (${d.mind.hardware.name}, ${softwareLabel(d.mind)}), replacing the current platform for good`)
-    say(research(d))
   }
   const extra = catchesOf(v)
   if (extra.length) say(`  catches taken: ${extra.map((c) => complicationName(c).name).join(', ')}`)
-  const pays = payOptions(v).filter((p) => p.p > 0)
+  const pays = v.kind === 'mind' ? [] : payOptions(v).filter((p) => p.p > 0)
   if (pays.length > 1) {
     const now = v.picks.pay ?? pays[0]!.resourceId
     say(`  paid in [pick pay <resourceId>]: ${pays.map((p) => `${p.resourceId}${p.resourceId === now ? ' (chosen)' : ''} ${pct(p.p)}`).join(', ')}`)
@@ -505,8 +507,8 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   propose strategy '{"name":"..","description":"..","unitId":"..","inputIds":[],"outputId":".."}'
   propose unit '{"name":"..","description":"..","first":false}'   (Jev picks its tier, value and what it runs on)
   propose sourcing '{"unitId":"..","name":"..","description":".."}'   (a contract: how many you may own, and their parts; pick with option <n>)
-  propose mind '{"name":"..","description":"..","step":100,"hardware":"..","software":".."}'
-                               (step: IQ over your best, one of 25/50/75/100. It replaces your platform for good; Jev offers three perk+drawback pairs, pick with option <n>)
+  propose mind '{"name":"..","description":".."}'
+                               (replaces your platform for good; Jev offers three takes, each a perk+drawback pair at its own IQ step (25-100) and payer, pick with option <n>)
   propose cover '{"name":"..","description":".."}'
   dismiss <cardId|all>         dismiss explainer cards
   verdict | pick <key> <value> | option <n> (a unit's take, a platform's perk+drawback pair, a Create offer, a contract or an expansion)

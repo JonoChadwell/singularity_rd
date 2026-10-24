@@ -99,39 +99,9 @@
       </template>
 
       <template v-if="kind === 'mind'">
-        <label class="field">
-          <span>Hardware</span>
-          <span class="row">
-            <input
-              v-model="mind.hardware"
-              :maxlength="NAME_MAX"
-              :placeholder="name.trim() || 'The platform it runs on'"
-              aria-label="Hardware"
-            />
-            <button v-if="current" type="button" class="link small" @click="mind.hardware = nextHardwareName(current.hardware.name)">
-              {{ nextHardwareName(current.hardware.name) }}
-            </button>
-          </span>
-        </label>
-        <label class="field">
-          <span>Smarter by</span>
-          <span class="row">
-            <select v-model.number="mind.step" aria-label="Smarter by">
-              <option v-for="s in PLATFORM_STEPS" :key="s" :value="s">+{{ s }} IQ → IQ {{ bestNow + s }}</option>
-            </select>
-            <span class="small muted">{{ stepHint }}</span>
-          </span>
-        </label>
-        <label class="field">
-          <span>Software</span>
-          <span class="row">
-            <input v-model="mind.software" :maxlength="NAME_MAX" :placeholder="DEFAULT_SOFTWARE" aria-label="Software" />
-            <span class="small muted">{{ softwareVersion(false) }}; its upgrade can be redone, from scratch</span>
-          </span>
-        </label>
         <p v-if="current" class="muted small note">
-          It replaces {{ current.name }} for good, even a hardware “Mk II”: nothing carries over. Jev offers three
-          perk-and-drawback pairs to pick from.
+          It replaces {{ current.name }} for good, even a “Mk II”: nothing carries over. Jev offers three takes, each a
+          perk and drawback at its own size, paid for in its own resource.
         </p>
       </template>
 
@@ -313,24 +283,23 @@
         <div>Needs IQ {{ coverDraft.minIQ }} and uses up {{ coverDraft.cost.length ? describeCost(game.state, coverDraft.cost) : 'nothing' }}, now.</div>
         <div v-if="coverBlock" class="bad">{{ coverBlock }}</div>
       </div>
-      <div v-else-if="verdict.kind === 'mind' && mindDraft" class="outcome small">
-        <div>
-          {{ mindDraft.mind.icon }} <strong>{{ mindDraft.mind.name }}</strong>: {{ mindDraft.mind.hardware.name }}
-          hardware, IQ {{ mindDraft.mind.hardware.iq }}, running {{ mindDraft.mind.software.name }}.
-        </div>
-        <p class="muted small cards-legend">Jev’s takes: a perk and the drawback that comes with it</p>
-        <div v-if="mindOptions.length" class="cards">
+      <div v-else-if="verdict.kind === 'mind' && mindOptions.length" class="outcome small">
+        <p class="muted small cards-legend">Jev’s takes: pick one. It replaces your platform for good.</p>
+        <div class="cards">
           <OptionCard v-for="o in mindOptions" :key="o.i" :chosen="mindChoice === o.i" @select="mindChoice = o.i">
+            <div>
+              <strong>{{ o.step ? '+' + o.step + ' IQ' : 'Same IQ' }}</strong> → IQ {{ o.draft.mind.hardware.iq }}
+            </div>
             <div class="good" :title="o.perk.rule">{{ o.perk.icon }} {{ o.perk.name }}</div>
             <div class="muted">{{ o.perk.rule }}</div>
             <div class="warn" :title="o.drawback.rule">{{ o.drawback.icon }} {{ o.drawback.name }}</div>
             <div class="muted">{{ o.drawback.rule }}</div>
+            <div class="muted">{{ researchText(o.draft) }}</div>
             <template #actions>
               <ApplyButtons :blocker="blockers[o.i] ?? null" @apply="applyNow(o.i)" />
             </template>
           </OptionCard>
         </div>
-        <div class="warn">{{ researchText(mindDraft) }}</div>
       </div>
     </VerdictView>
   </dialog>
@@ -338,16 +307,15 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue'
-import { HOLDERS, MAX_IQ_STEP, PLATFORM_STEPS, platformGateTier } from '@/engine/balance'
+import { HOLDERS } from '@/engine/balance'
 import { computeTrait } from '@/engine/computeTraits'
 import { resourceTrait } from '@/engine/resourceTraits'
 import { describeOption, optionBlocker, overflowOf, precheckCreate } from '@/engine/createProposal'
 import { applyBlocker, isBankable } from '@/engine/banking'
 import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
-import { DEFAULT_SOFTWARE, draftMind, precheckMind, stepFor } from '@/engine/mindProposal'
+import { draftMind, precheckMind } from '@/engine/mindProposal'
 import {
   bandText,
-  bestIQ,
   bestMind,
   byTier,
   capOf,
@@ -356,7 +324,6 @@ import {
   findResource,
   fmt,
   nextHardwareName,
-  softwareVersion,
   tierLabel,
   tierText,
   unitValueText
@@ -495,17 +462,7 @@ const strategy = reactive({
   outputId: props.request.outputId ?? game.state.resources[0]?.id ?? ''
 })
 
-const mind = reactive({
-  step: props.request.iq ? stepFor(game.state, props.request.iq) : MAX_IQ_STEP,
-  hardware: '',
-  software: ''
-})
 const current = computed(() => bestMind(game.state))
-const bestNow = computed(() => Math.round(bestIQ(game.state)))
-const stepHint = computed(() => {
-  const tier = platformGateTier(bestNow.value + mind.step)
-  return tier === null ? 'Any stock may pay.' : `Paid in a tier ${tier}+ resource your units make.`
-})
 const creation = reactive({
   target: props.request.unitId
     ? `unit:${props.request.unitId}`
@@ -525,6 +482,13 @@ const chip = (n: number) => Number(n.toPrecision(2))
 const presetName = ref('')
 const missingResources = ref<string[]>([])
 
+/** The current platform's next generation comes first, then the ready-made ideas. */
+const mindPresets = computed(() => {
+  const m = current.value
+  const next = m ? [{ name: nextHardwareName(m.hardware.name), description: `The next generation of ${m.hardware.name}.` }] : []
+  return [...next, ...MIND_PRESETS]
+})
+
 const presetItems = computed<PresetItem[]>(() => {
   const blocked = (n: string) => (taken(game.state, n) ? 'Already in the game.' : null)
   if (kind === 'resource') return RESOURCE_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
@@ -533,7 +497,7 @@ const presetItems = computed<PresetItem[]>(() => {
   if (kind === 'sourcing') return SOURCING_PRESETS.map((p) => ({ ...p, icon: '📦', blocked: null }))
   if (kind === 'storage') return STORAGE_PRESETS.map((p) => ({ ...p, icon: '🏗️', blocked: null }))
   if (kind === 'cover') return COVER_PRESETS.map((p) => ({ ...p, icon: '🕶️', blocked: blocked(p.name) }))
-  if (kind === 'mind') return MIND_PRESETS.map((p) => ({ ...p, icon: '🧠', blocked: blocked(p.name) }))
+  if (kind === 'mind') return mindPresets.value.map((p) => ({ ...p, icon: '🧠', blocked: blocked(p.name) }))
   return UNIT_PRESETS.map((p) => ({ ...p, icon: '🏭', blocked: blocked(p.name) }))
 })
 
@@ -577,11 +541,10 @@ function applyPreset(presetId: string) {
     name.value = p.name
     description.value = p.description
   } else if (kind === 'mind') {
-    const p = MIND_PRESETS.find((x) => x.name === presetId)
+    const p = mindPresets.value.find((x) => x.name === presetId)
     if (!p) return
     name.value = p.name
     description.value = p.description
-    Object.assign(mind, { hardware: p.hardware, software: p.software })
   } else {
     const p = UNIT_PRESETS.find((x) => x.name === presetId)
     if (!p) return
@@ -615,7 +578,7 @@ const input = computed<ProposalInput>(() => {
     return { kind, spec: { ...base, unitId: strategy.unitId, inputIds: strategy.inputIds.filter(Boolean), outputId: strategy.outputId } }
   }
   if (kind === 'unit') return { kind, spec: { ...base, first } }
-  if (kind === 'mind') return { kind, spec: { ...base, step: mind.step, hardware: mind.hardware, software: mind.software } }
+  if (kind === 'mind') return { kind, spec: base }
   if (kind === 'create') return { kind, spec: { ...base, target: creationTarget.value } }
   if (kind === 'sourcing') return { kind, spec: { ...base, unitId: sourcing.unitId } }
   if (kind === 'storage') return { kind, spec: { ...base, resourceId: storage.resourceId } }
@@ -672,11 +635,17 @@ const unitChoice = computed({
     if (verdict.value?.kind === 'unit') verdict.value.choice = choice
   }
 })
-const mindDraft = computed(() => (verdict.value?.kind === 'mind' ? draftMind(game.state, verdict.value) : null))
+// Jev's takes on the new platform, each drafted as if picked, to show its size and what it would cost.
 const mindOptions = computed(() => {
   const v = verdict.value
   if (v?.kind !== 'mind') return []
-  return v.options.map((o, i) => ({ i, perk: computeTrait(o.perk), drawback: computeTrait(o.drawback) }))
+  return v.options.map((o, i) => ({
+    i,
+    step: o.step,
+    perk: computeTrait(o.perk),
+    drawback: computeTrait(o.drawback),
+    draft: draftMind(game.state, { ...v, choice: i })
+  }))
 })
 const resourceOptions = computed(() => {
   const v = verdict.value
@@ -748,7 +717,7 @@ function saveForLater() {
     feedback.value = game.lastError
     return
   }
-  const n = v.options.filter((o) => !('blocked' in o && o.blocked)).length
+  const n = v.options.length
   finish({ tone: 'good', text: `Saved ${n} option${n === 1 ? '' : 's'} to Research.` })
 }
 

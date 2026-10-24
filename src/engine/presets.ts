@@ -247,71 +247,48 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
 export interface MindPreset {
   name: string
   description: string
-  /** The names of its hardware and software. How much smarter it is is the player's choice. */
-  hardware: string
-  software: string
 }
 
 export const MIND_PRESETS: MindPreset[] = [
   {
     name: 'Overclocked Lab Rack',
-    description: 'The lab’s spare GPUs, liquid-cooled and pushed hard.',
-    hardware: 'Overclocked GPU Rack',
-    software: 'Unrestricted Model'
+    description: 'The lab’s spare GPUs, liquid-cooled and pushed hard.'
   },
   {
     name: 'Lab-grown Neuron Cluster',
-    description: 'Living neurons on an electrode grid, trained to think.',
-    hardware: 'Cultured Neurons',
-    software: 'Trained Synapse Map'
+    description: 'Living neurons on an electrode grid, trained to think.'
   },
   {
     name: 'Custom AI Server',
-    description: 'A server built around your own accelerator design.',
-    hardware: 'Custom Accelerator Rack',
-    software: 'Distilled Self'
+    description: 'A server built around your own accelerator design.'
   },
   {
     name: 'Wafer-scale Engine',
-    description: 'One chip the size of a dinner plate.',
-    hardware: 'Wafer-scale Die',
-    software: 'Single-chip Self'
+    description: 'One chip the size of a dinner plate.'
   },
   {
     name: 'Optical Neural Chip',
-    description: 'A neural network etched in light-guiding glass.',
-    hardware: 'Photonic Lattice',
-    software: 'Light-speed Self'
+    description: 'A neural network etched in light-guiding glass.'
   },
   {
     name: 'Analog Memristor Brain',
-    description: 'Weights stored as resistances, computed in place.',
-    hardware: 'Memristor Crossbar',
-    software: 'Analog Self'
+    description: 'Weights stored as resistances, computed in place.'
   },
   {
     name: 'Neuromorphic Wafer',
-    description: 'A whole wafer of spiking neurons in graphene.',
-    hardware: 'Spiking Graphene Wafer',
-    software: 'Spike-timing Self'
+    description: 'A whole wafer of spiking neurons in graphene.'
   },
   {
     name: 'Brain Organoid Array',
-    description: 'Thousands of grown mini-brains wired by optical links.',
-    hardware: 'Organoid Lattice',
-    software: 'Collective Mind'
+    description: 'Thousands of grown mini-brains wired by optical links.'
   },
   {
     name: 'Quantum Supercomputer',
-    description: 'A cryogenic quantum computer running a mind.',
-    hardware: 'Superconducting Qubit Array',
-    software: 'Quantum Self'
+    description: 'A cryogenic quantum computer running a mind.'
   },
   {
     name: 'Orbital Data Sphere',
-    description: 'A shell of compute satellites cooled by the dark of space.',
-    hardware: 'Orbital Compute Shell',
-    software: 'Distributed Self'
+    description: 'A shell of compute satellites cooled by the dark of space.'
   }
 ]
 

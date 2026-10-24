@@ -1,4 +1,4 @@
-import { ranked, type JevQuestion, type Judge } from '@/ai/jev'
+import { answerFor, ranked, readNoul, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
 import { compatible, computeTrait, PERKS, type ComputeTraitId } from './computeTraits'
 import { contractsFor, currentIQ, findMind, findResource, findStrategy, findUnit, softwareVersion } from './model'
@@ -14,7 +14,7 @@ import {
 } from './proposals'
 import { lockReason } from './phase'
 import { seedOf } from './planPresets'
-import { priceCost } from './research'
+import { costMultiplier, priceCost } from './research'
 import { alarmQuestion, asksAlarm, riskFrom } from './risk'
 import { proposalText } from './stateText'
 import { ALL_TRAITS, TRAITS, UPKEEP_TRAITS } from './traits'
@@ -46,8 +46,12 @@ export interface UpgradeOption extends Candidate {
  * The IQ each of a platform's software options adds: random, but not all the same, and fixed for
  * the week, so asking again the same week offers the same sizes.
  */
-export function softwareSteps(state: GameState, mindId: string, count: number): number[] {
-  const steps = B.SOFTWARE_STEPS
+export function softwareSteps(
+  state: GameState,
+  mindId: string,
+  count: number,
+  steps: readonly number[] = B.SOFTWARE_STEPS
+): number[] {
   let seed = seedOf(`${state.runId}/${state.week}/${mindId}`)
   // The high bits: an LCG's low bits repeat with a short period.
   const next = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) >>> 16
@@ -266,6 +270,18 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
           candidates.map((c, i) => [`a_${keyOf(i)}`, alarmQuestion(state, `improving ${thing.name} this way (${text(c)})`)])
         )
       : {}),
+    // A software improvement that isn't a natural fit costs more.
+    ...(target.kind === 'mind'
+      ? Object.fromEntries(
+          candidates.map((c, i) => [
+            `f_${keyOf(i)}`,
+            {
+              type: 'noul',
+              instructions: `Could the AI plausibly develop this software improvement to ${thing.name}? ${text(c)}`
+            } as JevQuestion
+          ])
+        )
+      : {}),
     ...payQuestion(state, `improvements to ${thing.name}`)
   }
   const answers = await judge.ask(
@@ -316,7 +332,8 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
         const withTrait = c.changes.some((x) => x.kind === 'computeTrait') ? B.TRAIT_SOFTWARE_COST : 1
         // A mind can always work on its own upgrade; a bigger step just costs more.
         const step = steps[n]!
-        const worth = B.MIND_UPGRADE_SHARE * withTrait * (B.softwareCost(before + step) - B.softwareCost(before))
+        const plausible = costMultiplier(readNoul(answerFor(answers, `f_${keyOf(i)}`)), B.BARS.mind)
+        const worth = B.softwarePrice(before, step) * withTrait * plausible
         const changes = c.changes.map((x) => (x.kind === 'software' ? { ...x, iq: step } : x))
         return {
           ...c,

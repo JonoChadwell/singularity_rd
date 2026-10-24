@@ -50,8 +50,11 @@ weeks off the clock; cover research buys some back.
   every week for good. It grows with your industry and IQ², and reaching above your IQ's tier
   costs output, a little for a little.
 - **Intelligence** is one machine at a time: a hardware platform with an IQ, running software. A
-  new platform is 25 to 100 IQ smarter than your best and **replaces the old one for good**. Jev
-  offers three perk-and-drawback pairs from a fixed list of compute traits, and you pick one.
+  new platform takes just a name and a description, and **replaces the old one for good**. Jev
+  offers three takes, each a perk-and-drawback pair from a fixed list of compute traits at its own
+  size (25 to 100 IQ smarter than your best, random each week; or the same IQ, which turns software
+  into hardware) and paid for in its own resource. A platform costs the hardware IQ it adds over the
+  old one's, from a fixed table.
   Traits change research costs, the Phase 2 clock, which stock is burned each week, or the IQ
   counted for one type of research. The smartest platforms (IQ 300 and up) must be paid for in a
   resource your units make, of a high enough tier.
@@ -67,7 +70,8 @@ weeks off the clock; cover research buys some back.
 - **Resources** keep from week to week, up to a **storage cap**; what's made past it is lost.
   Storage research raises it: Jev rates how you'd do it, you pick modest, large with a catch, or
   huge and risky, and your IQ limits who could plausibly hold the total (an individual at IQ 100,
-  up to the whole Earth at 500). When demand outstrips supply, every user gets the same share.
+  up to the whole Earth at 500). Options above your IQ are still shown and can be saved for
+  later; they need that IQ to research. When demand outstrips supply, every user gets the same share.
 - **Resources have a nature:** one or two traits from a fixed list of 20, each an upside with a
   downside (Energetic: costs in it are half, but half of what's left is lost each week). A plan's
   resources get Jev's pick; one you add by hand offers three to choose from.
