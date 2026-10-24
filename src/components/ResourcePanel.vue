@@ -12,18 +12,18 @@
         <div class="info">
           <div class="name">
             {{ r.name }}
-            <span class="chip" :title="r.kind === 'stock' ? 'Keeps from week to week' : 'Made and used within a week; unused flow is lost'">
-              {{ r.kind }}
+            <span v-if="wasted(r.id) > 0" class="chip warn" title="Next week, this much won't fit in storage and is lost">
+              overflows {{ fmt(wasted(r.id)) }}
             </span>
             <span v-if="share(r.id) < 0.999" class="chip warn" title="Everyone who needs it runs at this share">
               {{ Math.round(share(r.id) * 100) }}%
             </span>
           </div>
           <div v-if="unmade(r.id)" class="how small">
-            <template v-if="ways(r).length > 1">
+            <template v-if="ways().length > 1">
               <span class="muted">How will you get this?</span>
               <button
-                v-for="w in ways(r)"
+                v-for="w in ways()"
                 :key="w.kind"
                 class="link"
                 :title="`Propose ${w.label.toLowerCase()} that makes ${r.name}`"
@@ -35,28 +35,38 @@
             <button
               v-else
               class="link"
-              :title="`Propose ${ways(r)[0]!.label.toLowerCase()} that makes ${r.name}`"
-              @click.stop="ui.openInvent({ kind: ways(r)[0]!.kind, outputId: r.id })"
+              :title="`Propose ${ways()[0]!.label.toLowerCase()} that makes ${r.name}`"
+              @click.stop="ui.openInvent({ kind: ways()[0]!.kind, outputId: r.id })"
             >
               How will you get this?
             </button>
           </div>
+          <div class="bar" :title="`${fmt(r.amount)} of ${fmt(capOf(game.state, r))} storage`">
+            <div class="fill" :class="{ full: r.amount >= capOf(game.state, r) * 0.999 }" :style="{ width: `${fillPct(r)}%` }" />
+          </div>
         </div>
         <div class="amount num">
-          <template v-if="r.kind === 'stock'">
-            {{ fmt(r.amount) }}
-            <Delta :value="netFlow(game.preview, r.id)" />
-          </template>
-          <template v-else>
-            <span :title="'Made next week'">{{ fmt(made(r.id)) }}</span>
-            <span class="muted small">/wk</span>
-          </template>
+          {{ fmt(r.amount) }}<span class="muted small"> / {{ fmt(capOf(game.state, r)) }}</span>
+          <Delta :value="netFlow(game.preview, r.id)" />
+          <button
+            class="link small store"
+            :disabled="!!lockReason(game.state, 'storage')"
+            :title="`Research more storage for ${r.name}`"
+            @click.stop="ui.openInvent({ kind: 'storage', resourceId: r.id })"
+          >
+            + Store
+          </button>
         </div>
 
         <div class="breakdown" role="tooltip">
           <div class="bd-title">{{ r.name }}: next week</div>
           <p class="muted">{{ r.description }}</p>
           <p class="muted">{{ tierText(r) }} · one is worth: {{ bandText(r) }}</p>
+          <p class="muted">
+            Holds {{ fmt(capOf(game.state, r)) }}: {{ fmt(r.cap) }} to start<template v-for="e in r.expansions" :key="e.name"
+              >, +{{ fmt(e.added) }} from {{ e.name }}{{ e.catch ? ` (${describeCatch(game.state, e.catch).toLowerCase()})` : '' }}</template
+            >.
+          </p>
           <template v-if="flows(r.id).length">
             <div v-for="f in flows(r.id)" :key="f.label" class="bd-row num">
               <span>{{ f.label }}</span>
@@ -65,12 +75,9 @@
               </span>
             </div>
             <div class="bd-row bd-total num">
-              <span>{{ r.kind === 'flow' ? 'Left over' : 'Net' }}</span>
+              <span>Net</span>
               <span>{{ signed(netFlow(game.preview, r.id)) }}</span>
             </div>
-            <p v-if="r.kind === 'flow' && netFlow(game.preview, r.id) > 0" class="muted">
-              Unused flow is lost, unless something Stores it.
-            </p>
           </template>
           <p v-else class="muted">Nothing makes or uses this next week.</p>
         </div>
@@ -82,8 +89,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { netFlow } from '@/engine/economy'
-import { bandText, byTier, fmt, tierText } from '@/engine/model'
+import { bandText, byTier, capOf, fmt, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
+import { describeCatch } from '@/engine/storageProposal'
 import type { Resource } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
@@ -93,27 +101,21 @@ const game = useGameStore()
 const ui = useUiStore()
 const sorted = computed(() => byTier(game.state.resources))
 const flows = (id: string) => game.preview.flows[id] ?? []
-const made = (id: string) => flows(id).reduce((n, f) => n + Math.max(0, f.amount), 0)
 const share = (id: string) => game.preview.shares[id] ?? 1
+const wasted = (id: string) => game.preview.wasted[id] ?? 0
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
-/**
- * The proposals that could make a resource. Only stocks can be passive income, and strategies
- * need a unit to run them; a flow with no units yet still points at strategies, whose form says
- * to propose a unit first.
- */
-function ways(r: Resource): { kind: 'income' | 'strategy'; label: string }[] {
-  const out: { kind: 'income' | 'strategy'; label: string }[] = []
-  if (r.kind === 'stock') out.push({ kind: 'income', label: 'A passive income' })
-  if (lockReason(game.state, 'strategy')) return out
-  if (game.state.units.length || r.kind === 'flow') out.push({ kind: 'strategy', label: 'A strategy' })
+const fillPct = (r: Resource) => Math.min(100, (100 * r.amount) / Math.max(1e-9, capOf(game.state, r)))
+/** The ways to make a resource now: Create, and once there are units, a strategy. */
+function ways(): { kind: 'create' | 'strategy'; label: string }[] {
+  const out: { kind: 'create' | 'strategy'; label: string }[] = [{ kind: 'create', label: 'Create it' }]
+  if (!lockReason(game.state, 'strategy') && game.state.units.length) out.push({ kind: 'strategy', label: 'A strategy' })
   return out
 }
 
-/** Nothing makes it, and there's a way it could be made now. */
+/** Nothing makes it. */
 const unmade = (id: string) =>
-  ways(game.state.resources.find((r) => r.id === id)!).length > 0 &&
   !game.state.strategies.some((s) => s.kind === 'make' && s.outputId === id) &&
-  !game.state.incomes.some((i) => i.resourceId === id)
+  !game.state.deliveries.some((d) => d.target.kind === 'resource' && d.target.id === id)
 </script>
 
 <style scoped>
@@ -174,6 +176,28 @@ li:focus {
 .amount {
   text-align: right;
   white-space: nowrap;
+}
+
+.store {
+  display: block;
+  margin-left: auto;
+}
+
+.bar {
+  height: 3px;
+  margin-top: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--good);
+}
+
+.fill.full {
+  background: var(--warn);
 }
 
 .breakdown {

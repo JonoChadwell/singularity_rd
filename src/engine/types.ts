@@ -1,29 +1,49 @@
 import type { JevAnswer } from '@/ai/jev'
+import type { StorageCatchId } from './balance'
 import type { ComputeTraitId } from './computeTraits'
 import type { QuirkId, TraitId } from './traits'
 
+/** Every resource is a stock: it keeps from week to week, up to its storage cap. */
 export interface Resource {
   id: string
   name: string
   description: string
   icon: string
-  /** Stocks keep from week to week. Flows are made and used within a week. */
-  kind: 'stock' | 'flow'
   /** Index into the value bands. */
   band: number
   /**
    * How far along the game it is, 0 to 4. Each phase's plan has one resource at the top (Phase
-   * 1: tier 1, Phase 2: tier 4) and its goal uses that up. The first income for a resource is
-   * paid only in lower tiers, so the first for a tier-0 resource is free.
+   * 1: tier 1, Phase 2: tier 4) and its goal uses that up.
    */
   tier: number
   /** Worth of one, in Money. */
   value: number
-  /** On hand (stocks only). */
+  /** On hand. */
   amount: number
-  /** Flow held over from last week by units that Store it. */
-  stored: number
+  /** The most it can hold before expansions: STORAGE_WORTH of its tier, in units. */
+  cap: number
+  /** Storage expansions researched for it. */
+  expansions: Expansion[]
 }
+
+/** Extra storage for one resource, from research. */
+export interface Expansion {
+  name: string
+  /** Units of the resource it adds to the cap. */
+  added: number
+  /** A catch the player took for a bigger expansion. */
+  catch: StorageCatch | null
+}
+
+export type StorageCatch =
+  /** Needs `amount` of a resource a week, or the extra space is lost that week. */
+  | { kind: 'upkeep'; resourceId: string; amount: number }
+  /** `share` of the amount stored spoils every week. */
+  | { kind: 'decay'; share: number }
+  /** Only `share` of the added space can fill each week. */
+  | { kind: 'fill'; share: number }
+
+export type { StorageCatchId }
 
 export interface Flow {
   resourceId: string
@@ -65,7 +85,10 @@ export interface Software {
   upgraded: boolean
 }
 
-/** An industry unit: anything you own a number of, running strategies. */
+/**
+ * An industry unit: anything you own a number of, running strategies. How many you may own is
+ * set by its sourcing contracts; a new design has none.
+ */
 export interface UnitType {
   id: string
   name: string
@@ -78,13 +101,9 @@ export interface UnitType {
   tier: number
   /** Jev's plausibility, kept for the card. */
   plausibility: number
-  /** What creating or building one uses. */
-  parts: Flow[]
   /** Paid per working unit per week. */
   upkeep: Flow[]
-  /** A unit that can also build these, with a build strategy. */
-  builderId: string | null
-  /** Total ever created or built. */
+  /** Total ever created. */
   built: number
   traits: TraitId[]
   /** Needs crew: how many of which unit each one needs. */
@@ -93,7 +112,7 @@ export interface UnitType {
   boosts: string | null
   /** By-product: the resource its strategies also make. */
   byproduct: string | null
-  /** Stores: the flow it holds over. */
+  /** Stores: the resource it adds storage for. */
   stores: string | null
   overclocked: boolean
   /** Weeks it has run (Learns on the job). */
@@ -106,10 +125,23 @@ export interface UnitType {
   assign: Record<string, number>
   /** The strategy that takes every unit not counted in `assign`. */
   rest: string | null
-  /** The highest power of ten of the fleet's worth that humans have noticed (0 = none yet). */
-  noticed?: number
-  /** Designed with a risky research: humans notice it twice as hard. */
-  risky?: boolean
+}
+
+/**
+ * A sourcing contract: a lease on `total` of a unit, each created later from `parts` at no
+ * action. A unit type's cap is the sum of its contracts' totals.
+ */
+export interface Sourcing {
+  id: string
+  unitId: string
+  name: string
+  description: string
+  /** What creating one uses. */
+  parts: Flow[]
+  total: number
+  /** Slots filled. Lost units give theirs back. */
+  used: number
+  risky: boolean
 }
 
 export interface Strategy {
@@ -119,37 +151,35 @@ export interface Strategy {
   unitId: string
   /**
    * make: turns inputs into a resource.
-   * build: turns parts into units of `outputId`, up to `target`.
    * crew: crews units of `outputId`.
    */
-  kind: 'make' | 'build' | 'crew'
+  kind: 'make' | 'crew'
   inputs: Flow[]
-  /** A resource id for make, a unit id for build and crew. */
+  /** A resource id for make, a unit id for crew. */
   outputId: string
-  /** Made per running unit per week (units built, or units crewed). */
+  /** Made per running unit per week (or units crewed). */
   amount: number
   /** Make only: the exact multiplier Jev rated it (see EFFICIENCY), kept to name it. */
   efficiency?: number
-  /** Build only: stop when you own this many. */
-  target?: number
-  /** Build only: a part-built unit carried into next week. */
-  carry?: number
   /** A catch the player accepted for a better result. */
   quirk?: QuirkId
   /** Weeks it has run (Slow to start). */
   weeksRun?: number
 }
 
+/** What a Create delivers: a resource, or units of a designed type (with cap to match). */
+export type CreateTarget = { kind: 'resource' | 'unit'; id: string }
+
 /**
- * A passive income: so much of a stock resource every week, with no units needed. A growing
- * income yields `amount` for each one of `per` owned, up to `cap` a week.
+ * A delivery from a Create: `amount` of the target each week it pays, starting after `delay`
+ * weeks, for `weeks` weeks (null: every week, for good).
  */
-export interface Income {
+export interface Delivery {
   name: string
-  resourceId: string
+  target: CreateTarget
   amount: number
-  per?: string
-  cap?: number
+  delay: number
+  weeks: number | null
 }
 
 /** One change an upgrade makes. */
@@ -158,6 +188,7 @@ export type Change =
   | { kind: 'software'; iq: number }
   | { kind: 'computeTrait'; trait: ComputeTraitId; add: boolean }
   | { kind: 'upkeep'; resourceId: string; factor: number }
+  /** Parts on every sourcing contract for the unit. */
   | { kind: 'parts'; resourceId: string; factor: number }
   | { kind: 'trait'; trait: TraitId; add: boolean }
   | { kind: 'output'; strategyId: string; factor: number }
@@ -170,14 +201,16 @@ export type ResearchEffect =
   | { kind: 'mind'; mind: Mind }
   | { kind: 'strategy'; strategy: Strategy }
   | { kind: 'upgrade'; target: UpgradeTarget; changes: Change[] }
-  /** Passive income: once researched, adds `income.amount` every week. */
-  | { kind: 'income'; income: Income }
+  /** A sourcing contract: once researched, units of its type can be created from it. */
+  | { kind: 'sourcing'; sourcing: Sourcing }
+  /** A storage expansion for one resource. */
+  | { kind: 'storage'; resourceId: string; expansion: Expansion }
   /** A phase's goal: researching it wins the phase. */
   | { kind: 'goal'; phase: PhaseNumber }
   /** Cover: moves the deadline back. `weeks` before diminishing returns. */
   | { kind: 'cover'; weeks: number }
 
-/** What a research uses up: amounts of stock resources. */
+/** What a research uses up: amounts of resources. */
 export type Cost = Flow[]
 
 /** A research humans would notice: it costs weeks off the clock when it's done. */
@@ -187,7 +220,7 @@ export interface Risk {
   weeks: number
 }
 
-/** Research is instant: a mind at least `minIQ` smart, the cost, and the week's research slot. */
+/** Research is instant: a mind at least `minIQ` smart, the cost, and the week's action. */
 export interface Research {
   id: string
   name: string
@@ -253,7 +286,7 @@ export interface Invention {
   week: number
   icon: string
   name: string
-  kind: 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'income' | 'plan' | 'cover'
+  kind: 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'sourcing' | 'storage' | 'create' | 'plan' | 'cover'
 }
 
 export interface Stats {
@@ -273,6 +306,7 @@ export interface WeekReport {
   runs: Record<string, { units: number; fraction: number; limitedBy: string | null }>
   /** Per unit type. */
   units: Record<string, UnitWeek>
+  /** Per resource: what overflowed its storage cap. */
   wasted: Record<string, number>
 }
 
@@ -283,16 +317,15 @@ export interface UnitWeek {
   unpaid: number
   /** Upkeep resource that ran short, if any. */
   unpaidFor: string | null
-  /** Builders with nothing to build, because the target is reached. */
-  done: number
   /** Not working this week (Intermittent). */
   resting: boolean
+  /** Arrived from a Create. */
   built: number
   lost: number
 }
 
 export interface GameState {
-  version: 13
+  version: 15
   runId: string
   week: number
   phase: PhaseState
@@ -308,13 +341,15 @@ export interface GameState {
   /** The active platform, and nothing else: a new platform replaces it. */
   minds: Mind[]
   units: UnitType[]
+  /** Sourcing contracts: what caps each unit type. */
+  sourcing: Sourcing[]
   strategies: Strategy[]
   research: Research[]
-  /** Passive incomes from research: each adds its amount every week. */
-  incomes: Income[]
+  /** What Creates still have to deliver, including every-week ones. */
+  deliveries: Delivery[]
   /** Names of finished upgrades, for the log and the end of a run. */
   upgrades: { name: string; targetId: string; week: number; key?: string }[]
-  /** One research proposal a week: accepting a strategy, unit, mind, upgrade or income uses it. */
+  /** One action a week: a research proposal (not a resource) or a Create. */
   proposedThisWeek: boolean
   inventions: Invention[]
   milestones: Milestone[]

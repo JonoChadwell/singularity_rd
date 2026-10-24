@@ -20,7 +20,7 @@ the new one comes online. A waiting platform that is no smarter than the one you
 researched.
 
 ### 2. Compute traits
-Perks and drawbacks baked into the current platform, from a **fixed list** (like the 16 unit
+Perks and drawbacks baked into the current platform, from a **fixed list** (like the 14 unit
 traits). When a platform is proposed, Jev ranks the perks and the drawbacks by how well they suit
 it, and the game offers the top three **perk-and-drawback pairs**. The player picks one. A perk is
 never paired with a drawback of its own family.
@@ -30,11 +30,12 @@ never paired with a drawback of its own family.
 | Frugal | Costly | Research you propose costs 20% less / 30% more |
 | Discreet | Noisy | +6 / −6 weeks on the Phase 2 clock, once, when it arrives |
 | | Thirsty | Burns 5% of your richest stock (by worth) every week. Running dry costs nothing |
-| Financier, Strategist, Inventor, Tinkerer, Deceiver | Blind to income, Short-sighted, Unimaginative, Clumsy, Honest to a fault | ±50 IQ counted for passive incomes, strategies, unit designs, unit upgrades, cover |
+| Fabricator, Strategist, Inventor, Tinkerer, Deceiver | Butterfingers, Short-sighted, Unimaginative, Clumsy, Honest to a fault | ±50 IQ counted for Creates, strategies, unit designs and sourcing, unit upgrades, cover |
 
 The IQ adjustment is the designer's "perks and drawbacks adjust the IQ this compute model provides
 for those thresholds for certain types of research". **(Claude's default for the details:)**
-- The types are a fixed list: income, strategy, unit, unit upgrade, cover.
+- The types are a fixed list: create, strategy, unit (designs and sourcing), unit upgrade, cover.
+  (Passive incomes were replaced by Create in save version 14; see ECONOMY_DESIGN.md.)
 - Goals and platforms (and the platform's own software upgrade) always use the **raw** IQ, so a
   drawback can never block victory.
 - Everywhere else the adjusted IQ is what counts. The research list, the upgrade dialog and the

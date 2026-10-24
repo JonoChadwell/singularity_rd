@@ -27,18 +27,15 @@ import { addUnit, crewPer } from './research'
 import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import { ALL_TRAITS, TRAITS, type TraitId } from './traits'
-import type { Cost, Flow, GameState, Resource, UnitType } from './types'
+import type { Cost, Flow, GameState, Resource, Sourcing, UnitType } from './types'
 import { newUnit } from './initialState'
 
 export interface UnitSpec {
   name: string
   description: string
-  /** A unit that can also build it, with a build strategy. null = only created from parts. */
-  builderId: string | null
-  /** Phase 2's first unit, from the plan: free, and designed at once. */
+  /** Phase 2's first unit, from the plan: free, designed at once, with a small contract. */
   first?: boolean
 }
-
 
 export interface TraitOdds {
   trait: TraitId
@@ -48,14 +45,13 @@ export interface TraitOdds {
 
 /**
  * One way Jev could see the unit: how advanced it is, how much one is worth (a value band), and
- * what it is made from and runs on, which are never above its own tier.
+ * what it runs on, which is never above its own tier. What it's made from is a matter for each
+ * sourcing contract.
  */
 export interface UnitOption {
   tier: number
   band: number
-  /** The stocks one is made from: more of them for a higher tier (PARTS_BY_TIER). */
-  partsIds: string[]
-  /** What it runs on each week: a stock or a flow. */
+  /** What it runs on each week. */
   upkeepId: string
   /** Its traits: part of the take, so a near-the-line trait is on in one take and off in another. */
   traits: TraitId[]
@@ -64,10 +60,7 @@ export interface UnitOption {
 export interface UnitVerdict extends VerdictBase {
   kind: 'unit'
   spec: UnitSpec
-  /**
-   * Jev's takes on tier, value, resources and traits, best first, and never two alike in what
-   * they are made from and run on. The player picks one.
-   */
+  /** Jev's takes on tier, value, upkeep and traits, best first, never two alike. The player picks one. */
   options: UnitOption[]
   /** Which option the player picked. */
   choice: number
@@ -78,16 +71,15 @@ export interface UnitVerdict extends VerdictBase {
 /** Question keys use underscores. */
 const key = (id: string) => id.replace(/-/g, '_')
 
-/** A blank form: Jev chooses what a unit is made from and runs on. */
-export const guessUnitSpec = (): UnitSpec => ({ name: '', description: '', builderId: null })
+/** A blank form. */
+export const guessUnitSpec = (): UnitSpec => ({ name: '', description: '' })
 
-/** The stocks a unit of this tier may be made from: its own tier and below, lowest first. */
+/** The resources a unit of this tier may be made from: its own tier and below, lowest first. */
 export const partPool = (state: GameState, tier: number): Resource[] =>
-  byTier(state.resources).filter((r) => r.kind === 'stock' && r.tier <= tier)
-
-/** What a unit of this tier may run on, a stock or a flow: its own tier and below, lowest first. */
-export const runPool = (state: GameState, tier: number): Resource[] =>
   byTier(state.resources).filter((r) => r.tier <= tier)
+
+/** What a unit of this tier may run on: its own tier and below, lowest first. */
+export const runPool = partPool
 
 export function precheckUnit(state: GameState, spec: UnitSpec): string | null {
   const locked = lockReason(state, 'unit')
@@ -97,29 +89,20 @@ export function precheckUnit(state: GameState, spec: UnitSpec): string | null {
   if (slot) return slot
   const nameError = precheckName(state, spec.name)
   if (nameError) return nameError
-  if (!state.resources.some((r) => r.kind === 'stock')) return 'Propose a resource first: a unit is made from one.'
-  // The first unit is tier 0, so it needs something at tier 0 to be made from.
-  if (spec.first && !partPool(state, 0).length) return 'You need a tier 0 stock to make your first unit from.'
-  if (spec.builderId && !findUnit(state, spec.builderId)) return 'Unknown builder.'
+  if (!state.resources.length) return 'Propose a resource first: a unit runs on one.'
+  // The first unit is tier 0, so it needs something at tier 0 to be made from and run on.
+  if (spec.first && !partPool(state, 0).length) return 'You need a tier 0 resource to make your first unit from.'
   return null
 }
 
 function paramOptions(state: GameState, param: NonNullable<(typeof TRAITS)[TraitId]['param']>): Record<string, string> {
-  switch (param) {
-    case 'unit':
-      return options(state.units)
-    case 'resource':
-      return options(state.resources)
-    case 'flow':
-      return options(state.resources.filter((r) => r.kind === 'flow'))
-  }
+  return param === 'unit' ? options(state.units) : options(state.resources)
 }
 
 export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): Promise<UnitVerdict> {
   const spec: UnitSpec = { ...raw, ...cleanText(raw.name, raw.description) }
   const refusal = precheckUnit(state, spec)
   if (refusal) throw new Error(refusal)
-  const builder = spec.builderId ? findUnit(state, spec.builderId)! : null
   const tiers = unitTiers(state, !!spec.first)
   const pools = poolQuestions(state, spec.name, tiers)
 
@@ -133,8 +116,18 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
       instructions: 'Is it exactly the same as a unit that already exists, just renamed?',
       criteria: { none: 'It is a different unit', ...options(state.units) }
     },
-    // Jev decides what it's made from and runs on, from nothing above its own tier.
-    ...pools.questions,
+    // Jev decides what it runs on, from nothing above its own tier.
+    ...pools,
+    // The first unit's starter contract needs parts.
+    ...(spec.first
+      ? {
+          parts_t0: {
+            type: 'choice',
+            instructions: `Which resource is one ${spec.name} most naturally made from?`,
+            criteria: options(partPool(state, 0))
+          } satisfies JevQuestion
+        }
+      : {}),
     icon: iconQuestion,
     value: {
       type: 'score',
@@ -172,8 +165,8 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
             ? t.id === 'needs-crew'
               ? 'If it needs operators, which unit would operate it?'
               : 'If it makes another unit work better, which one?'
-            : t.param === 'flow'
-              ? 'If it stores something, which flow?'
+            : t.id === 'stores'
+              ? 'If it stores something, which resource?'
               : 'If it makes a by-product, which resource?',
         criteria: paramOptions(state, t.param)
       }
@@ -184,8 +177,7 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     proposalText(state, [
       'The player proposes a new industry unit: something the AI can own many of.',
       `Name: "${spec.name}"`,
-      `Description: "${spec.description || '(none given)'}"`,
-      `Made by: ${builder ? `the AI's own ${builder.name}, or straight from its parts` : 'the AI, straight from its parts'}.`
+      `Description: "${spec.description || '(none given)'}"`
     ]),
     questions,
     'unit'
@@ -207,7 +199,7 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     ...base,
     kind: 'unit',
     spec,
-    options: unitOptions(state, answers, tiers, pools.keys, !!spec.first, traitOdds),
+    options: unitOptions(state, answers, tiers, pools, !!spec.first, traitOdds),
     choice: 0,
     traitOdds
   }
@@ -219,57 +211,46 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
 }
 
 /**
- * The tiers a unit may be. The plan's first unit is tier 0; any other can be as low as there is a
- * stock to make it from, up to the top.
+ * The tiers a unit may be. The plan's first unit is tier 0; any other can be as low as there is
+ * a resource for it to run on, up to the top.
  */
 function unitTiers(state: GameState, first: boolean): number[] {
   if (first) return [0]
-  return Array.from({ length: B.MAX_UNIT_TIER + 1 }, (_, t) => t).filter((t) => partPool(state, t).length > 0)
+  return Array.from({ length: B.MAX_UNIT_TIER + 1 }, (_, t) => t).filter((t) => runPool(state, t).length > 0)
 }
 
-interface PoolKeys {
-  /** The question that settles what a unit of this tier is made from. */
-  parts: Record<number, string>
-  /** The question that settles what it runs on. */
-  runs: Record<number, string>
+/** The question that settles what a unit of this tier runs on, keyed `runs_t<tier>`. */
+const runsKey = (tier: number, questions: Record<string, JevQuestion>) => {
+  for (let t = tier; t >= 0; t--) if (questions[`runs_t${t}`]) return `runs_t${t}`
+  return `runs_t${tier}`
 }
 
 /**
- * Questions asking Jev what a unit is made from and runs on, once for each distinct set of
- * resources its tier allows (nothing above its own tier), so tiers that allow the same share one.
+ * Questions asking Jev what a unit runs on, once for each distinct set of resources its tier
+ * allows (nothing above its own tier), so tiers that allow the same share one.
  */
-function poolQuestions(state: GameState, name: string, tiers: number[]) {
+function poolQuestions(state: GameState, name: string, tiers: number[]): Record<string, JevQuestion> {
   const questions: Record<string, JevQuestion> = {}
-  const keys: PoolKeys = { parts: {}, runs: {} }
-  const kinds = [
-    {
-      pool: partPool,
-      keys: keys.parts,
-      prefix: 'parts',
-      ask: `Which resource is one ${name} most naturally made from? Advanced things are made from several kinds of part, so how likely each is matters too.`
-    },
-    { pool: runPool, keys: keys.runs, prefix: 'runs', ask: `Which one resource would one ${name} most naturally run on each week, to operate and maintain it?` }
-  ]
-  for (const { pool, keys: byTierKey, prefix, ask } of kinds) {
-    const asked = new Map<string, string>()
-    for (const tier of tiers) {
-      const things = pool(state, tier)
-      const sets = things.map((r) => r.id).join(',')
-      if (!asked.has(sets)) {
-        asked.set(sets, `${prefix}_t${tier}`)
-        questions[`${prefix}_t${tier}`] = { type: 'choice', instructions: ask, criteria: options(things) }
-      }
-      byTierKey[tier] = asked.get(sets)!
+  const asked = new Set<string>()
+  for (const tier of tiers) {
+    const things = runPool(state, tier)
+    const set = things.map((r) => r.id).join(',')
+    if (asked.has(set)) continue
+    asked.add(set)
+    questions[`runs_t${tier}`] = {
+      type: 'choice',
+      instructions: `Which one resource would one ${name} most naturally run on each week, to operate and maintain it?`,
+      criteria: options(things)
     }
   }
-  return { questions, keys }
+  return questions
 }
 
 /**
  * Every resource in a pool, Jev's picks first and most likely first. Those it didn't name follow
  * in the pool's own order (lowest tier first).
  */
-function rankedIds(answers: Record<string, JevAnswer>, question: string, pool: Resource[]): string[] {
+export function rankedIds(answers: Record<string, JevAnswer>, question: string, pool: Resource[]): string[] {
   const answer = answers[question]
   const ids = pool.map((r) => r.id)
   const named = answer ? ranked(answer).map(([id]) => id).filter((id) => ids.includes(id)) : []
@@ -280,7 +261,7 @@ function rankedIds(answers: Record<string, JevAnswer>, question: string, pool: R
  * The levels Jev weighed on a score question, most likely first, kept inside the scale. Padded
  * with neighbours of its top level, so there are always enough to choose between.
  */
-function levelsByOdds(answer: JevAnswer | undefined, levels: number): number[] {
+export function levelsByOdds(answer: JevAnswer | undefined, levels: number): number[] {
   const out: number[] = []
   const add = (n: number) => {
     const level = Math.min(levels - 1, Math.max(0, n))
@@ -303,7 +284,7 @@ function defaultTraits(odds: TraitOdds[]): TraitOdds[] {
 /**
  * The trait sets the takes can have, the default first. Each other flips one trait Jev was unsure
  * of (near the line), the closest call first: on in one take, off in another. A perk makes the
- * unit dearer to make and a drawback cheaper, so the takes differ in price as well as in what they do.
+ * unit dearer to source and a drawback cheaper, so the takes differ in price as well as in what they do.
  */
 export function traitVariants(odds: TraitOdds[]): TraitOdds[][] {
   const base = defaultTraits(odds)
@@ -318,56 +299,41 @@ export function traitVariants(odds: TraitOdds[]): TraitOdds[][] {
   return variants
 }
 
-/** What a take is made from and runs on, as a key: two takes with the same key are alike. */
-const recipeKey = (o: Pick<UnitOption, 'partsIds' | 'upkeepId'>) => `${[...o.partsIds].sort().join('+')}|${o.upkeepId}`
+/** A take as a key: two takes with the same key are alike. */
+const takeKey = (o: Pick<UnitOption, 'tier' | 'band' | 'upkeepId'>) => `${o.tier}|${o.band}|${o.upkeepId}`
 
 /**
- * Up to three takes on a unit, Jev's own first. No two share what they are made from and run on,
- * so each is a real choice; with only one way to make it there is only one take. They are never
- * all worth the same (two may be). The plan's first unit is always tier 0. Elsewhere, when more
- * than one tier is possible, the three are never all in one tier. Each take is made from and runs
- * on resources at or below its own tier, and carries a trait set.
+ * Up to three takes on a unit, Jev's own first, never two alike. They are never all worth the
+ * same, and when more than one tier is possible, never all in one tier. The plan's first unit is
+ * always tier 0. Each take runs on a resource at or below its own tier, and carries a trait set.
  */
 export function unitOptions(
   state: GameState,
   answers: Record<string, JevAnswer>,
   tiers: number[],
-  keys: PoolKeys,
+  questions: Record<string, JevQuestion>,
   first: boolean,
   traitOdds: TraitOdds[]
 ): UnitOption[] {
   const tierLevels = first ? [0] : levelsByOdds(answers.tier, B.MAX_UNIT_TIER + 1).filter((t) => tiers.includes(t))
   const bands = levelsByOdds(answers.value, first ? B.FIRST_UNIT_MAX_BAND + 1 : B.UNIT_VALUE.length)
-  // Every way to make a unit of a tier, with how far down Jev's lists it is: the likeliest parts
-  // (swapping the last for each next one) and the likeliest thing to run on, then the next.
-  const recipesOf = (tier: number) => {
-    const count = B.PARTS_BY_TIER[tier] ?? 1
-    const parts = rankedIds(answers, keys.parts[tier]!, partPool(state, tier))
-    const runs = rankedIds(answers, keys.runs[tier]!, runPool(state, tier))
-    const swaps = Math.max(1, parts.length - count + 1)
-    return Array.from({ length: swaps }, (_, p) =>
-      runs.map((upkeepId, u) => ({
-        rank: p + u,
-        partsIds: parts.length <= count ? parts : [...parts.slice(0, count - 1), parts[count - 1 + p]!],
-        upkeepId
-      }))
-    ).flat()
-  }
   const candidates = tierLevels
     .flatMap((tier, t) =>
-      recipesOf(tier).flatMap((recipe) => bands.map((band, b) => ({ tier, band, ...recipe, score: t + b + recipe.rank, t, b })))
+      rankedIds(answers, runsKey(tier, questions), runPool(state, tier)).flatMap((upkeepId, rank) =>
+        bands.map((band, b) => ({ tier, band, upkeepId, score: t + b + rank, t, b, rank }))
+      )
     )
     .sort((x, y) => x.score - y.score || x.b - y.b || x.t - y.t || x.rank - y.rank)
   const chosen: typeof candidates = []
   for (const c of candidates) {
     if (chosen.length >= B.UNIT_OPTIONS) break
-    if (!chosen.some((o) => recipeKey(o) === recipeKey(c))) chosen.push(c)
+    if (!chosen.some((o) => takeKey(o) === takeKey(c))) chosen.push(c)
   }
   // Takes that are all in one tier (when more than one was possible) or all worth the same
   // aren't a choice. Swap one for the best take that fixes it, the last first.
   const allSame = (set: typeof candidates, of: 'tier' | 'band') => set.every((o) => o[of] === set[0]![of])
   const fine = (set: typeof candidates) =>
-    new Set(set.map(recipeKey)).size === set.length &&
+    new Set(set.map(takeKey)).size === set.length &&
     !(set.length === B.UNIT_OPTIONS && tierLevels.length > 1 && allSame(set, 'tier')) &&
     !(set.length > 1 && bands.length > 1 && allSame(set, 'band'))
   for (let i = chosen.length - 1; i >= 1 && !fine(chosen); i--) {
@@ -380,10 +346,9 @@ export function unitOptions(
     }
   }
   const variants = traitVariants(traitOdds)
-  return chosen.map(({ tier, band, partsIds, upkeepId }, i) => ({
+  return chosen.map(({ tier, band, upkeepId }, i) => ({
     tier,
     band,
-    partsIds,
     upkeepId,
     traits: variants[i % variants.length]!.map((t) => t.trait)
   }))
@@ -406,7 +371,7 @@ export interface UnitDraft {
 export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   const read = reader(v)
   const spec = v.spec
-  const { tier, band, partsIds, upkeepId, traits: ids } = v.options[v.choice] ?? v.options[0]!
+  const { tier, band, upkeepId, traits: ids } = v.options[v.choice] ?? v.options[0]!
   const param = (id: TraitId) => v.traitOdds.find((t) => t.trait === id)?.param ?? null
   const value = B.pick(B.UNIT_VALUE, band)[1]
   const work = value / B.PAYBACK_WEEKS
@@ -428,11 +393,7 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
     value,
     tier,
     plausibility: v.plausibility,
-    // Perks make it dearer to make, drawbacks cheaper. Risky designs cut corners.
-    parts: priceParts(state, partsIds, value * traitPriceFactor(ids) * (v.risk ? B.RISK_PARTS : 1)),
-    risky: !!v.risk,
     upkeep,
-    builderId: spec.builderId,
     traits: ids,
     boosts: param('boosts'),
     byproduct: param('by-product'),
@@ -445,6 +406,21 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   // Research is priced by tier, not by what one costs: a cheap unit can be very advanced.
   const [, minIQ, worth] = B.pick(B.TIERS, tier)
   return { unit, minIQ: floorIQ(minIQ), cost: costFor(state, v, worth) }
+}
+
+/** The first unit's free contract: a few, made from what Jev picked. */
+function starterContract(state: GameState, v: UnitVerdict, unit: UnitType): Sourcing {
+  const partId = rankedIds(v.answers, 'parts_t0', partPool(state, 0))[0]!
+  return {
+    id: makeId(state, `${unit.name} starter`),
+    unitId: unit.id,
+    name: 'Starter batch',
+    description: `The plan’s first ${unit.name}.`,
+    parts: priceParts(state, [partId], unit.value * traitPriceFactor(unit.traits)),
+    total: B.STARTER_CONTRACT,
+    used: 0,
+    risky: false
+  }
 }
 
 export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
@@ -460,14 +436,14 @@ export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
   state.inventions.push({ week: state.week, icon: unit.icon, name: unit.name, kind: 'unit' })
   state.decidedThisWeek = true
   if (v.spec.first) {
-    // The plan's first unit comes designed: no research, no week's proposal. There are no free
-    // copies: creating one needs its parts, and creating one unlocks minds and upgrades.
+    // The plan's first unit comes designed, with a small contract: no research, no week's action.
     state.phase.firstUnit = null
     addUnit(state, unit)
+    state.sourcing.push(starterContract(state, v, unit))
     logProposal(
       state,
       'good',
-      `${unit.icon} ${unit.name} is designed. Create some from parts on its card, then give them a strategy.`
+      `${unit.icon} ${unit.name} is designed, with a starter batch of ${B.STARTER_CONTRACT}. Create some on its card, then give them a strategy.`
     )
     return { state, outcome: { kind: 'added', name: unit.name } }
   }
@@ -484,4 +460,3 @@ export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
     })
   )
 }
-

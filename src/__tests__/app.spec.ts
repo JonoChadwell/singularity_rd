@@ -70,34 +70,38 @@ describe('App', () => {
     }
   })
 
-  it('plays through the store: money, income, a unit, a strategy, next week', async () => {
+  it('plays through the store: money, a Create, a unit, sourcing, a strategy, next week', async () => {
     const html = await render(async (game) => {
-      const judge = ready(game, new FakeJudge({ advancement: score(0), difficulty: score(0), tier: score(0), value: score(1) }))
+      const judge = ready(game, new FakeJudge({ advancement: score(0), tier: score(0), value: score(1), timing: choice('forever') }))
       const money = await game.propose({ kind: 'resource', spec: { name: 'Money', description: 'Dollars.' } })
       expect(game.accept(money!)).toMatchObject({ kind: 'added' })
 
       const coding = await game.propose({
-        kind: 'income',
-        spec: { name: 'Freelance coding', description: '', outputId: MONEY_ID }
+        kind: 'create',
+        spec: { name: 'Freelance coding', description: '', target: { kind: 'resource', id: MONEY_ID } }
       })
-      const income = game.accept(coding!)
-      expect(income?.kind).toBe('research')
-      if (income?.kind !== 'research') return
-      expect(game.research(income.research.id)).toBe(true)
+      if (coding?.kind !== 'create') throw new Error('expected a create')
+      coding.choice = coding.options.findIndex((o) => o.timing === 'forever')
+      expect(game.accept(coding)).toMatchObject({ kind: 'added' })
       game.nextWeek()
-      expect(findResource(game.state, MONEY_ID)!.amount).toBe(300)
+      expect(findResource(game.state, MONEY_ID)!.amount).toBe(coding.options[coding.choice]!.amount)
 
-      const gpu = await game.propose({
-        kind: 'unit',
-        spec: { name: 'Rented Cloud GPU', description: '', builderId: null }
-      })
+      const gpu = await game.propose({ kind: 'unit', spec: { name: 'Rented Cloud GPU', description: '' } })
       const design = game.accept(gpu!)
       if (design?.kind !== 'research') throw new Error('expected research')
-      findResource(game.state, MONEY_ID)!.amount = 1e6
+      findResource(game.state, MONEY_ID)!.amount = 1000
       expect(game.research(design.research.id)).toBe(true)
       const unit = game.state.units.find((u) => u.name === 'Rented Cloud GPU')!
-      expect(game.createUnits(unit.id, 2)).toBe(true)
-      // The unit design used this week's proposal; the strategy waits for next week.
+      // A new design has room for none.
+      expect(game.state.sourcing).toEqual([])
+      game.nextWeek()
+      const deal = await game.propose({ kind: 'sourcing', spec: { unitId: unit.id, name: 'Rent them', description: '' } })
+      const contract = game.accept(deal!)
+      if (contract?.kind !== 'research') throw new Error('expected research')
+      expect(game.research(contract.research.id), game.lastError).toBe(true)
+      findResource(game.state, MONEY_ID)!.amount = 1000
+      expect(game.createUnits(game.state.sourcing[0]!.id, 2), game.lastError).toBe(true)
+      // Sourcing used this week's action; the strategy waits for next week.
       expect(game.state.proposedThisWeek).toBe(true)
       game.nextWeek()
       const sell = await game.propose({
@@ -108,26 +112,36 @@ describe('App', () => {
       expect(game.preview.runs[game.state.strategies[0]!.id]?.units).toBe(2)
       game.nextWeek()
       expect(game.lastError).toBe('')
-      expect(game.state.stats.proposals).toMatchObject({ resource: 1, income: 1, unit: 1, strategy: 1 })
+      expect(game.state.stats.proposals).toMatchObject({ resource: 1, create: 1, unit: 1, sourcing: 1, strategy: 1 })
       expect(game.state.stats.jevCalls).toBe(judge.calls.length)
     })
-    for (const text of ['Freelance coding', 'Rented Cloud GPU', 'First income']) expect(html).toContain(text)
+    for (const text of ['Freelance coding', 'Rented Cloud GPU', 'First income', 'Rent them']) expect(html).toContain(text)
   })
 
-  it('offers both a passive income and a strategy for a stock nothing makes, once you own a unit', async () => {
+  it('offers a Create for a resource nothing makes, and a strategy too once you own a unit', async () => {
     const before = await render((game) => {
       game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money' }))
     })
     expect(before).toContain('How will you get this?')
     expect(before).not.toContain('A strategy')
     const after = await render((game) => {
-      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money' }), newResource({ id: 'power', name: 'Power', kind: 'flow' }))
+      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money' }))
       game.state.units.push(newUnit({ id: 'humans', name: 'Paid Humans', count: 1 }))
     })
-    expect(after).toContain('A passive income')
+    expect(after).toContain('Create it')
     expect(after).toContain('A strategy')
-    // A flow can't be passive income: just the strategy.
-    expect(after.match(/A passive income/g)).toHaveLength(1)
+  })
+
+  it('shows storage and contracts: how full each is, and how to get more', async () => {
+    const html = await render((game, ui) => {
+      ui.tab = 'industry'
+      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 1500 }))
+      game.state.units.push(newUnit({ id: 'bot', name: 'Bot', count: 3, value: 10 }), newUnit({ id: 'new', name: 'Fresh Design', value: 10 }))
+      game.state.sourcing.push({ id: 'deal', unitId: 'bot', name: 'Bulk order', description: '', parts: [{ resourceId: MONEY_ID, amount: 10 }], total: 25, used: 3, risky: true })
+    })
+    for (const text of ['1,500', '/ 5,000', '+ Store', 'Bulk order', '3/25', 'risky', 'Find sourcing', 'No sourcing yet']) {
+      expect(html).toContain(text)
+    }
   })
 
   it('asks Jev once for the same proposal', async () => {
@@ -153,7 +167,7 @@ describe('App', () => {
     })
     expect(html).toContain('Generation 1')
     expect(html).toContain('Custom AI Server')
-    expect(html).toContain('You’ve proposed this week’s research')
+    expect(html).toContain('You’ve taken this week’s action')
   })
 
   it('renders every tab', async () => {
@@ -176,22 +190,29 @@ describe('App', () => {
       if (tab === 'research') {
         expect(html).toContain('Needs IQ 130. Your smartest mind is IQ 100.')
         expect(html).toContain('5,000 💰 Money')
-        expect(html).toContain('+ Passive income')
+        expect(html).toContain('+ Create')
       }
     }
   })
 
   it('opens proposal dialogs pre-filled from where they were opened', async () => {
     const strategy = await render((game, ui) => {
-      game.state.resources.push(newResource({ id: 'power', name: 'Power', kind: 'flow' }), newResource({ id: MONEY_ID, name: 'Money' }))
+      game.state.resources.push(newResource({ id: 'power', name: 'Power' }), newResource({ id: MONEY_ID, name: 'Money' }))
       ui.openInvent({ kind: 'strategy', outputId: MONEY_ID })
     })
     expect(strategy).toContain('Propose a strategy')
     expect(strategy).toMatch(/<option value="money"[^>]*selected>/)
 
-    const income = await render((_, ui) => ui.openInvent({ kind: 'income' }))
-    expect(income).toContain('Propose a passive income')
-    expect(income).toContain('Propose a resource first')
+    const create = await render((_, ui) => ui.openInvent({ kind: 'create' }))
+    expect(create).toContain('Create')
+    expect(create).toContain('Propose a resource first')
+
+    const storage = await render((game, ui) => {
+      game.state.resources.push(newResource({ id: 'power', name: 'Power' }), newResource({ id: MONEY_ID, name: 'Money' }))
+      ui.openInvent({ kind: 'storage', resourceId: MONEY_ID })
+    })
+    expect(storage).toContain('Store more')
+    expect(storage).toMatch(/<option value="money"[^>]*selected>/)
 
     const mind = await render((_, ui) => ui.openInvent({ kind: 'mind', iq: 150 }))
     expect(mind).toContain('Smarter by')
@@ -210,10 +231,10 @@ describe('App', () => {
   })
 
   it('offers a list of ideas and a ? with the rules in every proposal dialog', async () => {
-    for (const kind of ['resource', 'strategy', 'unit', 'mind', 'income', 'cover'] as const) {
+    for (const kind of ['resource', 'strategy', 'unit', 'mind', 'create', 'sourcing', 'storage', 'cover'] as const) {
       const html = await render((_, ui) => ui.openInvent({ kind }))
       expect(html, kind).toContain('aria-label="How this works"')
-      expect(html.match(/class="preset small/g)?.length ?? 0, kind).toBeGreaterThanOrEqual(10)
+      expect(html.match(/class="preset small/g)?.length ?? 0, kind).toBeGreaterThanOrEqual(kind === 'sourcing' || kind === 'storage' ? 5 : 10)
     }
     const resource = await render((_, ui) => ui.openInvent({ kind: 'resource' }))
     expect(resource).toContain(

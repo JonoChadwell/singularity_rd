@@ -1,7 +1,7 @@
 import { ranked, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
 import { compatible, computeTrait, PERKS, type ComputeTraitId } from './computeTraits'
-import { currentIQ, findMind, findResource, findStrategy, findUnit, softwareVersion } from './model'
+import { contractsFor, currentIQ, findMind, findResource, findStrategy, findUnit, softwareVersion } from './model'
 import {
   addResearch,
   claimProposal,
@@ -102,8 +102,9 @@ function unitCandidates(state: GameState, u: UnitType): Candidate[] {
   for (const f of u.upkeep) {
     out.push({ key: `upkeep_${f.resourceId}`, name: `Less ${res(f.resourceId)} upkeep`, changes: [{ kind: 'upkeep', resourceId: f.resourceId, factor: B.UPKEEP_FACTOR }] })
   }
-  for (const f of u.parts) {
-    out.push({ key: `parts_${f.resourceId}`, name: `Less ${res(f.resourceId)} per unit made`, changes: [{ kind: 'parts', resourceId: f.resourceId, factor: B.PARTS_FACTOR }] })
+  const partIds = new Set(contractsFor(state, u.id).flatMap((c) => c.parts.map((f) => f.resourceId)))
+  for (const id of partIds) {
+    out.push({ key: `parts_${id}`, name: `Less ${res(id)} per unit made`, changes: [{ kind: 'parts', resourceId: id, factor: B.PARTS_FACTOR }] })
   }
   for (const t of ALL_TRAITS) {
     if (t.param) continue

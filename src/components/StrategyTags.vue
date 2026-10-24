@@ -16,11 +16,7 @@ const game = useGameStore()
 
 const unit = computed(() => findUnit(game.state, props.strategy.unitId))
 const target = computed(() =>
-  props.strategy.kind === 'make'
-    ? findResource(game.state, props.strategy.outputId)
-    : props.strategy.kind === 'build'
-      ? findUnit(game.state, props.strategy.outputId)
-      : undefined
+  props.strategy.kind === 'make' ? findResource(game.state, props.strategy.outputId) : undefined
 )
 
 const word = computed(() => efficiencyWord(props.strategy))

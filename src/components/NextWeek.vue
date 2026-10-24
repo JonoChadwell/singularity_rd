@@ -12,8 +12,8 @@
     <p class="small slot" :class="game.state.proposedThisWeek ? 'good' : 'muted'">
       {{
         game.state.proposedThisWeek
-          ? '🔬 You’ve proposed this week’s research. Next week you can propose another.'
-          : `🧠 You can propose one research this week: ${kinds}.`
+          ? '🔬 You’ve taken this week’s action. Next week you can take another.'
+          : `🧠 You have one action this week: ${kinds}.`
       }}
     </p>
     <ul v-if="game.alerts.length" class="plain-list alerts" aria-label="Before you press">
@@ -56,9 +56,9 @@ const blocked = computed(() => weekBlocker(game.state))
 const kinds = computed(() => {
   const s = game.state
   const open = (f: Feature) => !lockReason(s, f)
-  const list = ['an income', 'an upgrade']
+  const list = ['Create', 'storage', 'an upgrade']
   if (open('strategy')) list.unshift('a strategy')
-  if (open('unit')) list.push('a unit')
+  if (open('unit')) list.push('a unit', 'sourcing')
   if (open('mind')) list.push('a mind')
   if (open('cover')) list.push('cover')
   return `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}`

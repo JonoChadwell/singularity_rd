@@ -14,6 +14,7 @@ import {
   resourceFrom,
   resourceQuestions,
   scale,
+  setTier,
   type Accepted,
   type ResourceSpec,
   type TornSpec,
@@ -136,8 +137,7 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
   )
   const torn: TornSpec[] = [
     { key: 'approach', topic: 'what the goal takes more of' },
-    { key: 'top', topic: 'what the goal is built from' },
-    ...fresh.map((i) => ({ key: `${prefix(i)}kind`, topic: `whether ${spec.resources[i]!.name} keeps from week to week` }))
+    { key: 'top', topic: 'what the goal is built from' }
   ]
   const v: PlanVerdict = { ...baseVerdict('plan', questions, answers, 'coherent', torn), kind: 'plan', spec, phase }
   gate(v, 'Jev doesn’t think this plan hangs together', null)
@@ -171,24 +171,23 @@ function topIndex(v: PlanVerdict, fresh: number[]): number {
  * Phase 2 brings at least one new resource of every tier, so a unit of any tier has something
  * of its own tier to be made from. Where Jev left a tier empty among the plan's new resources,
  * the nearest spare one moves into it: one whose own tier would still have another, so nothing
- * opens a new gap. The goal's resource stays at the top tier, and for tier 0 a stock is preferred,
- * since units are made from stocks.
+ * opens a new gap. The goal's resource stays at the top tier.
  */
 export function coverTiers(fresh: Resource[]): void {
   const covered = (tier: number, without?: Resource) => fresh.some((r) => r !== without && r.tier === tier)
   for (let tier = 0; tier <= B.GOAL_TIER[2]; tier++) {
     if (covered(tier)) continue
-    const flowPenalty = (r: Resource) => (tier === 0 && r.kind !== 'stock' ? 100 : 0)
     const spare = fresh
       .filter((r) => r.tier !== B.GOAL_TIER[2] && covered(r.tier, r))
-      .sort((a, b) => flowPenalty(a) + Math.abs(a.tier - tier) - (flowPenalty(b) + Math.abs(b.tier - tier)))[0]
-    if (spare) spare.tier = tier
+      .sort((a, b) => Math.abs(a.tier - tier) - Math.abs(b.tier - tier))[0]
+    if (spare) setTier(spare, tier)
   }
 }
 
 /**
  * The batch's resources, with the one the goal is built from at the phase's top tier, and the
- * goal: its IQ bar, and a cost in that resource worth GOAL_COST times the approach's multiplier.
+ * goal: its IQ bar, and a cost in that resource of GOAL_CAPS times its starting storage, times
+ * the approach's multiplier. Above one cap, you'll need to expand its storage to hold enough.
  */
 export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
   const state = structuredClone(current)
@@ -205,13 +204,13 @@ export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
   const level = reader(v).level('approach', B.GOAL_APPROACH.length)
   const [, iq1, mult1, iq2, mult2] = B.pick(B.GOAL_APPROACH, level)
   const minIQ = v.phase === 1 ? iq1 : iq2
-  const worth = B.GOAL_COST[v.phase] * (v.phase === 1 ? mult1 : mult2) * costMultiplier(v.plausibility, v.bar)
+  const caps = B.GOAL_CAPS[v.phase] * (v.phase === 1 ? mult1 : mult2) * costMultiplier(v.plausibility, v.bar)
   const goal = newResearch(state, {
     name: v.spec.goal,
     description: v.spec.means || v.spec.goal,
     icon: '🎯',
     minIQ,
-    cost: [{ resourceId: top.id, amount: B.nice(worth / top.value) }],
+    cost: [{ resourceId: top.id, amount: B.nice(caps * top.cap) }],
     effect: { kind: 'goal', phase: v.phase }
   })
   return { state, added, goal, top }

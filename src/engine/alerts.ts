@@ -1,6 +1,6 @@
 import { researchBlocker } from './actions'
 import * as B from './balance'
-import { bestIQ, bestMind, findResource, fmt, fmtCount, researchIQ } from './model'
+import { affordable, bestIQ, bestMind, contractsFor, findResource, fmt, fmtCount, openSlots, OVERFLOW, researchIQ } from './model'
 import { lockReason, weeksLeft } from './phase'
 import { goalOf } from './projection'
 import type { GameState, WeekReport } from './types'
@@ -15,7 +15,9 @@ export type Prompt =
   | { kind: 'upgrade-mind'; mindId: string }
   | { kind: 'design-mind'; iq: number }
   | { kind: 'assign'; unitId: string }
-  | { kind: 'income' }
+  | { kind: 'create' }
+  | { kind: 'source'; unitId: string }
+  | { kind: 'storage'; resourceId: string }
   | { kind: 'research' }
   | { kind: 'first-unit' }
 
@@ -62,13 +64,45 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
         prompt: { label: 'Where will its upkeep come from?', to: { kind: 'make-resource', resourceId: w.unpaidFor } }
       })
     }
-    if (w.done > 0) {
+  }
+
+  // Units you can't own any of yet, and contracts you can't afford to fill.
+  for (const u of state.units) {
+    const contracts = contractsFor(state, u.id)
+    if (!contracts.length) {
       add({
-        key: `done-${u.id}`,
+        key: `cap-${u.id}`,
+        tone: 'warn',
+        text: `${u.icon} ${u.name} is designed, but you have no sourcing for it yet.`,
+        prompt: { label: 'How will you get them?', to: { kind: 'source', unitId: u.id } }
+      })
+      continue
+    }
+    const open = contracts.filter((c) => openSlots(c) > 0 && c.parts.length)
+    if (open.length && open.every((c) => affordable(state, c) === 0)) {
+      add({
+        key: `slots-${u.id}`,
         tone: 'info',
-        text: `${fmtCount(w.done)} ${u.name} are idle: their build target is reached.`
+        text: `${u.icon} ${u.name} has room for ${fmtCount(open.reduce((n, c) => n + openSlots(c), 0))} more, but you can’t afford the parts for one.`
       })
     }
+  }
+
+  // Storage about to overflow.
+  for (const [id, amount] of Object.entries(preview.wasted)) {
+    const r = findResource(state, id)
+    if (!r || amount <= 0) continue
+    add({
+      key: `overflow-${id}`,
+      tone: 'warn',
+      text: `${r.icon} ${fmt(amount)} ${r.name} will overflow its storage next week.`,
+      prompt: { label: 'Store more?', to: { kind: 'storage', resourceId: id } }
+    })
+  }
+
+  // The week's action.
+  if (state.phase.status === 'playing' && !state.proposedThisWeek) {
+    add({ key: 'action', tone: 'info', text: 'This week’s action is unused: propose a research, or Create.' })
   }
 
   // The clock.
@@ -89,18 +123,18 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
     add({
       key: 'first-unit',
       tone: 'warn',
-      text: `Your plan’s first unit, ${state.phase.firstUnit.name}, isn’t designed yet. Designing it is free; you build the copies from parts.`,
+      text: `Your plan’s first unit, ${state.phase.firstUnit.name}, isn’t designed yet. Designing it is free, with a small starter batch.`,
       prompt: { label: 'Design it', to: { kind: 'first-unit' } }
     })
   }
 
   // The very start, or any time nothing brings anything in.
-  if (state.phase.status === 'playing' && !state.incomes.length && !state.units.length) {
+  if (state.phase.status === 'playing' && !state.deliveries.length && !state.units.length && !state.resources.some((r) => r.amount > 0)) {
     add({
       key: 'start',
       tone: 'warn',
-      text: 'Nothing brings anything in yet.',
-      prompt: { label: 'What could the Starting Server work out how to earn?', to: { kind: 'income' } }
+      text: 'You have nothing yet.',
+      prompt: { label: 'What could the Starting Server make?', to: { kind: 'create' } }
     })
   }
 
@@ -155,11 +189,11 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
 
   // Stockpiles nothing uses.
   for (const r of state.resources) {
-    if (r.kind !== 'stock' || r.amount <= 0) continue
+    if (r.amount <= 0) continue
     const flows = preview.flows[r.id] ?? []
-    const used = flows.some((f) => f.amount < 0)
+    const used = flows.some((f) => f.amount < 0 && f.label !== OVERFLOW)
     const needed =
-      state.units.some((u) => u.parts.some((p) => p.resourceId === r.id)) ||
+      state.sourcing.some((c) => openSlots(c) > 0 && c.parts.some((p) => p.resourceId === r.id)) ||
       state.research.some((x) => x.cost.some((c) => c.resourceId === r.id))
     if (!used && !needed && flows.some((f) => f.amount > 0)) {
       add({ key: `pile-${r.id}`, tone: 'info', text: `${fmt(r.amount)} ${r.name} piling up: nothing uses it.` })

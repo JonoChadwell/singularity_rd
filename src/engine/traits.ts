@@ -1,7 +1,6 @@
 /** The fixed list of traits. Each is a one-line rule; the engine implements each rule by id. */
 
 export const TRAIT_IDS = [
-  'self-replicating',
   'networked',
   'mass-produced',
   'learns',
@@ -30,18 +29,10 @@ export interface Trait {
   /** What Jev is asked: does a unit like this have the trait? */
   question: string
   /** The parameter Jev picks alongside it, if any. */
-  param?: 'unit' | 'resource' | 'flow'
+  param?: 'unit' | 'resource'
 }
 
 export const TRAITS: Record<TraitId, Trait> = {
-  'self-replicating': {
-    id: 'self-replicating',
-    name: 'Self-replicating',
-    icon: '♻️',
-    kind: 'perk',
-    rule: 'Can run “Build more of itself”.',
-    question: 'Could one of these build copies of itself from parts?'
-  },
   networked: {
     id: 'networked',
     name: 'Networked',
@@ -80,9 +71,9 @@ export const TRAITS: Record<TraitId, Trait> = {
     name: 'Stores',
     icon: '🔋',
     kind: 'perk',
-    rule: 'Holds a flow over to next week, like a battery.',
-    question: 'Is storing something (like a battery or a tank) one of the main things these do?',
-    param: 'flow'
+    rule: 'Adds storage for a resource: each holds a few weeks of its work’s worth.',
+    question: 'Is storing something (like a battery, a tank or a warehouse) one of the main things these do?',
+    param: 'resource'
   },
   boosts: {
     id: 'boosts',

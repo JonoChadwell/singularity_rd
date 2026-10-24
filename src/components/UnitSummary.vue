@@ -6,12 +6,8 @@
     <dd class="num">{{ fmt(labour(unit)) }} Money’s worth a week</dd>
     <dt>Runs on</dt>
     <dd>{{ unit.upkeep.length ? `${describeFlows(state, unit.upkeep)} a week` : 'nothing' }}</dd>
-    <dt>Made from</dt>
-    <dd>{{ describeFlows(state, unit.parts) }}</dd>
-    <template v-if="unit.builderId">
-      <dt>Also built by</dt>
-      <dd>{{ builder }}</dd>
-    </template>
+    <dt>Sourcing</dt>
+    <dd>{{ contracts ? `${contracts} contract${contracts === 1 ? '' : 's'}` : 'none yet: find sourcing to own some' }}</dd>
     <template v-if="unit.traits.length">
       <dt>Traits</dt>
       <dd><TraitChips :traits="unit.traits" :unit="unit" /></dd>
@@ -21,14 +17,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { describeFlows, findUnit, fmt, labour, tierLabel, unitValueText } from '@/engine/model'
+import { contractsFor, describeFlows, fmt, labour, tierLabel, unitValueText } from '@/engine/model'
 import type { GameState, UnitType } from '@/engine/types'
 import TraitChips from './TraitChips.vue'
 
 const props = defineProps<{ unit: UnitType; state: GameState }>()
-const builder = computed(() =>
-  props.unit.builderId === props.unit.id ? 'itself' : (findUnit(props.state, props.unit.builderId ?? '')?.name ?? 'a unit you’ll design')
-)
+const contracts = computed(() => contractsFor(props.state, props.unit.id).length)
 </script>
 
 <style scoped>

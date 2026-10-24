@@ -23,11 +23,11 @@ export function describeState(state: GameState): string {
       ]
     : []
   return [
-    'A game. An AI that began as one unattended research server is inventing its way to the singularity. The player proposes resources, units, strategies and upgrades, and you judge them. Be generous and playful: odd paths work if they hang together.',
+    'A game. An AI that began as one unattended research server is inventing its way to the singularity. The player proposes resources, units, strategies, ways to get and store things, and upgrades, and you judge them. Be generous and playful: odd paths work if they hang together.',
     '',
     ...planLines,
     'Resources:',
-    ...state.resources.map((r) => `- ${r.name} (${r.kind}, tier ${r.tier}): ${r.description}`),
+    ...state.resources.map((r) => `- ${r.name} (tier ${r.tier}): ${r.description}`),
     '',
     'Intelligence systems (single machines that think and do research):',
     ...state.minds.map(

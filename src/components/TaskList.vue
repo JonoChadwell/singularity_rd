@@ -44,23 +44,6 @@
               </template>
             </span>
           </template>
-          <template v-else-if="row.strategy.kind === 'build'">
-            <label class="row target">
-              Build until I own
-              <input
-                class="n"
-                type="number"
-                min="0"
-                :value="row.strategy.target ?? 0"
-                aria-label="Build target"
-                @change="setTarget(row.strategy!.id, $event)"
-              />
-            </label>
-            <div>
-              From {{ partsText(row.strategy) }} each · ~{{ fmt(rateOf(row.strategy)) }} a week per builder
-              <span v-if="run(row.id)"> · {{ fmtCount(run(row.id)!.units) }} building</span>
-            </div>
-          </template>
           <template v-else-if="row.strategy.kind === 'crew'">
             Each crews {{ fmt(row.strategy.amount) }} {{ unitName(row.strategy.outputId) }}
           </template>
@@ -104,7 +87,7 @@ const rows = computed<Row[]>(() => {
     .map((s) => ({
       id: s.id,
       name: s.name,
-      icon: s.kind === 'build' ? '🔨' : s.kind === 'crew' ? '👷' : '',
+      icon: s.kind === 'crew' ? '👷' : '',
       count: byTask[s.id] ?? 0,
       rest: u.rest === s.id,
       strategy: s
@@ -120,17 +103,6 @@ function perUnit(s: Strategy) {
   const output = findResource(game.state, s.outputId)
   const made = `${fmt(rate.amount)} ${output?.icon ?? ''} ${output?.name ?? '?'}`
   return rate.inputs.length ? `${describeFlows(game.state, rate.inputs)} → ${made}` : made
-}
-
-const rateOf = (s: Strategy) => strategyRate(game.state, s).amount
-function partsText(s: Strategy) {
-  const target = findUnit(game.state, s.outputId)
-  return target ? describeFlows(game.state, target.parts) : '?'
-}
-
-function setTarget(strategyId: string, e: Event) {
-  const n = Number((e.target as HTMLInputElement).value)
-  if (Number.isFinite(n)) game.setBuildTarget(strategyId, n)
 }
 </script>
 
@@ -177,10 +149,5 @@ function setTarget(strategyId: string, e: Event) {
   color: var(--warn);
   border-color: rgb(251 191 36 / 0.35);
   cursor: help;
-}
-
-.target {
-  gap: 6px;
-  margin-bottom: 2px;
 }
 </style>

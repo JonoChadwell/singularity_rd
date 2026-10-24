@@ -1,4 +1,5 @@
 import * as B from './balance'
+import { startingCap } from './model'
 import type { GameState, Mind, Resource, UnitType } from './types'
 
 export function newRunId(): string {
@@ -16,9 +17,7 @@ export function newUnit(fields: Pick<UnitType, 'id' | 'name'> & Partial<UnitType
     value: 0,
     tier: 0,
     plausibility: 1,
-    parts: [],
     upkeep: [],
-    builderId: null,
     built: 0,
     traits: [],
     crew: null,
@@ -51,12 +50,12 @@ export function newResource(fields: Pick<Resource, 'id' | 'name'> & Partial<Reso
   return {
     description: fields.name,
     icon: '💡',
-    kind: 'stock',
     band: 1,
     tier: 0,
     value: 1,
     amount: 0,
-    stored: 0,
+    cap: startingCap(fields.tier ?? 0, fields.value ?? 1),
+    expansions: [],
     ...fields
   }
 }
@@ -73,7 +72,7 @@ export function createInitialState(): GameState {
     starting: true
   })
   return {
-    version: 13,
+    version: 15,
     runId: newRunId(),
     week: 1,
     phase: {
@@ -93,15 +92,16 @@ export function createInitialState(): GameState {
     resources: [],
     minds: [server],
     units: [],
+    sourcing: [],
     strategies: [],
     research: [],
-    incomes: [],
+    deliveries: [],
     upgrades: [],
     proposedThisWeek: false,
     inventions: [],
     milestones: [],
     stats: {
-      proposals: { resource: 0, strategy: 0, unit: 0, mind: 0, upgrade: 0, income: 0, plan: 0, cover: 0 },
+      proposals: { resource: 0, strategy: 0, unit: 0, mind: 0, upgrade: 0, sourcing: 0, storage: 0, create: 0, plan: 0, cover: 0 },
       rejections: 0,
       researched: 0,
       jevCalls: 0

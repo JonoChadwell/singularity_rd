@@ -66,10 +66,13 @@ export const GOAL_APPROACH: [string, number, number, number, number][] = [
   ['Mostly resources and scale', 110, 1.2, 350, 2],
   ['Almost pure resources and scale', 100, 1.4, 300, 4]
 ]
-/** Phase 1 is a tutorial: its research (incomes and upgrades) costs this share of the usual price. */
+/** Phase 1 is a tutorial: its research (storage and upgrades) costs this share of the usual price. */
 export const PHASE1_RESEARCH_COST = 0.3
-/** Worth of what a balanced goal uses up, by phase. */
-export const GOAL_COST: Record<1 | 2, number> = { 1: 2500, 2: 1e13 }
+/**
+ * What a balanced goal uses up, as a multiple of its resource's starting storage cap, by phase.
+ * Above 1, you have to expand storage to hold enough: the goal is a breadth requirement, not a sum.
+ */
+export const GOAL_CAPS: Record<1 | 2, number> = { 1: 0.35, 2: 8 }
 
 // ---------------------------------------------------------------- risk and cover
 
@@ -84,16 +87,14 @@ export const ALARM: [string, number][] = [
 /** Risky research costs this share as much… */
 export const RISK_COST = 0.5
 /** …and does more. */
-export const RISK_INCOME = 2
 export const RISK_OUTPUT = 1.5
 export const RISK_PARTS = 0.5
 /**
- * Humans notice a unit type when the fleet is worth this much (units owned × one's value), and
- * every tenfold after, each time a week more than the last: 10B costs 1 week, 100B costs 2, 1T
- * costs 3. Going by worth keeps many cheap units and a few dear ones alike.
+ * Expanding caps is what humans notice. A sourcing contract or storage expansion that adds this
+ * much worth (units × value, or extra storage × value) costs a week, and a week more for every
+ * tenfold after: 100k costs 1, 1M costs 2, 10M costs 3. Risky expansions cost twice that.
  */
-export const NOTICE_FROM = 1e10
-export const NOTICE_WEEKS = 1
+export const EXPANSION_NOTICE_FROM = 1e5
 /** Cover: [label, minimum IQ, weeks added]. */
 export const COVER: [string, number, number][] = [
   ['A flimsy excuse', 100, 3],
@@ -106,7 +107,7 @@ export const COVER_DECAY = 0.7
 /** Cover costs this many weeks of your weekly output for each week it adds. */
 export const COVER_COST_WEEKS = 0.25
 /** Weekly output is counted as at least this much, so early cover isn't free. */
-export const COVER_MIN_OUTPUT = 1000
+export const COVER_MIN_OUTPUT = 300
 
 // ---------------------------------------------------------------- research
 
@@ -125,12 +126,25 @@ export const MIN_IQ = 100
  * mind. Proposing a resource is free; its tier changes what it does to the economy.
  */
 export const TIERS: [string, number, number][] = [
-  ['Basic', 100, 1e3],
-  ['Earned', 110, 1e4],
-  ['Made', 140, 1e5],
-  ['Advanced', 200, 3e5],
-  ['Ultimate', 300, 1e6]
+  ['Basic', 100, 300],
+  ['Earned', 110, 1200],
+  ['Made', 140, 5000],
+  ['Advanced', 200, 18000],
+  ['Ultimate', 300, 60000]
 ]
+/**
+ * Best IQ as a fractional tier: interpolated between the tiers' minimum IQs (IQ 170 is tier 2.5,
+ * between 140 and 200). Past the top tier, one more tier for every 200 IQ.
+ */
+export function iqTier(iq: number): number {
+  if (iq <= TIERS[0]![1]) return 0
+  for (let t = 1; t < TIERS.length; t++) {
+    const lo = TIERS[t - 1]![1]
+    const hi = TIERS[t]![1]
+    if (iq < hi) return t - 1 + (iq - lo) / (hi - lo)
+  }
+  return TIERS.length - 1 + (iq - TIERS[TIERS.length - 1]![1]) / 200
+}
 /** What Jev is told each tier of unit means: a unit's tier is how advanced a thing it is. */
 export const UNIT_TIERS: string[] = [
   'Basic: ordinary, works today with off-the-shelf parts',
@@ -152,35 +166,118 @@ export const TIER_BONUS = 1.2
  */
 export const MAX_UNIT_TIER = TIERS.length - 1
 /**
+ * A reach penalty for interpolating: the multiplier at each whole number of tiers short. Read
+ * log-linearly between them, so 25 IQ short is always gentler than 125 IQ short.
+ */
+export function reachFactor(tiersShort: number): number {
+  if (tiersShort <= 0) return 1
+  const last = TIER_PENALTY.length - 1
+  if (tiersShort >= last) return TIER_PENALTY[last]!
+  const lo = Math.floor(tiersShort)
+  const t = tiersShort - lo
+  return Math.exp(Math.log(TIER_PENALTY[lo]!) * (1 - t) + Math.log(TIER_PENALTY[lo + 1]!) * t)
+}
+/**
  * How many different resources a unit of each tier is made from, by tier: advanced things take
  * more kinds of part. Fewer when it may use fewer than that.
  */
 export const PARTS_BY_TIER = [1, 1, 2, 2, 3]
 /**
- * The plan's first unit is designed free but built from parts: tier 0, no dearer than this value
- * band ("modest, like a car"), so one is affordable a turn or two after Phase 1.
+ * The plan's first unit is designed free: tier 0, no dearer than this value band ("modest, like
+ * a car"), with a small free sourcing contract.
  */
 export const FIRST_UNIT_MAX_BAND = 2
+export const STARTER_CONTRACT = 20
+
+// ---------------------------------------------------------------- caps
+
 /**
- * Passive income: [label, minimum IQ, Money's worth a week]. It costs INCOME_COST_WEEKS of
- * itself. More income takes a new proposal.
+ * Sourcing: how many of a unit Jev thinks could be had one way, [label, units]. A contract is a
+ * lease on that many: you create them later, from its parts, at no action.
  */
-export const INCOME_DIFFICULTY: [string, number, number][] = [
-  ['Trivial', 100, 300],
-  ['Simple', 100, 1000],
-  ['Ordinary', 110, 3000],
-  ['Advanced', 140, 1e4],
-  ['Cutting-edge', 200, 4e4],
-  ['Frontier science', 300, 1.5e5],
-  ['Science fiction', 450, 6e5]
+export const SOURCING_LIMITS: [string, number][] = [
+  ['A handful: a few dozen at most', 25],
+  ['A small batch: around a hundred', 120],
+  ['A production run: several hundred', 600],
+  ['Mass market: thousands', 3500],
+  ['Industrial scale: tens of thousands', 20000],
+  ['Global supply: hundreds of thousands', 150000]
 ]
-export const INCOME_COST_WEEKS = 1
+/** A risky contract cuts corners for this many times the units. */
+export const RISK_SOURCING = 10
+/** A sourcing contract's fee: this share of the unit's tier technology cost. */
+export const SOURCING_FEE = 0.5
+/** Sourcing takes Jev offers. */
+export const SOURCING_OPTIONS = 3
+
+/** Worth a resource of each tier can be stored to at the start, before expansions. */
+export const STORAGE_WORTH = [5000, 12000, 40000, 100000, 250000]
+/** Storage expansion sizes, as multiples of STORAGE_WORTH before the scalars: [label, size, risky]. */
+export const STORAGE_SIZES: [string, number, boolean][] = [
+  ['Modest and clean', 1, false],
+  ['Large, with a catch', 3, false],
+  ['Huge and risky', 10, true]
+]
+/** An expansion costs this share of its base worth (STORAGE_WORTH × size, before the scalars). */
+export const STORAGE_COST_SHARE = 0.2
+/** Catches a large expansion can carry: [id, label]. */
+export const STORAGE_CATCHES = [
+  ['upkeep', 'Upkeep: it needs some of another resource every week, or the extra space is lost that week'],
+  ['decay', 'Decay: a share of what is stored spoils every week'],
+  ['fill', 'Slow fill: only part of the extra space can be filled each week']
+] as const
+export type StorageCatchId = (typeof STORAGE_CATCHES)[number][0]
+/** Upkeep catch: this share of the added worth, a week. */
+export const STORAGE_UPKEEP = 0.02
+/** Decay catch: this share of the amount stored, a week. */
+export const STORAGE_DECAY = 0.05
+/** Slow fill catch: this share of the added space can fill a week. */
+export const STORAGE_FILL = 0.2
+/** Stores trait: a unit holds this many weeks of its labour's worth. */
+export const STORE_WEEKS = 4
 /**
- * Growing incomes, by the same bands: the share of the worth of the stock they grow with that
- * they yield each week. Capped at GROWTH_CAP times the band's flat income.
+ * Who could plausibly hold so much, [label, best IQ that allows it]. The ownership ladder: at IQ
+ * 100 the most you can ever hold is what an ordinary person could own.
  */
-export const GROWTH_RATE = [0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
-export const GROWTH_CAP = 5
+export const HOLDERS: [string, number][] = [
+  ['An ordinary individual', 100],
+  ['A small corporation', 200],
+  ['A large corporation', 300],
+  ['A nation', 400],
+  ['The whole of planet Earth', 500],
+  ['More than Earth could hold', 600]
+]
+/** The biggest holder a mind this smart may reach, as an index into HOLDERS. */
+export const holderReach = (iq: number) => HOLDERS.filter(([, minIQ]) => minIQ <= iq).length - 1
+
+// ---------------------------------------------------------------- create
+
+/** Create's base output worth, by target tier, before the scalars. */
+export const CREATE_VALUE = [400, 700, 2500, 6000, 15000]
+/** Inputs consumed come back as this many times their worth. */
+export const CREATE_INPUT_RETURN = 1.2
+/**
+ * An option's inputs are worth this share of what the mind makes before timing (base ×
+ * Efficiency × Reach). Paid in full now, whatever the timing.
+ */
+export const CREATE_INPUT_SHARE = 1
+/** Units made by Create cost this many times what a sourcing contract would charge. */
+export const CREATE_UNIT_PREMIUM = 2
+/** Industry scalar: 1 at no units, up to INDUSTRY_MAX, one step per decade of unit worth from INDUSTRY_FROM. */
+export const INDUSTRY_FROM = 1e3
+export const INDUSTRY_DECADES = 5
+export const INDUSTRY_MAX = 10
+/** A target this far below your IQ (tier min IQ ≤ best IQ × this) guarantees a free, immediate option. */
+export const CREATE_EASY = 0.6
+/** Payout timings: [id, label, multiplier on total output, weeks]. */
+export const CREATE_TIMINGS = [
+  ['now', 'Once, right away', 1, 0],
+  ['spread', 'Spread over 4 weeks', 1.5, 4],
+  ['later', 'Once, in 4 weeks', 2, 4],
+  ['forever', 'Every week, for good', 0.125, 0]
+] as const
+export type CreateTiming = (typeof CREATE_TIMINGS)[number][0]
+export const CREATE_OPTIONS = 3
 /** Strategies: [label, minimum IQ, cost in weeks of the runners' work]. IQ 0 = ready at once. */
 export const ADVANCEMENT: [string, number, number][] = [
   ['Trivial', 0, 0],
@@ -202,14 +299,14 @@ export const techCost = (tier: number): number =>
 /** Strategy research is priced as if you owned at least this many. */
 export const MIN_FLEET = 10
 /** A software upgrade costs this share of the difference in software cost it makes. */
-export const MIND_UPGRADE_SHARE = 0.1
+export const MIND_UPGRADE_SHARE = 0.15
 /** Worth of the resources used up by software that takes a mind to this IQ, in total. */
-export const softwareCost = (iq: number) => 1e4 * (iq / 100) ** 4
+export const softwareCost = (iq: number) => 1000 * (iq / 100) ** 4
 /**
  * Worth of the resources used up building a new platform of this IQ. The main gate on
- * intelligence: steep, so each platform needs a bigger economy than the last.
+ * intelligence: each platform needs bigger storage than the last to pay for it.
  */
-export const mindDesignCost = (iq: number) => 1e4 * (iq / 100) ** 10
+export const mindDesignCost = (iq: number) => 1000 * (iq / 100) ** 3
 /** Upgrade factors Jev can offer. */
 export const UPKEEP_FACTOR = 0.5
 export const PARTS_FACTOR = 0.5
@@ -233,24 +330,26 @@ export const IMPLAUSIBLE_COST = 3
  */
 export const PAYBACK_WEEKS = 1.5
 
-/** Worth of one industry unit, in Money: [label, value]. */
+/**
+ * Worth of one industry unit, in Money: [label, value]. Deliberately irregular steps, so costs
+ * never land on exact 3× or 10× multiples.
+ */
 export const UNIT_VALUE: [string, number][] = [
-  ['Trivial, like a toolbox', 50],
-  ['Cheap, like a bicycle', 500],
-  ['Modest, like a car', 5e3],
-  ['Costly, like a truck', 5e4],
-  ['Expensive, like a factory line', 5e5],
-  ['Huge, like a power station', 5e7],
-  ['Colossal, like a city', 5e9]
+  ['Trivial, like a toolbox', 10],
+  ['Cheap, like a bicycle', 50],
+  ['Modest, like a car', 200],
+  ['Costly, like a truck', 700],
+  ['Expensive, like a factory line', 1500],
+  ['Huge, like a power station or a city', 4000]
 ]
-/** Worth of one of a resource, in Money: [label, value]. */
+/** Worth of one of a resource, in Money: [label, value]. Irregular steps, as for units. */
 export const RESOURCE_VALUE: [string, number][] = [
   ['Next to worthless, like a kilowatt-hour', 0.1],
-  ['Cheap, like a lemon', 1],
-  ['Modest, like a meal', 10],
-  ['Valuable, like a phone', 1e3],
-  ['Precious, like a car', 1e5],
-  ['Priceless, like a masterpiece', 1e7]
+  ['Cheap, like a lemon', 0.4],
+  ['Modest, like a meal', 1.5],
+  ['Valuable, like a phone', 5],
+  ['Precious, like a car', 18],
+  ['Priceless, like a masterpiece', 60]
 ]
 /** Resource tiers: how far along the game a resource is. Index = tier. */
 export const RESOURCE_TIERS: string[] = [
@@ -280,8 +379,6 @@ export const UPKEEP_SIZE: [string, number][] = [
   ['A fair amount', 0.25],
   ['A lot', 0.5]
 ]
-/** Builder labour needed per unit of value built. */
-export const BUILD_LABOUR = 0.25
 /** Crew: each crewed unit needs crew worth this share of its own value. */
 export const CREW_SHARE = 0.5
 
@@ -306,7 +403,17 @@ export const SLOW_WEEKS = 3
 
 // ---------------------------------------------------------------- Jev
 
-export const BARS = { resource: 0.15, strategy: 0.3, unit: 0.35, mind: 0.35, income: 0.3, plan: 0.25, cover: 0.3 }
+export const BARS = {
+  resource: 0.15,
+  strategy: 0.3,
+  unit: 0.35,
+  mind: 0.35,
+  sourcing: 0.3,
+  storage: 0.3,
+  create: 0.3,
+  plan: 0.25,
+  cover: 0.3
+}
 /** Jev is torn when confidence is below this and its top two answers are this close. */
 export const TORN_CONFIDENCE = 0.4
 export const TORN_GAP = 0.1
@@ -382,3 +489,9 @@ export function nice(n: number): number {
   if (!(n > 0)) return 0
   return Number(n.toPrecision(2))
 }
+
+/**
+ * IQ efficiency of a new action: the share of the usual cost it takes a mind this smart, for
+ * something whose tier needs `tierIQ`. Baked in when the action is accepted, never recomputed.
+ */
+export const iqEfficiency = (tierIQ: number, iq: number) => Math.min(1, Math.max(0.5, Math.sqrt(tierIQ / Math.max(1, iq))))

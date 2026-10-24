@@ -1,18 +1,6 @@
 import * as B from './balance'
 import { clockOf, computeTrait, costFactorOf } from './computeTraits'
-import {
-  bestMind,
-  defaultTask,
-  describeIncome,
-  findMind,
-  findResource,
-  findStrategy,
-  findUnit,
-  labour,
-  makeId,
-  partsFor,
-  tierFactor
-} from './model'
+import { bestMind, contractsFor, defaultTask, findMind, findResource, findStrategy, findUnit, fmt, makeId } from './model'
 import { coverWeeks, moveClock, winPhase } from './phase'
 import { has, type TraitId } from './traits'
 import type { Change, Cost, Flow, GameState, Mind, Research, Resource, Strategy, UnitType } from './types'
@@ -25,40 +13,25 @@ export function costMultiplier(plausibility: number, bar: number): number {
   return 1 + (B.IMPLAUSIBLE_COST - 1) * t
 }
 
-/** Stocks something makes: a passive income or a strategy. */
+/** Resources something makes: a Create delivery or a strategy. */
 function produced(state: GameState): Set<string> {
   return new Set([
-    ...state.incomes.map((i) => i.resourceId),
+    ...state.deliveries.flatMap((d) => (d.target.kind === 'resource' ? [d.target.id] : [])),
     ...state.strategies.filter((s) => s.kind === 'make').map((s) => s.outputId)
   ])
 }
 
 /**
- * Resources research could use up: stocks you have some of or something makes, since flows
- * can't be saved up. With none of those, the stocks of the phase's plan: you'll have to earn
- * them first. With no plan either, nothing: research is free. `allow` narrows what may pay.
+ * Resources research could use up: ones you have some of or something makes. With none of
+ * those, the resources of the phase's plan: you'll have to earn them first. With no plan either,
+ * nothing: research is free. `allow` narrows what may pay.
  */
 export function spendable(state: GameState, allow: (r: Resource) => boolean = () => true): Resource[] {
   const made = produced(state)
-  const stocks = state.resources.filter((r) => r.kind === 'stock' && allow(r) && (r.amount > 0 || made.has(r.id)))
+  const stocks = state.resources.filter((r) => allow(r) && (r.amount > 0 || made.has(r.id)))
   if (stocks.length) return stocks
   const plan = new Set(state.phase.plan?.resources ?? [])
-  return state.resources.filter((r) => r.kind === 'stock' && allow(r) && plan.has(r.id))
-}
-
-/** Whether no income, done or waiting as research, yields this resource yet. */
-export const firstIncomeFor = (state: GameState, resourceId: string) =>
-  !state.incomes.some((i) => i.resourceId === resourceId) &&
-  !state.research.some((r) => r.effect.kind === 'income' && r.effect.income.resourceId === resourceId)
-
-/**
- * The first income for a resource is paid only in lower tiers, so the first for a tier-0
- * resource is free. Later incomes may be paid in anything.
- */
-export function incomePayers(state: GameState, outputId: string): ((r: Resource) => boolean) | undefined {
-  const output = findResource(state, outputId)
-  if (!output || !firstIncomeFor(state, outputId)) return undefined
-  return (r) => r.tier < output.tier
+  return state.resources.filter((r) => allow(r) && plan.has(r.id))
 }
 
 /**
@@ -90,35 +63,10 @@ export function priceCost(
 
 // ---------------------------------------------------------------- strategy rates
 
-/** What one running unit of a strategy uses and makes per week. Build rates follow the builder's labour. */
+/** What one running unit of a strategy uses and makes per week. */
 export function strategyRate(state: GameState, s: Strategy): { inputs: Flow[]; amount: number } {
-  const runner = findUnit(state, s.unitId)
-  if (!runner) return { inputs: [], amount: 0 }
-  if (s.kind === 'build') {
-    const target = findUnit(state, s.outputId)
-    if (!target) return { inputs: [], amount: 0 }
-    // A builder below the tier of what it builds is out of its depth.
-    const amount = (labour(runner) * tierFactor(runner.tier, target.tier)) / (B.BUILD_LABOUR * Math.max(1e-9, target.value))
-    return { inputs: partsFor(target).map((p) => ({ ...p, amount: p.amount * amount })), amount }
-  }
+  if (!findUnit(state, s.unitId)) return { inputs: [], amount: 0 }
   return { inputs: s.inputs, amount: s.amount }
-}
-
-export function makeBuildStrategy(state: GameState, unit: UnitType, builder: UnitType): Strategy {
-  const self = unit.id === builder.id
-  return {
-    id: makeId(state, self ? `replicate-${unit.name}` : `build-${unit.name}`),
-    name: self ? `Build more ${unit.name}` : `Build ${unit.name}`,
-    description: self
-      ? `${unit.name} build copies of themselves from parts.`
-      : `${builder.name} build ${unit.name} from parts.`,
-    unitId: builder.id,
-    kind: 'build',
-    inputs: [],
-    outputId: unit.id,
-    amount: 0,
-    target: 0
-  }
 }
 
 export function makeCrewStrategy(state: GameState, unit: UnitType, crew: UnitType, per: number): Strategy {
@@ -138,19 +86,11 @@ export function makeCrewStrategy(state: GameState, unit: UnitType, crew: UnitTyp
 export const crewPer = (unit: UnitType, crew: UnitType) =>
   Math.max(0.01, B.nice((B.CREW_SHARE * unit.value) / Math.max(1e-9, crew.value)))
 
-/** Adds the strategies a unit's traits and builder imply. */
+/** Adds the strategies a unit's traits imply. */
 export function addUnitExtras(state: GameState, unit: UnitType) {
   const strategies = state.strategies
   const exists = (kind: Strategy['kind'], runner: string) =>
     strategies.some((s) => s.kind === kind && s.outputId === unit.id && s.unitId === runner)
-  const builder = unit.builderId ? findUnit(state, unit.builderId) : undefined
-  if (builder && !exists('build', builder.id)) {
-    strategies.push(makeBuildStrategy(state, unit, builder))
-    defaultTask(state, builder)
-  }
-  if (has(unit, 'self-replicating') && !exists('build', unit.id)) {
-    strategies.push(makeBuildStrategy(state, unit, unit))
-  }
   const crew = unit.crew && findUnit(state, unit.crew.unitId)
   if (crew && unit.crew && !exists('crew', crew.id)) {
     strategies.push(makeCrewStrategy(state, unit, crew, unit.crew.per))
@@ -200,7 +140,7 @@ export function applyUnitChanges(state: GameState, unit: UnitType, changes: Chan
         unit.upkeep = scaled(unit.upkeep, c.resourceId, c.factor)
         break
       case 'parts':
-        unit.parts = scaled(unit.parts, c.resourceId, c.factor)
+        for (const contract of contractsFor(state, unit.id)) contract.parts = scaled(contract.parts, c.resourceId, c.factor)
         break
       case 'trait':
         if (c.add && !has(unit, c.trait)) unit.traits.push(c.trait)
@@ -232,7 +172,6 @@ function removeTrait(state: GameState, unit: UnitType, trait: TraitId) {
     drop('crew')
     unit.crew = null
   }
-  if (trait === 'self-replicating') drop('build', unit.id)
   if (trait === 'boosts') unit.boosts = null
   if (trait === 'by-product') unit.byproduct = null
   if (trait === 'stores') unit.stores = null
@@ -266,13 +205,19 @@ export function completeResearch(state: GameState, r: Research): string {
   state.research = state.research.filter((x) => x.id !== r.id)
   if (r.risk?.weeks) moveClock(state, -r.risk.weeks, `${r.name} alarmed humans`)
   switch (effect.kind) {
-    case 'income': {
-      state.incomes.push({ ...effect.income })
-      return `${r.icon} ${effect.income.name}: ${describeIncome(state, effect.income)} a week.`
-    }
     case 'unit': {
       addUnit(state, effect.unit)
-      return `${effect.unit.icon} ${effect.unit.name} is designed. Create them from parts on its card.`
+      return `${effect.unit.icon} ${effect.unit.name} is designed. Find sourcing for it on its card to own some.`
+    }
+    case 'sourcing': {
+      state.sourcing.push({ ...effect.sourcing, used: 0 })
+      const unit = findUnit(state, effect.sourcing.unitId)
+      return `${r.icon} ${effect.sourcing.name}: up to ${fmt(effect.sourcing.total)} more ${unit?.name ?? 'units'}. Create them on its card.`
+    }
+    case 'storage': {
+      const res = findResource(state, effect.resourceId)
+      if (res) res.expansions.push({ ...effect.expansion })
+      return `${r.icon} ${effect.expansion.name}: room for ${fmt(effect.expansion.added)} more ${res?.name ?? ''}.`
     }
     case 'goal':
       return winPhase(state, effect.phase)

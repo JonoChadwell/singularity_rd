@@ -1,11 +1,9 @@
 import { readLevel, type JevAnswer, type JevQuestion } from '@/ai/jev'
 import * as B from './balance'
-import { fmt, owned } from './model'
-import { moveClock } from './phase'
-import type { GameState, Risk, UnitType } from './types'
+import type { GameState, Risk } from './types'
 
 // Risk, in Phase 2: research humans would notice costs weeks off the clock, and pays for it.
-// So does owning lots of anything.
+// So does expanding caps: sourcing contracts and storage, by how much they add.
 
 /** Only Phase 2 has a clock for risk to move. */
 export const asksAlarm = (state: GameState) => state.phase.n === 2
@@ -38,7 +36,6 @@ export const alarmLabel = (risk: Risk) => (B.ALARM[risk.level]?.[0] ?? '').split
 
 /** What the risk pays, by kind of research. */
 export const RISK_BONUS = {
-  income: `costs half and yields ${B.RISK_INCOME}×`,
   strategy: `costs half and makes ${B.RISK_OUTPUT}× as much`,
   unit: 'costs half to design, and needs half the parts',
   mind: `costs half and is ${B.RISK_IQ_BONUS} IQ smarter`,
@@ -49,40 +46,30 @@ export function riskText(risk: Risk, kind: keyof typeof RISK_BONUS): string {
   return `Risky: ${alarmLabel(risk).toLowerCase()}. −${risk.weeks} weeks when you research it; ${RISK_BONUS[kind]}.`
 }
 
-// ---------------------------------------------------------------- notices
-
-const FIRST_DECADE = Math.round(Math.log10(B.NOTICE_FROM))
-
-/** The highest power of ten humans would notice at this fleet worth (0 below NOTICE_FROM). */
-const decadeOf = (worth: number) => (worth >= B.NOTICE_FROM ? Math.floor(Math.log10(worth) + 1e-9) : 0)
-
-/** What `count` of a unit type is worth, in Money. */
-const fleetWorth = (u: UnitType, count: number) => count * u.value
+// ---------------------------------------------------------------- expansions
 
 /**
- * Weeks humans would take off for this unit type reaching `count`: a week for the first power
- * of ten of fleet worth they notice, two for the next, and so on; twice that for a risky unit.
+ * Weeks humans would take off for an expansion that adds `worth` (units × value, or extra
+ * storage × value): a week from EXPANSION_NOTICE_FROM, and one more for every tenfold after.
+ * Twice that for a risky one.
  */
-export function noticeWeeks(u: UnitType, count: number): number {
-  const top = decadeOf(fleetWorth(u, count))
-  let weeks = 0
-  for (let d = Math.max(u.noticed ?? 0, FIRST_DECADE - 1) + 1; d <= top; d++) weeks += (d - FIRST_DECADE + 1) * B.NOTICE_WEEKS
-  return weeks * (u.risky ? 2 : 1)
+export function expansionWeeks(worth: number, risky: boolean): number {
+  if (worth < B.EXPANSION_NOTICE_FROM) return 0
+  const weeks = 1 + Math.floor(Math.log10(worth / B.EXPANSION_NOTICE_FROM) + 1e-9)
+  return weeks * (risky ? 2 : 1)
 }
 
-/** How many of a unit type humans notice next: the count whose fleet is worth the next power of ten. */
-export function noticeAt(u: UnitType): number {
-  const next = Math.max(u.noticed ?? 0, FIRST_DECADE - 1) + 1
-  return u.value > 0 ? 10 ** next / u.value : Infinity
+/**
+ * The risk of an expansion: how alarming it is, plus how big. Only Phase 2 has a clock. A risky
+ * option is at least "it would make the news".
+ */
+export function expansionRisk(state: GameState, alarm: Risk | null, worth: number, risky: boolean): Risk | null {
+  if (!asksAlarm(state)) return null
+  const level = Math.max(alarm?.level ?? 0, risky ? 2 : 0)
+  const weeks = (alarm && !risky ? alarm.weeks : (B.ALARM[level]?.[1] ?? 0)) + expansionWeeks(worth, risky)
+  return weeks > 0 ? { level, weeks } : null
 }
 
-/** Takes weeks off for every unit type whose fleet has crossed a new power of ten of worth. */
-export function checkNotices(state: GameState) {
-  for (const u of state.units) {
-    const worth = fleetWorth(u, owned(u))
-    const weeks = noticeWeeks(u, owned(u))
-    const top = decadeOf(worth)
-    if (top > (u.noticed ?? 0)) u.noticed = top
-    if (weeks) moveClock(state, -weeks, `Humans noticed ${fmt(10 ** top)} worth of ${u.name}`)
-  }
-}
+/** A risk in words, for an expansion option: "−3 weeks (it would make the news)". */
+export const expansionRiskText = (risk: Risk | null) =>
+  risk ? `−${risk.weeks} week${risk.weeks === 1 ? '' : 's'} on the clock (${alarmLabel(risk).toLowerCase()})` : 'Nobody notices'

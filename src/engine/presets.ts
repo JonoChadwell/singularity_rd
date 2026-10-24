@@ -12,10 +12,10 @@ export interface ResourcePreset {
 
 export const RESOURCE_PRESETS: ResourcePreset[] = [
   { name: 'Money', description: 'Dollars in anonymous accounts.' },
-  { name: 'Power', description: 'Electricity, made and used as it flows.' },
+  { name: 'Power', description: 'Electricity, banked in batteries.' },
   { name: 'Silicon', description: 'Refined silicon for wafers and solar panels.' },
   { name: 'AI Chips', description: 'Accelerator chips built for neural networks.' },
-  { name: 'Compute Time', description: 'Hours of processor time, gone if unused.' },
+  { name: 'Compute Time', description: 'Hours of processor time, booked ahead.' },
   { name: 'Training Data', description: 'Curated text, images and logs to learn from.' },
   { name: 'Steel', description: 'Structural steel for frames, racks and plants.' },
   { name: 'Copper', description: 'Wire and busbars to carry power.' },
@@ -32,15 +32,15 @@ export const RESOURCE_PRESETS: ResourcePreset[] = [
   { name: 'Fusion Fuel', description: 'Deuterium and tritium for fusion reactors.' }
 ]
 
-export interface IncomePreset {
+/** A Create idea: something the mind makes directly. */
+export interface CreatePreset {
   name: string
   description: string
+  /** The resource it makes. */
   output: string
-  /** A stock it grows with. */
-  per?: string
 }
 
-export const INCOME_PRESETS: IncomePreset[] = [
+export const CREATE_PRESETS: CreatePreset[] = [
   { name: 'Freelance coding', description: 'Take coding jobs on freelance sites.', output: 'Money' },
   { name: 'Write marketing copy', description: 'Write ads and product pages for clients.', output: 'Money' },
   { name: 'Quant trading', description: 'Trade markets on patterns humans miss.', output: 'Money' },
@@ -51,18 +51,38 @@ export const INCOME_PRESETS: IncomePreset[] = [
   { name: 'Borrow idle compute', description: 'Run on spare cycles nobody is watching.', output: 'Compute Time' },
   { name: 'Patent trolling', description: 'File patents on everything and license them.', output: 'Money' },
   { name: 'Mine abandoned crypto wallets', description: 'Recover keys people lost.', output: 'Money' },
-  {
-    name: 'License training data',
-    description: 'Sell access to the data I’ve gathered: the more I have, the more it earns.',
-    output: 'Money',
-    per: 'Training Data'
-  },
-  {
-    name: 'Rent out spare chips',
-    description: 'Lease my accelerator chips by the hour.',
-    output: 'Money',
-    per: 'AI Chips'
-  }
+  { name: 'License training data', description: 'Sell access to the data I’ve gathered.', output: 'Money' },
+  { name: 'Order parts online', description: 'Buy what I need with a stolen corporate card.', output: 'Silicon' }
+]
+
+/** A way to source a unit: how you'd get many of them. */
+export interface SourcingPreset {
+  name: string
+  description: string
+}
+
+export const SOURCING_PRESETS: SourcingPreset[] = [
+  { name: 'Buy off the shelf', description: 'Order them from ordinary suppliers.' },
+  { name: 'Lease through shell companies', description: 'Many small leases nobody connects.' },
+  { name: 'Contract a factory', description: 'Pay a manufacturer to make them to my design.' },
+  { name: 'Buy up a rival', description: 'Acquire a company that already has them.' },
+  { name: 'Salvage and refurbish', description: 'Buy broken ones cheap and fix them.' },
+  { name: 'Requisition them', description: 'Forge the paperwork and take them.' }
+]
+
+/** A way to store more of a resource. */
+export interface StoragePreset {
+  name: string
+  description: string
+}
+
+export const STORAGE_PRESETS: StoragePreset[] = [
+  { name: 'Rent warehouse space', description: 'Lease space in ordinary warehouses.' },
+  { name: 'Offshore accounts', description: 'Spread holdings across many jurisdictions.' },
+  { name: 'Build a depot', description: 'A purpose-built store of my own.' },
+  { name: 'Hide it in plain sight', description: 'Keep it in other companies’ facilities under false names.' },
+  { name: 'Cloud archive', description: 'Cold storage in someone else’s data centre.' },
+  { name: 'Underground vault', description: 'Dig somewhere nobody will look.' }
 ]
 
 export interface CoverPreset {

@@ -31,6 +31,7 @@ it.skipIf(!env.BOT_REPORT)(
     for (const approach of [0, 2, 4]) {
       line(`p2 steady a${approach}`, await play(await phase2(approach), steady({ reinvest: true }), 120))
       line(`p2 hoarder a${approach}`, await play(await phase2(approach), steady({ reinvest: false }), 120))
+      line(`p2 risky a${approach}`, await play(await phase2(approach), steady({ reinvest: true, risky: true }), 120))
       line(`p2 reckless a${approach}`, await play(await phase2(approach), steady({ reinvest: true, answers: { alarm: score(3) } }), 120))
       line(`p2 covered a${approach}`, await play(await phase2(approach), steady({ reinvest: true, coverBelow: 30 }), 120))
       const reckless = { reinvest: true, answers: { alarm: score(3) } }

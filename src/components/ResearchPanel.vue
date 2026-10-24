@@ -2,22 +2,20 @@
   <div class="research">
     <div class="tab-head">
       <p class="muted small intro">
-        You can propose one research a week. Once it’s here, doing it is instant: it needs a mind at least as smart as
-        its minimum IQ, and it uses up some of the resources you have.
+        One action a week: propose a research, or Create. Once research is here, doing it is instant: it needs a mind
+        at least as smart as its minimum IQ, and it uses up some of the resources you have.
       </p>
       <div class="buttons">
-        <button class="add" @click="ui.openInvent({ kind: 'income' })">+ Passive income</button>
+        <button class="add" @click="ui.openInvent({ kind: 'create' })">+ Create</button>
         <button v-if="!coverLock" class="add" @click="ui.openInvent({ kind: 'cover' })">+ Cover</button>
       </div>
     </div>
     <p v-if="game.state.proposedThisWeek" class="small good">
-      You’ve proposed this week’s research. Next week you can propose another.
+      You’ve taken this week’s action. Next week you can take another.
     </p>
-    <div v-if="game.state.incomes.length" class="incomes small">
-      <span class="muted">Passive income each week:</span>
-      <span v-for="i in game.state.incomes" :key="i.name + i.resourceId">
-        💸 {{ i.name }}: {{ describeIncome(game.state, i) }}
-      </span>
+    <div v-if="game.state.deliveries.length" class="incomes small">
+      <span class="muted">Still to come from Create:</span>
+      <span v-for="(d, i) in game.state.deliveries" :key="i">⚗️ {{ d.name }}: {{ describeDelivery(game.state, d) }}</span>
     </div>
     <article v-for="r in ordered" :key="r.id" class="item" :class="{ goal: r.effect.kind === 'goal' }">
       <header class="head">
@@ -25,8 +23,13 @@
         <div class="title">
           <strong>{{ r.effect.kind === 'goal' ? `Goal: ${r.name}` : r.name }}</strong>
           <div class="muted small">{{ r.description }}</div>
-          <div v-if="r.effect.kind === 'income'" class="small">
-            {{ describeIncome(game.state, r.effect.income) }} every week, once researched.
+          <div v-if="r.effect.kind === 'sourcing'" class="small">
+            Room for {{ fmt(r.effect.sourcing.total) }}, each made from {{ describeFlows(game.state, r.effect.sourcing.parts) }}.
+          </div>
+          <div v-if="r.effect.kind === 'storage'" class="small">
+            Room for {{ fmt(r.effect.expansion.added) }} more{{
+              r.effect.expansion.catch ? `. ${describeCatch(game.state, r.effect.expansion.catch)}` : ''
+            }}.
           </div>
           <div v-if="r.effect.kind === 'cover'" class="small">
             Adds {{ coverWeeks(game.state, r.effect.weeks) }} weeks to the clock, once researched.
@@ -64,7 +67,7 @@
       </div>
     </article>
     <p v-if="!game.state.research.length" class="empty">
-      Research comes only from your ideas: a passive income, a unit or an intelligence system to design, an advanced
+      Research comes only from your ideas: a unit or an intelligence system to design, sourcing or storage, an advanced
       strategy, or an upgrade to something you own.
     </p>
   </div>
@@ -73,7 +76,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { researchBlocker } from '@/engine/actions'
-import { bestIQ, bestMind, describeCost, describeIncome, researchIQ } from '@/engine/model'
+import { bestIQ, bestMind, describeCost, describeDelivery, describeFlows, fmt, researchIQ } from '@/engine/model'
+import { describeCatch } from '@/engine/storageProposal'
 import { coverWeeks, lockReason } from '@/engine/phase'
 import { projectionText as describeProjection } from '@/engine/projection'
 import { alarmLabel } from '@/engine/risk'

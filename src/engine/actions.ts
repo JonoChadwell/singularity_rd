@@ -6,15 +6,14 @@ import {
   findMind,
   findResearch,
   findResource,
-  findStrategy,
+  findSourcing,
   findUnit,
-  owned,
+  openSlots,
   partsFor,
   researchIQ,
   tasksFor
 } from './model'
 import { completeResearch } from './research'
-import { checkNotices, noticeWeeks } from './risk'
 import type { Flow, GameState } from './types'
 
 // Planning actions. They take no time: each returns a new state, or throws a reason.
@@ -42,29 +41,28 @@ export function shuffleIdeas(current: GameState): GameState {
 /** What creating `n` of a unit uses up. */
 export const createCost = (parts: Flow[], n: number): Flow[] => parts.map((p) => ({ ...p, amount: p.amount * n }))
 
-/** Creates units from their parts. They work this week, unless Slow to build. */
-export function createUnits(current: GameState, unitId: string, n: number): GameState {
+/**
+ * Creates units from a sourcing contract's parts, up to its open slots. Takes no action. They
+ * work this week, unless Slow to build.
+ */
+export function createUnits(current: GameState, sourcingId: string, n: number): GameState {
   const state = draft(current)
-  const u = findUnit(state, unitId)
+  const c = findSourcing(state, sourcingId)
+  const u = c && findUnit(state, c.unitId)
   n = Math.floor(n)
-  if (!u || n <= 0) throw new Error('Nothing to create.')
-  const cost = createCost(partsFor(u), n)
+  if (!c || !u || n <= 0) throw new Error('Nothing to create.')
+  if (n > openSlots(c)) {
+    throw new Error(openSlots(c) ? `${c.name} only has room for ${openSlots(c)} more.` : `${c.name} is full. Find more sourcing.`)
+  }
+  const cost = createCost(partsFor(u, c), n)
   const short = costShortfall(state, cost)
   if (short) throw new Error(`You need ${short}.`)
-  for (const c of cost) findResource(state, c.resourceId)!.amount -= c.amount
+  for (const f of cost) findResource(state, f.resourceId)!.amount -= f.amount
+  c.used += n
   u.built += n
   addUnits(u, n, true)
   checkMilestones(state)
-  checkNotices(state)
   return state
-}
-
-/** Weeks humans would take off if you created `n` more of a unit now. */
-export function createNotice(state: GameState, unitId: string, n: number): number {
-  const u = findUnit(state, unitId)
-  // Only Phase 2 has a clock for notices to move.
-  if (!u || state.phase.n !== 2) return 0
-  return noticeWeeks(u, owned(u) + Math.max(0, Math.floor(n)))
 }
 
 /** Sets how many machines of a type work on a task. */
@@ -101,14 +99,6 @@ export function assignAll(current: GameState, unitId: string, taskId: string): G
   return state
 }
 
-export function setBuildTarget(current: GameState, strategyId: string, target: number): GameState {
-  const state = draft(current)
-  const s = findStrategy(state, strategyId)
-  if (!s || s.kind !== 'build') throw new Error('Not a build strategy.')
-  s.target = Math.max(0, Math.floor(target))
-  return state
-}
-
 export function setOverclock(current: GameState, unitId: string, on: boolean): GameState {
   const state = draft(current)
   const u = findUnit(state, unitId)
@@ -140,7 +130,7 @@ export function researchBlocker(state: GameState, researchId: string): string | 
 
 /**
  * Does a research at once: uses up its cost and applies it. Any number a week; the weekly
- * limit is on proposing research, not doing it.
+ * action is proposing research, not doing it.
  */
 export function doResearch(current: GameState, researchId: string): GameState {
   const blocker = current.phase.status === 'lost' ? 'The game is over.' : researchBlocker(current, researchId)

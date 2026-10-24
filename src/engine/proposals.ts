@@ -10,7 +10,7 @@ import {
   type Judge
 } from '@/ai/jev'
 import * as B from './balance'
-import { findResource, findUnit, labour, makeId, namesInUse, runsOn, tierFactor } from './model'
+import { findResource, findUnit, labour, makeId, namesInUse, runsOn, startingCap, tierFactor } from './model'
 import { addStrategy, costMultiplier, priceCost, spendable } from './research'
 import { lockReason, moveClock } from './phase'
 import { alarmQuestions, riskFrom } from './risk'
@@ -22,7 +22,7 @@ export const NAME_MAX = 40
 export const DESCRIPTION_MAX = 240
 export const MAX_INPUTS = 2
 
-export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'income' | 'plan' | 'cover'
+export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'sourcing' | 'storage' | 'create' | 'plan' | 'cover'
 
 /** What the better of two answers costs: a drawback for a unit, a quirk for a strategy. */
 export type Complication = { kind: 'trait'; trait: TraitId } | { kind: 'quirk'; quirk: QuirkId }
@@ -306,11 +306,12 @@ export function logProposal(state: GameState, tone: 'good' | 'ai', text: string)
 }
 
 /**
- * One research proposal a week: accepting a strategy, unit, mind, upgrade or passive income uses
- * it. Resources don't. Doing research already proposed has no weekly limit.
+ * One action a week: accepting a research proposal (strategy, unit, mind, upgrade, sourcing,
+ * storage, cover) or a Create uses it. Resources don't. Doing research already proposed has no
+ * weekly limit.
  */
 export const proposalSlotBlocker = (state: GameState): string | null =>
-  state.proposedThisWeek ? 'You’ve already proposed research this week. Next week you can propose another.' : null
+  state.proposedThisWeek ? 'You’ve already taken this week’s action. Next week you can take another.' : null
 
 /** Uses the week's proposal, or refuses if it's gone. */
 export function claimProposal(state: GameState) {
@@ -373,14 +374,6 @@ export function resourceQuestions(state: GameState, prefix = '', name = ''): Rec
             criteria: { none: 'It is a different thing', ...options(state.resources) }
           } satisfies JevQuestion
         }),
-    [`${prefix}kind`]: {
-      type: 'choice',
-      instructions: `If some of ${it} is made this week and not used, is it still there next week? Most things keep; only things like electricity or attention are lost.`,
-      criteria: {
-        stock: 'Yes: it is a stock that keeps, like money, lemons, documents, keys or silicon wafers',
-        flow: 'No: it is a flow that is lost if unused, like electricity, compute time or attention'
-      }
-    },
     [`${prefix}value`]: {
       type: 'score',
       instructions: `How much is a single one of ${it} worth?`,
@@ -403,7 +396,7 @@ export function resourceQuestions(state: GameState, prefix = '', name = ''): Rec
 
 /**
  * Builds a resource from Jev's answers (with an optional key prefix). A plan's top resource
- * passes its tier, and is always a stock, since the goal uses it up.
+ * passes its tier. Its storage starts at its tier's worth.
  */
 export function resourceFrom(
   state: GameState,
@@ -414,20 +407,26 @@ export function resourceFrom(
 ): Resource {
   const read = reader(v)
   const band = read.level(`${prefix}value`, maxBand(state) + 1)
-  const kind = top === null ? read.choice(`${prefix}kind`, ['stock', 'flow'] as const) : 'stock'
   const tier = top ?? (read.has(`${prefix}tier`) ? read.level(`${prefix}tier`, maxTier(state) + 1) : 0)
+  const value = B.pick(B.RESOURCE_VALUE, band)[1]
   return {
     id: makeId(state, spec.name),
     name: spec.name,
     description: spec.description || spec.name,
     icon: B.icon(read.choice(`${prefix}icon`, Object.keys(B.ICONS))),
-    kind,
     band,
     tier,
-    value: B.pick(B.RESOURCE_VALUE, band)[1],
+    value,
     amount: 0,
-    stored: 0
+    cap: startingCap(tier, value),
+    expansions: []
   }
+}
+
+/** Retiers a resource, keeping its storage in step: a plan may move one into an empty tier. */
+export function setTier(r: Resource, tier: number) {
+  r.tier = tier
+  r.cap = startingCap(tier, r.value)
 }
 
 /** Resources have a very low bar: "a thing I could get". They're added at once. */
@@ -446,11 +445,8 @@ export async function judgeResource(state: GameState, judge: Judge, raw: Resourc
     'resource'
   )
   const v: ResourceVerdict = {
-    // Only stock-or-flow is worth asking about: it changes how the thing plays. Value just
-    // takes Jev's answer.
-    ...baseVerdict('resource', questions, answers, 'is_thing', [
-      { key: 'kind', topic: 'whether it keeps from week to week' }
-    ]),
+    // Value and tier just take Jev's answer.
+    ...baseVerdict('resource', questions, answers, 'is_thing', []),
     kind: 'resource',
     spec
   }

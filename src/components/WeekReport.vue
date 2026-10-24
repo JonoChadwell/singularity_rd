@@ -36,7 +36,6 @@ const changes = computed(() => {
   const report = game.state.lastWeek
   if (!report) return []
   return byTier(game.state.resources)
-    .filter((r) => r.kind === 'stock')
     .map((r) => ({
       icon: r.icon,
       label: r.name,

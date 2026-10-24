@@ -10,8 +10,8 @@
         </div>
         <div class="muted small desc">{{ unit.description }}</div>
       </div>
-      <div class="count num" title="Owned">
-        {{ fmtCount(unit.count) }}
+      <div class="count num" title="Owned, of how many your sourcing allows">
+        {{ fmtCount(unit.count) }}<span class="muted small"> / {{ fmtCount(cap) }}</span>
         <div v-if="pending" class="small muted">+{{ fmtCount(pending) }} on the way</div>
       </div>
     </header>
@@ -26,30 +26,44 @@
       </label>
     </div>
 
-    <div class="create row small">
-      <span class="muted">Each one takes {{ describeFlows(game.state, parts) }}.</span>
-      <input v-model.number="createN" class="n" type="number" min="1" aria-label="How many to create" />
-      <button class="small" :disabled="createN < 1 || !!short" @click="game.createUnits(unit.id, createN)">
-        Create {{ fmtCount(createN || 0) }}
-      </button>
-      <button
-        class="link"
-        :disabled="!most"
-        title="The most you can pay the parts for right now"
-        @click="createN = most"
-      >
-        max {{ fmtCount(most) }}
-      </button>
-      <button
-        class="link"
-        :disabled="!safe"
-        title="The most you can make while still paying next week's upkeep and every other drain, plus a week of upkeep for the new ones"
-        @click="createN = safe"
-      >
-        affordable {{ fmtCount(safe) }}
-      </button>
-      <span v-if="short && createN >= 1" class="warn">You need {{ short }}.</span>
-      <span v-else-if="notice" class="bad">Humans will notice: −{{ notice }} week{{ notice === 1 ? '' : 's' }}.</span>
+    <div class="sourcing small">
+      <div class="bar" :title="`${fmtCount(owned(unit))} of ${fmtCount(cap)} owned`">
+        <div class="fill" :style="{ width: `${cap ? Math.min(100, (100 * owned(unit)) / cap) : 0}%` }" />
+      </div>
+      <p v-if="!contracts.length" class="warn">No sourcing yet: you can’t own any until you find a way to get them.</p>
+      <div v-for="c in contracts" :key="c.id" class="contract row">
+        <span class="cname">
+          📦 <strong>{{ c.name }}</strong>&nbsp;<span class="muted num">{{ fmtCount(c.used) }}/{{ fmtCount(c.total) }}</span>
+          <span v-if="c.risky" class="chip bad">risky</span>
+        </span>
+        <template v-if="c.parts.length && openSlots(c) > 0">
+          <span class="muted">each takes {{ describeFlows(game.state, partsFor(unit, c)) }}</span>
+          <input
+            :value="n(c)"
+            class="n"
+            type="number"
+            min="1"
+            :aria-label="`How many to create from ${c.name}`"
+            @input="createN[c.id] = Number(($event.target as HTMLInputElement).value)"
+          />
+          <button class="small" :disabled="!canCreate(c)" @click="game.createUnits(c.id, n(c))">
+            Create {{ fmtCount(n(c)) }}
+          </button>
+          <button class="link" :disabled="!affordable(game.state, c)" title="The most you can pay the parts for right now" @click="createN[c.id] = affordable(game.state, c)">
+            max {{ fmtCount(affordable(game.state, c)) }}
+          </button>
+          <button
+            class="link"
+            :disabled="!creatable(game.state, c, use)"
+            title="The most you can make while still paying next week's upkeep and every other drain, plus a week of upkeep for the new ones"
+            @click="createN[c.id] = creatable(game.state, c, use)"
+          >
+            affordable {{ fmtCount(creatable(game.state, c, use)) }}
+          </button>
+          <span v-if="shortFor(c)" class="warn">You need {{ shortFor(c) }}.</span>
+        </template>
+        <span v-else class="muted">{{ c.parts.length ? 'full' : 'made by Create' }}</span>
+      </div>
     </div>
 
     <ul v-if="warnings.length" class="plain-list warnings small">
@@ -59,6 +73,7 @@
     <TaskList :unit="unit" />
 
     <footer class="row foot">
+      <button class="link" @click="ui.openInvent({ kind: 'sourcing', unitId: unit.id })">Find sourcing</button>
       <button class="link" @click="ui.openInvent({ kind: 'strategy', unitId: unit.id })">+ strategy</button>
       <button
         class="link"
@@ -74,24 +89,28 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
-import { createCost, createNotice } from '@/engine/actions'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { createCost } from '@/engine/actions'
 import { lockReason } from '@/engine/phase'
 import {
   affordable,
+  contractsFor,
   costShortfall,
   creatable,
   describeFlows,
   findResource,
   findUnit,
   fmtCount,
+  openSlots,
+  owned,
   partsFor,
   tierLabel,
+  unitCap,
   unitValueText,
   weeklyUse
 } from '@/engine/model'
 import { has } from '@/engine/traits'
-import type { UnitType } from '@/engine/types'
+import type { Sourcing, UnitType } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 import TaskList from './TaskList.vue'
@@ -103,13 +122,15 @@ const ui = useUiStore()
 const card = ref<HTMLElement>()
 
 const pending = computed(() => props.unit.pending.reduce((n, p) => n + p.count, 0))
-const parts = computed(() => partsFor(props.unit))
-const createN = ref(1)
-const short = computed(() => costShortfall(game.state, createCost(parts.value, Math.max(0, Math.floor(createN.value || 0)))))
-const most = computed(() => affordable(game.state, props.unit))
-const safe = computed(() => creatable(game.state, props.unit, weeklyUse(game.preview)))
-const unitName =(id: string) => findUnit(game.state, id)?.name ?? '?'
-const notice = computed(() => createNotice(game.state, props.unit.id, createN.value || 0))
+const contracts = computed(() => contractsFor(game.state, props.unit.id))
+const cap = computed(() => unitCap(game.state, props.unit.id))
+const use = computed(() => weeklyUse(game.preview))
+/** How many to create, per contract. */
+const createN = reactive<Record<string, number>>({})
+const n = (c: Sourcing) => Math.max(0, Math.floor(createN[c.id] ?? 1))
+const shortFor = (c: Sourcing) => (n(c) ? costShortfall(game.state, createCost(partsFor(props.unit, c), n(c))) : null)
+const canCreate = (c: Sourcing) => n(c) >= 1 && n(c) <= openSlots(c) && !shortFor(c)
+const unitName = (id: string) => findUnit(game.state, id)?.name ?? '?'
 const upgradeLock = computed(() => lockReason(game.state, 'unit-upgrade'))
 
 const warnings = computed(() => {
@@ -207,8 +228,31 @@ watch(
   width: auto;
 }
 
-.create {
+.sourcing {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sourcing p {
+  margin: 0;
+}
+
+.contract {
   gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--accent);
 }
 
 .warnings {

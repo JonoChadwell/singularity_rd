@@ -16,13 +16,13 @@ import { describeError, logEvent, snapshot, type LogStream } from '@/telemetry'
 
 export type { ProposalInput, Verdict }
 
-const SAVE_KEY = 'singularity-rd/save/v13'
+const SAVE_KEY = 'singularity-rd/save/v15'
 
 function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    return parsed?.version === 13 ? parsed : null
+    return parsed?.version === 15 ? parsed : null
   } catch {
     return null
   }
@@ -126,16 +126,14 @@ export const useGameStore = defineStore('game', () => {
     })
   }
 
-  const createUnits = (unitId: string, n: number) =>
-    act('create', { unitId, n }, (s) => actions.createUnits(s, unitId, n))
+  const createUnits = (sourcingId: string, n: number) =>
+    act('create', { sourcingId, n }, (s) => actions.createUnits(s, sourcingId, n))
   const assign = (unitId: string, taskId: string, n: number) =>
     act('assign', { unitId, taskId, n }, (s) => actions.assign(s, unitId, taskId, n))
   const assignRest = (unitId: string, taskId: string | null) =>
     act('assign_rest', { unitId, taskId }, (s) => actions.assignRest(s, unitId, taskId))
   const assignAll = (unitId: string, taskId: string) =>
     act('assign_all', { unitId, taskId }, (s) => actions.assignAll(s, unitId, taskId))
-  const setBuildTarget = (strategyId: string, target: number) =>
-    act('build_target', { strategyId, target }, (s) => actions.setBuildTarget(s, strategyId, target))
   const setOverclock = (unitId: string, on: boolean) =>
     act('overclock', { unitId, on }, (s) => actions.setOverclock(s, unitId, on))
   const research = (researchId: string) => {
@@ -249,7 +247,6 @@ export const useGameStore = defineStore('game', () => {
     assign,
     assignRest,
     assignAll,
-    setBuildTarget,
     setOverclock,
     research,
     dropResearch,

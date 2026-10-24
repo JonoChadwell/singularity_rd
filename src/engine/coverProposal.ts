@@ -38,7 +38,7 @@ export function weeklyOutput(state: GameState): number {
   let worth = 0
   for (const [id, flows] of Object.entries(preview.flows)) {
     const r = findResource(state, id)
-    if (r?.kind !== 'stock') continue
+    if (!r) continue
     worth += flows.reduce((n, f) => n + Math.max(0, f.amount), 0) * r.value
   }
   return Math.max(B.COVER_MIN_OUTPUT, worth)

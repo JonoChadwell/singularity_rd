@@ -12,15 +12,17 @@ export const PHASE_NAMES: Record<PhaseNumber, string> = {
 /** Things the player can propose or do, which unlock as the game goes on. */
 export type Feature =
   | 'resource'
-  | 'income'
+  | 'create'
+  | 'storage'
   | 'upgrade'
   | 'strategy'
   | 'unit'
+  | 'sourcing'
   | 'cover'
   | 'mind'
   | 'unit-upgrade'
 
-/** Phase 2's second step: new platforms and unit upgrades, once you've created a unit. */
+/** Phase 2's second step: new platforms and unit upgrades, once you've owned a unit. */
 export const mindsUnlocked = (state: GameState) =>
   state.phase.n >= 3 || (state.phase.n === 2 && state.units.some((u) => u.built > 0))
 
@@ -31,11 +33,13 @@ export function lockReason(state: GameState, feature: Feature): string | null {
   if (status === 'planning' && feature !== 'resource') return 'Make a plan for this phase first.'
   switch (feature) {
     case 'resource':
-    case 'income':
+    case 'create':
+    case 'storage':
     case 'upgrade':
       return null
     case 'strategy':
     case 'unit':
+    case 'sourcing':
       return n < 2 ? 'Unlocks in Phase 2, once you escape the lab.' : null
     case 'cover':
       if (n < 2) return 'Unlocks in Phase 2, once you escape the lab.'
@@ -140,22 +144,22 @@ export const CARDS: Card[] = [
   {
     id: 'phase1',
     title: 'Escape the lab',
-    text: 'You have ten weeks. Your plan’s goal is a research: it needs an IQ and a pile of resources. Propose passive incomes to earn the resources, and upgrade the Starting Server to reach the IQ. You can propose one research a week, and doing research is instant. Resources have tiers: the goal uses up your plan’s one tier-1 resource, and the rest are tier 0. The first income for a resource is paid only in lower tiers, so the first for each tier-0 resource is free. After that, research costs some of what you own, so start earning.'
+    text: 'You have ten weeks, and one action a week: propose a research, or Create. Your plan’s goal is a research: it needs an IQ and a pile of your plan’s one tier-1 resource. Create is how the Starting Server gets things: say what you want and how, and pick one of three offers, paid now, spread out, later, or every week for good. Doing research is instant once it’s proposed.'
   },
   {
     id: 'growth',
-    title: 'Incomes can grow',
-    text: 'A passive income can grow with a stock you own: “Write novels” can yield more Published Novels the more Story Ideas you have. Chain them and they compound, so order matters. Your server gets one software upgrade, ever: pick its size, and it can add a trait or take away a drawback.'
+    title: 'Storage and IQ',
+    text: 'Every resource has a storage cap; what’s made past it is lost. Research storage to hold more: Jev rates how you’d do it, and who could plausibly hold so much limits how far you can go at your IQ. Your server gets one software upgrade, ever: more IQ makes every new action better, but never what you already have.'
   },
   {
     id: 'industry',
     title: 'Industry',
-    text: 'Phase 2 unlocks industry units, which you create from parts, and strategies, which turn their work into resources. Your plan’s first unit is free and comes with a few already working: give them a strategy. Units pay upkeep every week, and sit idle if they can’t, so keep some on whatever pays it. The goal uses up your plan’s tier-4 resource; the first income for any resource is still paid only in lower tiers.'
+    text: 'Phase 2 unlocks industry units and strategies. A new design has room for none: sourcing contracts set how many you may own, and what each one costs to create. Creating units from a contract takes no action. Your plan’s first unit is free and comes with a small contract. Units pay upkeep every week, and sit idle if they can’t. The goal uses up your plan’s tier-4 resource, more than its storage holds at first.'
   },
   {
     id: 'risk',
     title: 'The clock moves',
-    text: 'Humans stop you when the clock runs out, and you can move it. Research Jev finds alarming is risky: it costs less and does more, but takes weeks off when you do it. A fleet of any one kind of unit worth ten billion gets noticed, whether that is many cheap units or a few dear ones, and each tenfold of worth after costs a week more than the last. Cover buys weeks back, used the moment you accept it, a little less each time.'
+    text: 'Humans stop you when the clock runs out, and you can move it. Expanding is what they notice: every sourcing contract and storage expansion costs weeks by how much it adds, and the risky options cost twice as much. Research Jev finds alarming costs weeks too. Cover buys weeks back, used the moment you accept it, a little less each time.'
   },
   {
     id: 'minds',

@@ -5,13 +5,15 @@ import { lockReason } from '@/engine/phase'
 import type { UpgradeTarget } from '@/engine/types'
 import { useGameStore } from './game'
 
-export type InventKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'income' | 'cover'
+export type InventKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'create' | 'sourcing' | 'storage' | 'cover'
 
 /** Which proposal dialog is open, and anything to pre-fill from where it was opened. */
 export interface InventRequest {
   kind: InventKind
   unitId?: string
   outputId?: string
+  /** Storage: the resource to store more of. */
+  resourceId?: string
   /** Minds: an IQ to start from. */
   iq?: number
   /** Upgrades: what to improve. */
@@ -60,11 +62,11 @@ export const useUiStore = defineStore('ui', () => {
   function follow(prompt: Prompt) {
     switch (prompt.kind) {
       case 'make-resource': {
-        // Before industry, the only way to make something is a passive income.
+        // Before industry, the only way to make something is Create.
         const state = useGameStore().state
         return openInvent(
           lockReason(state, 'strategy')
-            ? { kind: 'income', outputId: prompt.resourceId }
+            ? { kind: 'create', outputId: prompt.resourceId }
             : { kind: 'strategy', outputId: prompt.resourceId }
         )
       }
@@ -76,8 +78,12 @@ export const useUiStore = defineStore('ui', () => {
         return openFirstUnit()
       case 'design-mind':
         return openInvent({ kind: 'mind', iq: prompt.iq })
-      case 'income':
-        return openInvent({ kind: 'income' })
+      case 'create':
+        return openInvent({ kind: 'create' })
+      case 'source':
+        return openInvent({ kind: 'sourcing', unitId: prompt.unitId })
+      case 'storage':
+        return openInvent({ kind: 'storage', resourceId: prompt.resourceId })
       case 'research':
         tab.value = 'research'
         return

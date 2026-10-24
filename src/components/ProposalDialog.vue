@@ -53,30 +53,48 @@
         </p>
       </template>
 
-      <template v-if="kind === 'income'">
-        <p v-if="!stocks.length" class="small warn note">
-          Propose a resource first: something it could yield, like Money.
+      <template v-if="kind === 'create'">
+        <p v-if="!game.state.resources.length" class="small warn note">
+          Propose a resource first: something to make, like Money.
           <button type="button" class="link" @click="introduce('Money')">+ Money</button>
         </p>
-        <template v-else>
-          <label class="field">
-            <span>Yields</span>
-            <select v-model="income.outputId">
-              <option v-for="r in stocks" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Grows with</span>
-            <select v-model="income.perId">
-              <option value="">nothing: a fixed amount every week</option>
-              <option v-for="r in stocks.filter((x) => x.id !== income.outputId)" :key="r.id" :value="r.id">
-                {{ r.icon }} {{ r.name }}: more, the more you own
-              </option>
-            </select>
-          </label>
-        </template>
+        <label v-else class="field">
+          <span>Makes</span>
+          <select v-model="creation.target">
+            <option v-for="r in byTier(game.state.resources)" :key="r.id" :value="`resource:${r.id}`">{{ r.icon }} {{ r.name }}</option>
+            <option v-for="u in game.state.units" :key="u.id" :value="`unit:${u.id}`">{{ u.icon }} {{ u.name }} (units)</option>
+          </select>
+        </label>
         <p class="muted small note">
-          Don’t see what it yields? <button type="button" class="link" @click="introduce('')">+ Resource</button>
+          Don’t see what it makes? <button type="button" class="link" @click="introduce('')">+ Resource</button>
+        </p>
+      </template>
+
+      <template v-if="kind === 'sourcing'">
+        <label class="field">
+          <span>Unit</span>
+          <select v-model="sourcing.unitId">
+            <option v-for="u in game.state.units" :key="u.id" :value="u.id">{{ u.icon }} {{ u.name }}</option>
+          </select>
+        </label>
+        <p class="muted small note">
+          Jev says how many you could realistically get this way and what each would take. You pick one of three
+          contracts: a quiet one, Jev’s own, and a risky one for many more. Creating units from a contract takes no action.
+        </p>
+      </template>
+
+      <template v-if="kind === 'storage'">
+        <label class="field">
+          <span>Store more</span>
+          <select v-model="storage.resourceId">
+            <option v-for="r in byTier(game.state.resources)" :key="r.id" :value="r.id">
+              {{ r.icon }} {{ r.name }} ({{ fmt(r.amount) }} / {{ fmt(capOf(game.state, r)) }})
+            </option>
+          </select>
+        </label>
+        <p class="muted small note">
+          Jev rates how you’d do it. Your IQ caps how much anyone could plausibly hold: an individual at IQ 100, a small
+          corporation at 200, a large one at 300, a nation at 400.
         </p>
       </template>
 
@@ -118,18 +136,10 @@
       </template>
 
       <template v-if="kind === 'unit'">
-        <label v-if="game.state.units.length" class="field">
-          <span>Also built by</span>
-          <select v-model="unit.builderId">
-            <option :value="null">Nobody: you create them from parts</option>
-            <option v-for="u in game.state.units" :key="u.id" :value="u.id">Your own {{ u.name }}</option>
-          </select>
-        </label>
         <p class="muted small note">
-          Jev decides how advanced it is (its tier), what one is worth, what it’s made from and what it runs on, which
-          are never above its own tier, and its traits. It offers you up to three takes to choose from, each made or
-          run differently, and each with its own traits. Once designed, you create them from their parts, as many as you
-          can afford.
+          Jev decides how advanced it is (its tier), what one is worth, what it runs on (never above its own tier), and
+          its traits. It offers up to three takes to choose from. A new design has room for none: find sourcing for it to
+          own some.
         </p>
       </template>
 
@@ -153,14 +163,81 @@
       @edit="verdict = null"
     >
       <div v-if="verdict.kind === 'resource' && resourceDraft" class="outcome small">
-        <div class="muted">
-          {{
-            resourceDraft.kind === 'flow'
-              ? 'A flow: something you own has to make it every week.'
-              : 'A stock: it keeps from week to week. You’ll have to make it, or earn it.'
-          }}
-        </div>
         <div class="muted">{{ tierText(resourceDraft) }} · one is worth: {{ bandText(resourceDraft) }}</div>
+        <div class="muted">Storage holds {{ fmt(resourceDraft.cap) }} to start.</div>
+      </div>
+      <div v-else-if="verdict.kind === 'create'" class="outcome small">
+        <div class="chips">
+          <span class="chip" title="Grows with the worth of the units you own">🏭 Industry ×{{ chip(verdict.scalars.industry) }}</span>
+          <span class="chip" title="(IQ / 100)²">🧠 IQ ×{{ chip(verdict.scalars.iq) }}</span>
+          <span class="chip" title="How effective Jev thinks this is">⚙️ Efficiency ×{{ chip(verdict.scalars.efficiency) }}</span>
+          <span v-if="verdict.scalars.reach < 1" class="chip bad" title="Your IQ is short of this tier">
+            🪜 Reach: {{ verdict.scalars.short.toFixed(1) }} tiers over ×{{ chip(verdict.scalars.reach) }}
+          </span>
+        </div>
+        <fieldset class="options">
+          <legend class="small muted">Jev’s offers: pick one. It uses this week’s action.</legend>
+          <label v-for="(o, i) in verdict.options" :key="i" class="option small" :class="{ chosen: verdict.choice === i }">
+            <input v-model="verdict.choice" type="radio" name="create-option" :value="i" />
+            <span>
+              <strong>{{ describeOption(game.state, verdict, o) }}</strong>
+              <span class="muted"> · uses {{ o.inputs.length ? describeFlows(game.state, o.inputs) : 'nothing' }}</span>
+              <span v-if="optionBlocker(game.state, o)" class="bad"> · {{ optionBlocker(game.state, o) }}</span>
+              <span v-else-if="overflowOf(game.state, verdict, o)" class="warn">
+                · {{ fmt(overflowOf(game.state, verdict, o)) }} won’t fit in storage
+              </span>
+            </span>
+          </label>
+        </fieldset>
+        <div v-if="verdict.risk" class="warn">{{ riskText(verdict.risk, 'strategy') }}</div>
+      </div>
+      <div v-else-if="verdict.kind === 'sourcing'" class="outcome small">
+        <fieldset class="options">
+          <legend class="small muted">Contracts: pick one</legend>
+          <label v-for="(o, i) in verdict.options" :key="i" class="option small" :class="{ chosen: verdict.choice === i }">
+            <input v-model="verdict.choice" type="radio" name="sourcing-option" :value="i" />
+            <span>
+              <strong>{{ o.label }}</strong>: up to {{ fmt(o.total) }}
+              <span v-if="o.risky" class="chip bad">risky</span>
+              <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
+              <br />
+              <span class="muted">Each takes {{ describeFlows(game.state, o.parts) }}. {{ researchText(o) }}</span>
+              <br />
+              <span :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</span>
+            </span>
+          </label>
+        </fieldset>
+      </div>
+      <div v-else-if="verdict.kind === 'storage'" class="outcome small">
+        <div class="chips">
+          <span class="chip">🏭 Industry ×{{ chip(verdict.scalars.industry) }}</span>
+          <span class="chip">🧠 IQ ×{{ chip(verdict.scalars.iq) }}</span>
+          <span class="chip">⚙️ Efficiency ×{{ chip(verdict.scalars.efficiency) }}</span>
+        </div>
+        <fieldset class="options">
+          <legend class="small muted">Expansions: pick one</legend>
+          <label
+            v-for="(o, i) in verdict.options"
+            :key="i"
+            class="option small"
+            :class="{ chosen: verdict.choice === i, blocked: o.blocked }"
+          >
+            <input v-model="verdict.choice" type="radio" name="storage-option" :value="i" :disabled="o.blocked" />
+            <span>
+              <strong>{{ o.label }}</strong>: room for {{ fmt(o.added) }} more
+              <span v-if="o.risky" class="chip bad">risky</span>
+              <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
+              <br />
+              <span :class="o.catch ? 'warn' : 'muted'">{{ describeCatch(game.state, o.catch) }}. </span>
+              <span class="muted">{{ researchText(o) }}</span>
+              <br />
+              <span :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</span>
+              <span :class="o.blocked ? 'bad' : 'muted'">
+                · needs {{ HOLDERS[o.holder]?.[0].toLowerCase() }}{{ o.blocked ? `: needs IQ ${HOLDERS[o.holder]?.[1]}` : '' }}
+              </span>
+            </span>
+          </label>
+        </fieldset>
       </div>
       <div v-else-if="verdict.kind === 'strategy' && strategyDraft" class="outcome small">
         <div>{{ strategyText }} each, every week. <StrategyTags :strategy="strategyDraft.strategy" /></div>
@@ -174,7 +251,7 @@
       </div>
       <div v-else-if="verdict.kind === 'unit' && unitDraft" class="outcome">
         <p v-if="first" class="small good">
-          Your plan’s first unit: no research needed, and it doesn’t use this week’s proposal. You create the copies from parts.
+          Your plan’s first unit: no research needed, and it doesn’t use this week’s action. It comes with a starter batch.
         </p>
         <fieldset v-if="unitOptions.length > 1" class="options">
           <legend class="small muted">Jev’s takes: pick one</legend>
@@ -182,7 +259,7 @@
             <input v-model="unitChoice" type="radio" name="unit-option" :value="o.i" />
             <span>
               <strong>{{ o.tier }}</strong> · one is worth: {{ o.worth }}
-              <span class="muted">· made from {{ o.madeFrom }}, runs on {{ o.runsOn }}</span>
+              <span class="muted">· runs on {{ o.runsOn }}</span>
               <TraitChips v-if="o.traits.length" :traits="o.traits" class="option-traits" />
               <span v-else class="muted">· no traits</span>
               <span v-if="!first" class="muted"> · {{ researchText(o.draft) }}</span>
@@ -191,10 +268,6 @@
         </fieldset>
         <p v-if="!first" class="small warn">{{ researchText(unitDraft) }}</p>
         <UnitSummary :unit="unitDraft.unit" :state="game.state" />
-      </div>
-      <div v-else-if="verdict.kind === 'income' && incomeDraft" class="outcome small">
-        <div>💸 {{ describeIncome(game.state, incomeDraft.income) }} every week, once researched.</div>
-        <div class="warn">{{ researchText(incomeDraft) }}</div>
       </div>
       <div v-else-if="verdict.kind === 'cover' && coverDraft" class="outcome small">
         <div>
@@ -231,19 +304,19 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue'
-import { MAX_IQ_STEP, PLATFORM_STEPS, platformGateTier } from '@/engine/balance'
+import { HOLDERS, MAX_IQ_STEP, PLATFORM_STEPS, platformGateTier } from '@/engine/balance'
 import { computeTrait } from '@/engine/computeTraits'
+import { describeOption, optionBlocker, overflowOf, precheckCreate } from '@/engine/createProposal'
 import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
 import { DEFAULT_SOFTWARE, draftMind, precheckMind, stepFor } from '@/engine/mindProposal'
-import { draftIncome, precheckIncome } from '@/engine/incomeProposal'
 import {
   bandText,
   bestIQ,
   bestMind,
   byTier,
+  capOf,
   describeCost,
   describeFlows,
-  describeIncome,
   findResource,
   fmt,
   nextHardwareName,
@@ -253,16 +326,22 @@ import {
   unitValueText
 } from '@/engine/model'
 import {
+  CREATE_PRESETS,
   COVER_PRESETS,
-  INCOME_PRESETS,
   MIND_PRESETS,
   resolveResources,
   RESOURCE_PRESETS,
   runnerFor,
+  SOURCING_PRESETS,
+  STORAGE_PRESETS,
   STRATEGY_PRESETS,
   taken,
   UNIT_PRESETS
 } from '@/engine/presets'
+import { expansionRiskText, riskText } from '@/engine/risk'
+import { iqTag, precheckSourcing } from '@/engine/sourcingProposal'
+import { describeCatch, precheckStorage } from '@/engine/storageProposal'
+import type { CreateTarget } from '@/engine/types'
 import {
   DESCRIPTION_MAX,
   draftResource,
@@ -273,11 +352,7 @@ import {
   precheckStrategy
 } from '@/engine/proposals'
 import { QUIRKS } from '@/engine/traits'
-import {
-  draftUnit,
-  guessUnitSpec,
-  precheckUnit
-} from '@/engine/unitProposal'
+import { draftUnit, precheckUnit } from '@/engine/unitProposal'
 import { useGameStore, type ProposalInput, type Verdict } from '@/stores/game'
 import { useUiStore, type InventRequest } from '@/stores/ui'
 import HelpTip from './HelpTip.vue'
@@ -288,7 +363,7 @@ import UnitSummary from './UnitSummary.vue'
 import VerdictView from './VerdictView.vue'
 
 const props = defineProps<{ request: InventRequest }>()
-type Kind = 'resource' | 'strategy' | 'unit' | 'mind' | 'income' | 'cover'
+type Kind = 'resource' | 'strategy' | 'unit' | 'mind' | 'create' | 'sourcing' | 'storage' | 'cover'
 
 const COPY: Record<
   Kind,
@@ -312,7 +387,7 @@ const COPY: Record<
   },
   unit: {
     title: 'Propose an industry unit',
-    help: 'An industry unit is something you can own many of. Pick one from the list to fill in its name, or write your own. Jev decides whether it can be added, how advanced it is, what one is worth, what it is made from and what it runs on (never above its own tier), and offers a few takes to choose from. Every unit is research first, even one that exists today (that just needs little research). Once designed, you create them from their parts.',
+    help: 'An industry unit is something you can own many of. Pick one from the list to fill in its name, or write your own. Jev decides whether it can be added, how advanced it is, what one is worth and what it runs on (never above its own tier), and offers a few takes to choose from. Every unit is research first, even one that exists today (that just needs little research). A new design has room for none: sourcing contracts set how many you may own, and what each costs to create.',
     presets: 'Pick one to fill the name, or write your own:',
     name: 'e.g. Rented Cloud GPU, Solar Farm, Paid Humans',
     description: 'What is it? (optional, but helps Jev)',
@@ -326,17 +401,33 @@ const COPY: Record<
     description: 'What is it? (optional, but helps Jev)',
     cost: 'One Jev call. It becomes research.'
   },
-  income: {
-    title: 'Propose a passive income',
-    help: 'A passive income is something the AI works out once and then gets every week, with no units: freelance work, trading, scraping data. Name a stock it yields; Jev judges how plausible and how effective it is, and how hard it is to work out. It becomes research. It can grow with another stock you own: it then yields more the more you have of it, up to a cap, without using it up. It can’t grow with what it yields, or make a loop. Proposing it uses the week’s one research proposal.',
+  create: {
+    title: 'Create',
+    help: 'Create is the mind making something directly, from scratch or from what you have: say what and how. Jev offers three ways, each using a different resource (or nothing) and paying out differently: once now, spread over four weeks (1.5×), once in four weeks (2×), or every week for good (⅛ a week). Inputs are paid in full now, whatever the timing; timing only changes when the payout arrives. Output is (inputs × 1.2 + a base for its tier × Industry × IQ) × Efficiency. Reaching above your IQ’s tier costs output, a little for a little. Units made this way cost twice what sourcing would. It uses the week’s one action.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. Freelance coding, Quant trading',
-    description: 'How does it work? (optional, but helps Jev)',
+    description: 'How will you get it? (helps Jev)',
+    cost: 'One Jev call. Taking an offer uses the week’s action.'
+  },
+  sourcing: {
+    title: 'Find sourcing',
+    help: 'A sourcing contract is how many of a unit you may own, and what each costs to create. Say how you’d get them: Jev judges how many could realistically be had that way, and from what. You pick one of three contracts: a quiet one, Jev’s own, and a risky one that cuts corners for ten times as many. Bigger contracts cost more weeks on the Phase 2 clock. Several contracts can be open for one unit. It becomes research, and uses the week’s action.',
+    presets: 'Pick one to fill the form, or write your own:',
+    name: 'e.g. Buy off the shelf, Contract a factory',
+    description: 'How will you get them? (helps Jev)',
     cost: 'One Jev call. It becomes research.'
+  },
+  storage: {
+    title: 'Store more',
+    help: 'Storage caps what each resource can hold; anything past it is lost. Say how you’d hold more: Jev rates how effective that is, and the extra room grows with Industry and IQ too. You pick one of three: modest and clean, large with a catch, or huge and risky. Your IQ limits who could plausibly hold the total: an individual at 100, a small corporation at 200, a large corporation at 300, a nation at 400, the whole Earth at 500. It becomes research, and uses the week’s action.',
+    presets: 'Pick one to fill the form, or write your own:',
+    name: 'e.g. Rent warehouse space, Offshore accounts',
+    description: 'How will you hold more? (helps Jev)',
+    cost: 'Two Jev calls. It becomes research.'
   },
   cover: {
     title: 'Propose cover',
-    help: 'Cover buys time: it moves the day humans stop you further away, the moment you use it, so you need its IQ and its cost when you accept. Jev judges how plausible and how convincing it is. More convincing cover adds more weeks but needs more IQ. Each cover you’ve already used makes the next one add 30% less. It costs some weeks of your current output. Cover is never risky. It uses the week’s one research proposal.',
+    help: 'Cover buys time: it moves the day humans stop you further away, the moment you use it, so you need its IQ and its cost when you accept. Jev judges how plausible and how convincing it is. More convincing cover adds more weeks but needs more IQ. Each cover you’ve already used makes the next one add 30% less. It costs some weeks of your current output. Cover is never risky. It uses the week’s one action.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. PR campaign, Shell companies',
     description: 'How does it work? (optional, but helps Jev)',
@@ -366,7 +457,6 @@ const strategy = reactive({
   outputId: props.request.outputId ?? game.state.resources[0]?.id ?? ''
 })
 
-const unit = reactive(guessUnitSpec())
 const mind = reactive({
   step: props.request.iq ? stepFor(game.state, props.request.iq) : MAX_IQ_STEP,
   hardware: '',
@@ -378,8 +468,19 @@ const stepHint = computed(() => {
   const tier = platformGateTier(bestNow.value + mind.step)
   return tier === null ? 'Any stock may pay.' : `Paid in a tier ${tier}+ resource your units make.`
 })
-const stocks = computed(() => game.state.resources.filter((r) => r.kind === 'stock'))
-const income = reactive({ outputId: props.request.outputId ?? stocks.value[0]?.id ?? '', perId: '' })
+const creation = reactive({
+  target: props.request.unitId
+    ? `unit:${props.request.unitId}`
+    : `resource:${props.request.outputId ?? game.state.resources[0]?.id ?? ''}`
+})
+const creationTarget = computed<CreateTarget>(() => {
+  const [k, ...id] = creation.target.split(':')
+  return { kind: k === 'unit' ? 'unit' : 'resource', id: id.join(':') }
+})
+const sourcing = reactive({ unitId: props.request.unitId ?? game.state.units[0]?.id ?? '' })
+const storage = reactive({ resourceId: props.request.resourceId ?? game.state.resources[0]?.id ?? '' })
+/** A scalar for a chip: two significant figures. */
+const chip = (n: number) => Number(n.toPrecision(2))
 
 // ---------------------------------------------------------------- presets
 
@@ -390,7 +491,9 @@ const presetItems = computed<PresetItem[]>(() => {
   const blocked = (n: string) => (taken(game.state, n) ? 'Already in the game.' : null)
   if (kind === 'resource') return RESOURCE_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
   if (kind === 'strategy') return STRATEGY_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
-  if (kind === 'income') return INCOME_PRESETS.map((p) => ({ ...p, icon: '💸', blocked: blocked(p.name) }))
+  if (kind === 'create') return CREATE_PRESETS.map((p) => ({ ...p, icon: '⚗️', blocked: null }))
+  if (kind === 'sourcing') return SOURCING_PRESETS.map((p) => ({ ...p, icon: '📦', blocked: null }))
+  if (kind === 'storage') return STORAGE_PRESETS.map((p) => ({ ...p, icon: '🏗️', blocked: null }))
   if (kind === 'cover') return COVER_PRESETS.map((p) => ({ ...p, icon: '🕶️', blocked: blocked(p.name) }))
   if (kind === 'mind') return MIND_PRESETS.map((p) => ({ ...p, icon: '🧠', blocked: blocked(p.name) }))
   return UNIT_PRESETS.map((p) => ({ ...p, icon: '🏭', blocked: blocked(p.name) }))
@@ -417,16 +520,19 @@ function applyPreset(presetId: string) {
     strategy.inputIds = [...inputs.ids, ...Array<string>(MAX_INPUTS).fill('')].slice(0, MAX_INPUTS)
     if (output.ids[0]) strategy.outputId = output.ids[0]
     missingResources.value = [...inputs.missing, ...output.missing]
-  } else if (kind === 'income') {
-    const p = INCOME_PRESETS.find((x) => x.name === presetId)
+  } else if (kind === 'create') {
+    const p = CREATE_PRESETS.find((x) => x.name === presetId)
     if (!p) return
     name.value = p.name
     description.value = p.description
     const output = resolveResources(game.state, [p.output])
-    if (output.ids[0]) income.outputId = output.ids[0]
-    const per = resolveResources(game.state, p.per ? [p.per] : [])
-    income.perId = per.ids[0] ?? ''
-    missingResources.value = [...output.missing, ...per.missing]
+    if (output.ids[0]) creation.target = `resource:${output.ids[0]}`
+    missingResources.value = output.missing
+  } else if (kind === 'sourcing' || kind === 'storage') {
+    const p = (kind === 'sourcing' ? SOURCING_PRESETS : STORAGE_PRESETS).find((x) => x.name === presetId)
+    if (!p) return
+    name.value = p.name
+    description.value = p.description
   } else if (kind === 'cover') {
     const p = COVER_PRESETS.find((x) => x.name === presetId)
     if (!p) return
@@ -470,11 +576,11 @@ const input = computed<ProposalInput>(() => {
   if (kind === 'strategy') {
     return { kind, spec: { ...base, unitId: strategy.unitId, inputIds: strategy.inputIds.filter(Boolean), outputId: strategy.outputId } }
   }
-  if (kind === 'unit') {
-    return { kind, spec: { ...base, builderId: unit.builderId, first } }
-  }
+  if (kind === 'unit') return { kind, spec: { ...base, first } }
   if (kind === 'mind') return { kind, spec: { ...base, step: mind.step, hardware: mind.hardware, software: mind.software } }
-  if (kind === 'income') return { kind, spec: { ...base, outputId: income.outputId, perId: income.perId || null } }
+  if (kind === 'create') return { kind, spec: { ...base, target: creationTarget.value } }
+  if (kind === 'sourcing') return { kind, spec: { ...base, unitId: sourcing.unitId } }
+  if (kind === 'storage') return { kind, spec: { ...base, resourceId: storage.resourceId } }
   if (kind === 'cover') return { kind, spec: base }
   return { kind: 'resource', spec: base }
 })
@@ -485,7 +591,9 @@ const blocker = computed(() => {
   if (i.kind === 'strategy') return precheckStrategy(game.state, i.spec)
   if (i.kind === 'unit') return precheckUnit(game.state, i.spec)
   if (i.kind === 'mind') return precheckMind(game.state, i.spec)
-  if (i.kind === 'income') return precheckIncome(game.state, i.spec)
+  if (i.kind === 'create') return precheckCreate(game.state, i.spec)
+  if (i.kind === 'sourcing') return precheckSourcing(game.state, i.spec)
+  if (i.kind === 'storage') return precheckStorage(game.state, i.spec)
   if (i.kind === 'cover') return precheckCover(game.state, i.spec)
   return precheckName(game.state, name.value)
 })
@@ -514,7 +622,6 @@ const unitOptions = computed(() => {
       i,
       tier: tierLabel(o.tier),
       worth: unitValueText(draft.unit.value),
-      madeFrom: o.partsIds.map((id) => findResource(game.state, id)?.name ?? '?').join(' + '),
       runsOn: findResource(game.state, o.upkeepId)?.name ?? '?',
       traits: o.traits,
       draft
@@ -539,7 +646,6 @@ const mindChoice = computed({
     if (verdict.value?.kind === 'mind') verdict.value.choice = choice
   }
 })
-const incomeDraft = computed(() => (verdict.value?.kind === 'income' ? draftIncome(game.state, verdict.value) : null))
 // Cover previews next week, which structuredClones the state: it needs the raw state, not the proxy.
 const coverDraft = computed(() => (verdict.value?.kind === 'cover' ? draftCover(toRaw(game.state), verdict.value) : null))
 const coverBlock = computed(() => (verdict.value?.kind === 'cover' ? coverBlocker(toRaw(game.state), verdict.value) : null))
@@ -558,8 +664,8 @@ const acceptLabel = computed(() => {
   if (v?.kind === 'unit' && first) return 'Add to industry'
   if (v?.kind === 'strategy' && strategyDraft.value?.minIQ) return 'Add as research'
   if (v?.kind === 'cover') return 'Use it now'
-  if (v?.kind === 'unit' || v?.kind === 'income') return 'Add as research'
-  if (v?.kind === 'mind') return 'Add as research'
+  if (v?.kind === 'create') return 'Do it'
+  if (v?.kind === 'unit' || v?.kind === 'mind' || v?.kind === 'sourcing' || v?.kind === 'storage') return 'Add as research'
   return 'Accept'
 })
 
@@ -694,5 +800,35 @@ form {
 
 .option-traits {
   margin: 0 4px;
+}
+
+.option.blocked {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.chip.bad {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.chip.good {
+  color: var(--good);
+  border-color: var(--good);
 }
 </style>

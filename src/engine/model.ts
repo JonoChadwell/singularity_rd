@@ -1,7 +1,7 @@
 import * as B from './balance'
 import { iqShiftOf, type ResearchType } from './computeTraits'
 import { has, TRAITS } from './traits'
-import type { Flow, GameState, Income, Mind, Research, Resource, Strategy, UnitType } from './types'
+import type { CreateTarget, Delivery, Flow, GameState, Mind, Research, Resource, Sourcing, Strategy, UnitType } from './types'
 
 // ---------------------------------------------------------------- formatting
 
@@ -69,7 +69,7 @@ export function tierFit(unitTier: number, outputTier: number): { text: string; g
   return { text: gap === -1 ? 'Struggling' : gap === -2 ? 'Far out of its depth' : 'Hopeless', good: false }
 }
 
-/** A strategy's efficiency in Jev's word: "Brilliant". Null for build and crew strategies. */
+/** A strategy's efficiency in Jev's word: "Brilliant". Null for crew strategies. */
 export function efficiencyWord(s: Strategy): string | null {
   if (s.kind !== 'make' || s.efficiency === undefined) return null
   return B.EFFICIENCY.find(([, m]) => m === s.efficiency)?.[0] ?? null
@@ -90,6 +90,11 @@ export const findStrategy = (state: GameState, id: string): Strategy | undefined
   state.strategies.find((s) => s.id === id)
 export const findResearch = (state: GameState, id: string): Research | undefined =>
   state.research.find((r) => r.id === id)
+export const findSourcing = (state: GameState, id: string): Sourcing | undefined =>
+  state.sourcing.find((c) => c.id === id)
+/** A unit type's sourcing contracts, oldest first. */
+export const contractsFor = (state: GameState, unitId: string): Sourcing[] =>
+  state.sourcing.filter((c) => c.unitId === unitId)
 
 export const MONEY_ID = 'money'
 
@@ -97,6 +102,12 @@ export const MONEY_ID = 'money'
 function researchThing(r: Research): { id: string; name: string } | null {
   const e = r.effect
   return e.kind === 'unit' ? e.unit : e.kind === 'mind' ? e.mind : e.kind === 'strategy' ? e.strategy : null
+}
+
+/** Ids a research will add, for picking fresh ids. */
+function researchIds(r: Research): string[] {
+  const thing = researchThing(r)
+  return [...(thing ? [thing.id] : []), ...(r.effect.kind === 'sourcing' ? [r.effect.sourcing.id] : [])]
 }
 
 /** A stable id from a name, so the same world always gives Jev the same request. */
@@ -114,7 +125,8 @@ export function makeId(state: GameState, name: string): string {
     ...state.units.map((u) => u.id),
     ...state.strategies.map((s) => s.id),
     ...state.research.map((r) => r.id),
-    ...state.research.flatMap((r) => researchThing(r)?.id ?? [])
+    ...state.sourcing.map((c) => c.id),
+    ...state.research.flatMap(researchIds)
   ])
   let id = base
   for (let i = 2; taken.has(id); i++) id = `${base}-${i}`
@@ -152,23 +164,36 @@ export function describeFlows(state: GameState, flows: Flow[], multiplier = 1): 
     .join(' + ')
 }
 
-/** What an income yields this week: a fixed amount, or so much per one owned, up to its cap. */
-export function incomeYield(state: GameState, i: Income): number {
-  if (!i.per) return i.amount
-  const have = findResource(state, i.per)?.amount ?? 0
-  return Math.min(i.cap ?? Infinity, i.amount * have)
+/** A Create's target, by name and icon. */
+export function targetLabel(state: GameState, t: CreateTarget): string {
+  const thing = t.kind === 'unit' ? findUnit(state, t.id) : findResource(state, t.id)
+  return thing ? `${thing.icon} ${thing.name}` : '?'
 }
 
-/** An income in words: "+300 💰 Money" or "0.02 📚 Novels per 💡 Story Idea owned (+1.4 now, up to 50)". */
-export function describeIncome(state: GameState, i: Income): string {
-  if (!i.per) return `+${describeFlows(state, [i])}`
-  const out = findResource(state, i.resourceId)
-  const per = findResource(state, i.per)
-  return (
-    `${fmt(i.amount)} ${out?.icon ?? '?'} ${out?.name ?? '?'} per ${per?.icon ?? '?'} ${per?.name ?? '?'} owned ` +
-    `(+${fmt(incomeYield(state, i))} now, up to ${fmt(i.cap ?? Infinity)})`
-  )
+/** A delivery in words: "+300 💰 Money every week" or "+40 🤖 Robots a week for 3 more weeks". */
+export function describeDelivery(state: GameState, d: Delivery): string {
+  const what = `+${fmt(d.amount)} ${targetLabel(state, d.target)}`
+  if (d.weeks === null) return `${what} every week${d.delay ? `, from ${d.delay} weeks’ time` : ''}`
+  if (d.delay) return `${what} in ${d.delay} week${d.delay === 1 ? '' : 's'}`
+  return `${what} a week for ${d.weeks} more week${d.weeks === 1 ? '' : 's'}`
 }
+
+/** What a resource can hold: its cap, its expansions (unless one's upkeep went unpaid), and units that Store it. */
+export function capOf(state: GameState, r: Resource, unpaid: ReadonlySet<Resource['expansions'][number]> = new Set()): number {
+  let cap = r.cap
+  for (const e of r.expansions) if (!unpaid.has(e)) cap += e.added
+  for (const u of state.units) {
+    if (u.stores === r.id && has(u, 'stores')) cap += (u.count * labour(u) * B.STORE_WEEKS) / Math.max(1e-9, r.value)
+  }
+  return cap
+}
+
+/** The cap a new resource of this tier and value starts with. */
+export const startingCap = (tier: number, value: number) =>
+  B.nice((B.STORAGE_WORTH[Math.min(tier, B.STORAGE_WORTH.length - 1)] ?? 0) / Math.max(1e-9, value))
+
+/** Room left in a resource's storage. */
+export const room = (state: GameState, r: Resource) => Math.max(0, capOf(state, r) - r.amount)
 
 // ---------------------------------------------------------------- intelligence
 
@@ -197,11 +222,10 @@ export function nextHardwareName(name: string): string {
 export function researchType(r: Research): ResearchType | null {
   const e = r.effect
   switch (e.kind) {
-    case 'income':
-      return 'income'
     case 'strategy':
       return 'strategy'
     case 'unit':
+    case 'sourcing':
       return 'unit'
     case 'cover':
       return 'cover'
@@ -235,57 +259,74 @@ export function traitPriceFactor(traits: UnitType['traits']): number {
   }, 1)
 }
 
-/** Parts per unit built, after Mass-produced. */
-export function partsFor(u: UnitType): Flow[] {
-  if (!has(u, 'mass-produced')) return u.parts
+/** Parts per unit created from a contract, after Mass-produced. */
+export function partsFor(u: UnitType, c: Sourcing): Flow[] {
+  if (!has(u, 'mass-produced')) return c.parts
   const factor = (1 - B.MASS_PRODUCED) ** Math.floor(Math.log10(Math.max(1, u.built)))
-  return u.parts.map((p) => ({ ...p, amount: p.amount * factor }))
+  return c.parts.map((p) => ({ ...p, amount: p.amount * factor }))
 }
 
 /** Units owned or on their way. */
 export const owned = (u: UnitType) => u.count + u.pending.reduce((n, p) => n + p.count, 0)
 
+/** How many of a unit type you may own: the sum of its contracts. A new design has none. */
+export const unitCap = (state: GameState, unitId: string) =>
+  contractsFor(state, unitId).reduce((n, c) => n + c.total, 0)
+
+/** Slots left on a contract. */
+export const openSlots = (c: Sourcing) => Math.max(0, c.total - c.used)
+
+/** Worth of every unit you own: what the Industry scalar grows with. */
+export const industryWorth = (state: GameState) => state.units.reduce((n, u) => n + owned(u) * u.value, 0)
+
+/** The Industry scalar: 1 with no units, one step per decade of unit worth, up to INDUSTRY_MAX. */
+export function industryScalar(state: GameState): number {
+  const decades = Math.log10(1 + industryWorth(state) / B.INDUSTRY_FROM)
+  return 1 + (B.INDUSTRY_MAX - 1) * Math.min(1, decades / B.INDUSTRY_DECADES)
+}
+
+/** The IQ scalar: (IQ / 100)², with the IQ counted for Creates. */
+export const iqScalar = (state: GameState) => (iqFor(state, 'create') / 100) ** 2
+
 // ---------------------------------------------------------------- creating units
 
-/** Stock each resource that next week's running will use, from a preview. */
-export function weeklyUse(report: { flows: Record<string, { amount: number }[]> } | null): Record<string, number> {
+/** The flow row for what didn't fit in storage: lost, not used. */
+export const OVERFLOW = 'Overflowed storage'
+
+/** Stock each resource that next week's running will use, from a preview. Overflow isn't use. */
+export function weeklyUse(report: { flows: Record<string, { label: string; amount: number }[]> } | null): Record<string, number> {
   const use: Record<string, number> = {}
   for (const [id, flows] of Object.entries(report?.flows ?? {})) {
-    use[id] = -flows.reduce((n, f) => n + Math.min(0, f.amount), 0)
+    use[id] = -flows.reduce((n, f) => n + (f.label === OVERFLOW ? 0 : Math.min(0, f.amount)), 0)
   }
   return use
 }
 
 /**
- * The most you could create from parts while keeping `reserve` of each resource back, plus a
- * week's upkeep and default-strategy inputs for the new units: these are paid from stock on
- * hand before the week's output arrives, so spending everything would leave them idle.
+ * The most you could create from a contract while keeping `reserve` of each resource back, plus
+ * a week's upkeep and default-strategy inputs for the new units, so spending everything doesn't
+ * leave them idle. Never more than the contract's open slots.
  */
-export function creatable(state: GameState, u: UnitType, reserve: Record<string, number> = {}): number {
+export function creatable(state: GameState, c: Sourcing, reserve: Record<string, number> = {}): number {
+  const u = findUnit(state, c.unitId)
+  if (!u) return 0
   const per = new Map<string, number>()
-  for (const p of partsFor(u)) per.set(p.resourceId, (per.get(p.resourceId) ?? 0) + p.amount)
-  for (const f of u.upkeep) {
-    const r = findResource(state, f.resourceId)
-    if (r?.kind === 'stock') per.set(f.resourceId, (per.get(f.resourceId) ?? 0) + f.amount)
-  }
-  // New units join the default (rest) strategy, so they also use its stock inputs. Build
-  // strategies are skipped: what they use depends on their target.
+  const add = (f: Flow) => per.set(f.resourceId, (per.get(f.resourceId) ?? 0) + f.amount)
+  for (const p of partsFor(u, c)) add(p)
+  for (const f of u.upkeep) add(f)
+  // New units join the default (rest) strategy, so they also use its inputs.
   const task = u.rest ? findStrategy(state, u.rest) : undefined
-  if (task && task.kind !== 'build') {
-    for (const f of task.inputs) {
-      if (findResource(state, f.resourceId)?.kind === 'stock') {
-        per.set(f.resourceId, (per.get(f.resourceId) ?? 0) + f.amount)
-      }
-    }
-  }
-  return mostFrom(state, per, reserve)
+  if (task) for (const f of task.inputs) add(f)
+  return Math.min(openSlots(c), mostFrom(state, per, reserve))
 }
 
-/** The most you can pay the parts for right now, ignoring upkeep. */
-export function affordable(state: GameState, u: UnitType): number {
+/** The most you can pay the parts for right now from a contract, ignoring upkeep. */
+export function affordable(state: GameState, c: Sourcing): number {
+  const u = findUnit(state, c.unitId)
+  if (!u) return 0
   const per = new Map<string, number>()
-  for (const p of partsFor(u)) per.set(p.resourceId, (per.get(p.resourceId) ?? 0) + p.amount)
-  return mostFrom(state, per, {})
+  for (const p of partsFor(u, c)) per.set(p.resourceId, (per.get(p.resourceId) ?? 0) + p.amount)
+  return Math.min(openSlots(c), mostFrom(state, per, {}))
 }
 
 function mostFrom(state: GameState, per: Map<string, number>, reserve: Record<string, number>): number {
@@ -328,12 +369,8 @@ export function allocation(state: GameState, u: UnitType): { byTask: Record<stri
 /** Ensures a single-strategy unit runs it with all its units. */
 export function defaultTask(state: GameState, u: UnitType) {
   const tasks = state.strategies.filter((s) => s.unitId === u.id)
-  const rest = tasks.find((s) => s.id === u.rest)
-  // A build strategy starts with a target of 0, so it's only the default when there's nothing else.
-  if (rest && rest.kind !== 'build') return
-  const work = tasks.filter((s) => s.kind !== 'build')
-  if (work.length === 1) u.rest = work[0]!.id
-  else if (!rest && tasks.length === 1) u.rest = tasks[0]!.id
+  if (tasks.some((s) => s.id === u.rest)) return
+  if (tasks.length === 1) u.rest = tasks[0]!.id
 }
 
 /** Whether the world has what a research uses up. Returns what's short, or null. */
@@ -341,7 +378,11 @@ export function costShortfall(state: GameState, cost: Research['cost']): string 
   for (const c of cost) {
     const r = findResource(state, c.resourceId)
     if (!r) return 'a resource that no longer exists'
-    if (r.amount < c.amount - 1e-9) return `${fmt(c.amount - r.amount)} more ${r.name}`
+    if (r.amount < c.amount - 1e-9) {
+      const cap = capOf(state, r)
+      const room = c.amount > cap + 1e-9 ? ` (it can only hold ${fmt(cap)}: store more ${r.name} first)` : ''
+      return `${fmt(c.amount - r.amount)} more ${r.name}${room}`
+    }
   }
   return null
 }

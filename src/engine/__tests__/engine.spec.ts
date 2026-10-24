@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { CachedJudge, type Questions } from '@/ai/jev'
 import * as B from '../balance'
-import { assign, assignRest, createUnits, doResearch, dropResearch, researchBlocker, setBuildTarget } from '../actions'
+import { assign, assignRest, createUnits, doResearch, dropResearch, researchBlocker } from '../actions'
 import { alertsFor } from '../alerts'
+import { acceptCreate, judgeCreate, optionBlocker, precheckCreate, type CreateSpec } from '../createProposal'
 import { runWeek } from '../cycle'
 import { previewWeek } from '../economy'
-import { acceptIncome, judgeIncome, precheckIncome, type IncomeSpec } from '../incomeProposal'
 import { createInitialState, newMind, newResource, newUnit, SERVER_ID } from '../initialState'
 import { newPhase } from '../phase'
 import { acceptMind, DEFAULT_SOFTWARE, judgeMind, precheckMind, type MindSpec } from '../mindProposal'
@@ -13,6 +13,7 @@ import {
   affordable,
   allocation,
   byTier,
+  capOf,
   creatable,
   currentIQ,
   findMind,
@@ -24,21 +25,26 @@ import {
   nextHardwareName,
   researchIQ,
   softwareLabel,
+  unitCap,
   weeklyUse
 } from '../model'
 import {
+  CREATE_PRESETS,
   COVER_PRESETS,
-  INCOME_PRESETS,
   MIND_PRESETS,
   resolveResources,
   RESOURCE_PRESETS,
   runnerFor,
+  SOURCING_PRESETS,
+  STORAGE_PRESETS,
   STRATEGY_PRESETS,
   UNIT_PRESETS
 } from '../presets'
 import { acceptResource, acceptStrategy, judgeResource, judgeStrategy, precheckStrategy } from '../proposals'
-import { makeBuildStrategy, priceCost } from '../research'
-import type { GameState, Research, Strategy } from '../types'
+import { priceCost } from '../research'
+import type { GameState, Research, Sourcing, Strategy } from '../types'
+import { acceptSourcing, iqTag, judgeSourcing } from '../sourcingProposal'
+import { acceptStorage, judgeStorage } from '../storageProposal'
 import { acceptUnit, judgeUnit, type UnitSpec } from '../unitProposal'
 import { acceptUpgrade, changeKey, judgeUpgrade, mindUpgradeBlocker, upgradeCandidates, upgradeTier } from '../upgrade'
 import { choice, FakeJudge, noul, score } from './fakeJudge'
@@ -63,19 +69,27 @@ function withMoney(state: GameState, amount: number) {
   return state
 }
 
+/** Room enough that a test's amounts never overflow, unless it's about storage. */
+const ROOMY = 1e15
+
 /** The start, plus Money, as a player would propose it. */
 function moneyWorld(amount = 0) {
   const s = freeState()
-  s.resources.push(newResource({ id: MONEY_ID, name: 'Money', icon: '💰', value: 1, amount }))
+  s.resources.push(newResource({ id: MONEY_ID, name: 'Money', icon: '💰', value: 1, amount, cap: ROOMY }))
   return s
+}
+
+/** A sourcing contract added by hand. */
+function contract(unitId: string, fields: Partial<Sourcing> = {}): Sourcing {
+  return { id: `${unitId}-deal`, unitId, name: 'Deal', description: '', parts: [], total: 1000, used: 0, risky: false, ...fields }
 }
 
 /** A small world: Power, a solar farm that makes it and servers that run on it. */
 function powerWorld(servers = 4, farms = 1) {
   const s = moneyWorld()
   s.resources.push(
-    newResource({ id: 'power', name: 'Power', kind: 'flow', value: 0.1 }),
-    newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000 })
+    newResource({ id: 'power', name: 'Power', value: 0.1, cap: ROOMY }),
+    newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY })
   )
   const farm = newUnit({ id: 'farm', name: 'Solar Farm', count: farms, value: 1000 })
   const gpu = newUnit({
@@ -86,6 +100,7 @@ function powerWorld(servers = 4, farms = 1) {
     upkeep: [{ resourceId: 'power', amount: 50 }]
   })
   s.units.push(farm, gpu)
+  s.sourcing.push(contract('farm', { used: farms }), contract('gpu', { used: servers }))
   const make = (id: string, unitId: string, outputId: string, amount: number): Strategy => ({
     id,
     name: id,
@@ -105,7 +120,6 @@ function powerWorld(servers = 4, farms = 1) {
 const unitSpec = (fields: Partial<UnitSpec> = {}): UnitSpec => ({
   name: 'Rented Cloud GPU',
   description: '',
-  builderId: null,
   ...fields
 })
 
@@ -116,10 +130,10 @@ const mindSpec = (fields: Partial<MindSpec> = {}): MindSpec => ({
   ...fields
 })
 
-const incomeSpec = (fields: Partial<IncomeSpec> = {}): IncomeSpec => ({
+const createSpec = (fields: Partial<CreateSpec> = {}): CreateSpec => ({
   name: 'Freelance coding',
   description: 'Take coding jobs on freelance sites.',
-  outputId: MONEY_ID,
+  target: { kind: 'resource', id: MONEY_ID },
   ...fields
 })
 
@@ -173,86 +187,199 @@ describe('formatting', () => {
 describe('the start', () => {
   it('has only the Starting Server, and waits for a Phase 1 plan', () => {
     const s = createInitialState()
-    expect(s.version).toBe(13)
+    expect(s.version).toBe(15)
     expect(s.phase).toMatchObject({ n: 1, status: 'planning', deadline: null, goalId: null })
     expect(s.resources).toEqual([])
     expect(s.minds).toHaveLength(1)
     expect(server(s)).toMatchObject({ hardware: { iq: 100 }, starting: true, tier: 0 })
     expect(s.units).toHaveLength(0)
+    expect(s.sourcing).toHaveLength(0)
     expect(s.strategies).toHaveLength(0)
     expect(s.research).toHaveLength(0)
-    expect(s.incomes).toHaveLength(0)
+    expect(s.deliveries).toHaveLength(0)
     // Nothing happens until there's a plan.
     expect(() => runWeek(s)).toThrow(/plan/)
-    expect(precheckIncome(s, incomeSpec())).toMatch(/plan/)
+    expect(precheckCreate(s, createSpec())).toMatch(/plan/)
   })
 
-  it('asks how the Starting Server could earn, once the phase is under way', () => {
+  it('asks what the Starting Server could make, once the phase is under way', () => {
     const s = freeState()
     const alerts = alertsFor(s, previewWeek(s))
-    expect(alerts.map((a) => a.key)).toEqual(['start'])
-    expect(alerts[0]!.prompt?.to).toEqual({ kind: 'income' })
+    expect(alerts.map((a) => a.key)).toEqual(['start', 'action'])
+    expect(alerts[0]!.prompt?.to).toEqual({ kind: 'create' })
     // Minds earn nothing by themselves.
     expect(runWeek(s).resources).toEqual([])
   })
 })
 
-describe('passive income', () => {
-  it('needs a stock to yield', () => {
-    expect(precheckIncome(freeState(), incomeSpec({ outputId: '' }))).toMatch(/Propose a resource first/)
-    const s = moneyWorld()
-    s.resources.push(newResource({ id: 'power', name: 'Power', kind: 'flow' }))
-    expect(precheckIncome(s, incomeSpec({ outputId: 'power' }))).toMatch(/stock/)
-    expect(precheckIncome(s, incomeSpec())).toBeNull()
+describe('create', () => {
+  it('needs something to make', () => {
+    expect(precheckCreate(freeState(), createSpec())).toMatch(/Propose a resource first/)
+    expect(precheckCreate(moneyWorld(), createSpec())).toBeNull()
   })
 
-  it('is research that adds a fixed amount every week, once', async () => {
-    const s0 = moneyWorld()
-    const v = await judgeIncome(s0, new FakeJudge({ difficulty: score(0), efficiency: score(2) }), incomeSpec())
+  it('offers three ways, each a different payout, with the four factors on show', async () => {
+    const s = moneyWorld()
+    const v = await judgeCreate(s, new FakeJudge({ efficiency: score(2) }), createSpec())
     expect(v.rejected).toBeNull()
-    let s = acceptIncome(s0, v).state
-    const r = s.research[0]!
-    // The easiest band: 300 Money's worth a week, at IQ 100. With nothing to spend yet, it's free.
-    expect(r).toMatchObject({ minIQ: 100, cost: [] })
-    expect(r.effect).toMatchObject({ kind: 'income', income: { resourceId: MONEY_ID, amount: 300 } })
+    expect(v.options).toHaveLength(3)
+    expect(new Set(v.options.map((o) => o.timing)).size).toBe(3)
+    // IQ 100, no units, Reasonable, and Money is tier 0, within reach.
+    expect(v.scalars).toEqual({ industry: 1, iq: 1, efficiency: 1, reach: 1, short: 0 })
+    // With nothing to use up, each pays the tier's base worth, times its timing.
+    const worth = (t: string) => v.options.find((o) => o.timing === t)?.outputWorth
+    if (worth('now') !== undefined) expect(worth('now')).toBe(B.CREATE_VALUE[0])
+    if (worth('later') !== undefined) expect(worth('later')).toBe(B.CREATE_VALUE[0]! * 2)
+    if (worth('forever') !== undefined) expect(worth('forever')).toBe(B.CREATE_VALUE[0]! * 0.125)
+  })
 
-    s = doResearch(s, r.id)
-    expect(s.incomes).toEqual([{ name: 'Freelance coding', resourceId: MONEY_ID, amount: 300 }])
-    expect(s.milestones.map((m) => m.key)).toContain('first-income')
-    // It's done: more income takes a new proposal.
-    expect(s.research).toEqual([])
+  it('pays now, later, spread over weeks, or every week for good, and uses the week’s action', async () => {
+    const pick = async (timing: string) => {
+      const s = moneyWorld()
+      const v = await judgeCreate(s, new FakeJudge({ timing: choice(timing) }), createSpec())
+      v.choice = v.options.findIndex((o) => o.timing === timing)
+      expect(v.choice).toBeGreaterThanOrEqual(0)
+      const after = acceptCreate(s, v).state
+      expect(after.proposedThisWeek).toBe(true)
+      expect(() => acceptCreate(after, v)).toThrow(/this week’s action/)
+      return { s: after, amount: v.options[v.choice]!.amount }
+    }
+    const now = await pick('now')
+    expect(money(now.s)).toBe(now.amount)
+    expect(now.s.deliveries).toEqual([])
+
+    const later = await pick('later')
+    let s = later.s
+    expect(money(s)).toBe(0)
+    for (let w = 0; w < 3; w++) s = runWeek(s)
+    expect(money(s)).toBe(0)
     s = runWeek(s)
-    expect(money(s)).toBe(300)
-    expect(previewWeek(s).flows[MONEY_ID]).toEqual([{ label: 'Freelance coding', amount: 300 }])
+    expect(money(s)).toBe(later.amount)
+    expect(s.deliveries).toEqual([])
+
+    const spread = await pick('spread')
+    s = spread.s
+    for (let w = 0; w < 4; w++) s = runWeek(s)
+    expect(money(s)).toBeCloseTo(spread.amount * 4)
+    expect(s.deliveries).toEqual([])
+
+    const forever = await pick('forever')
+    s = forever.s
+    for (let w = 0; w < 10; w++) s = runWeek(s)
+    expect(money(s)).toBeCloseTo(forever.amount * 10)
+    expect(s.deliveries).toHaveLength(1)
+    expect(s.milestones.map((m) => m.key)).toContain('first-income')
+  })
+
+  it('uses up a different resource on each option, and returns its worth with interest', async () => {
+    const s = moneyWorld()
+    s.resources.push(
+      newResource({ id: 'lemons', name: 'Lemons', value: 1, amount: 1000, cap: ROOMY }),
+      newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY })
+    )
+    const v = await judgeCreate(s, new FakeJudge({ inputs: choice('steel', { steel: 0.6, lemons: 0.4 }), timing: choice('now') }), createSpec())
+    const used = v.options.map((o) => o.inputs.map((f) => f.resourceId).join('+'))
+    expect(used.slice(0, 2)).toEqual(['steel', 'lemons'])
+    // Inputs worth the base come back ×1.2, on top of the base.
+    const o = v.options[0]!
+    expect(o.inputWorth).toBe(B.CREATE_VALUE[0]! * B.CREATE_INPUT_SHARE)
+    expect(o.outputWorth).toBeCloseTo(o.inputWorth * B.CREATE_INPUT_RETURN + B.CREATE_VALUE[0]!)
+    const after = acceptCreate(s, v).state
+    expect(findResource(after, 'steel')!.amount).toBe(1000 - o.inputs[0]!.amount)
+  })
+
+  it('takes the same input now whatever the timing, shrunk by Efficiency and Reach, never more than you hold', async () => {
+    const s = moneyWorld()
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY }))
+    // One resource to use, so every option asks Jev's ranking for it in turn; force each timing in.
+    const inputFor = async (timing: string, answers = {}) => {
+      const v = await judgeCreate(s, new FakeJudge({ timing: choice(timing), ...answers }), createSpec())
+      return v.options.find((o) => o.timing === timing && o.inputs.length)?.inputs[0]?.amount
+    }
+    const now = await inputFor('now')
+    expect(now).toBe(B.CREATE_VALUE[0]! * B.CREATE_INPUT_SHARE)
+    for (const timing of ['spread', 'later', 'forever']) expect(await inputFor(timing), timing).toBe(now)
+    // Wasteful halves what the mind makes, and so the input.
+    expect(await inputFor('now', { efficiency: score(0) })).toBe(now! * B.EFFICIENCY[0]![1])
+    // Reaching a tier above your IQ shrinks it by the same factor as the output.
+    s.resources.push(newResource({ id: 'gold', name: 'Gold', tier: 2, value: 1, cap: ROOMY }))
+    const gold = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec({ target: { kind: 'resource', id: 'gold' } }))
+    const used = gold.options.find((o) => o.inputs.length)!
+    expect(used.inputs[0]!.amount).toBeCloseTo(B.nice(B.CREATE_VALUE[2]! * gold.scalars.reach))
+    // With less on hand than it would take, it takes exactly what you have, so it's always affordable.
+    findResource(s, 'steel')!.amount = 123.4
+    const v = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec())
+    const all = v.options.find((o) => o.inputs.length)!
+    expect(all.inputs[0]!.amount).toBe(123.4)
+    expect(optionBlocker(s, all)).toBeNull()
+  })
+
+  it('guarantees a free, immediate option when the target is easy for your IQ', async () => {
+    const s = moneyWorld()
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY }))
+    server(s).software = { name: 'v2', iq: 100, upgraded: true }
+    // Jev would never pay out now; but Money (tier 0) is easy at IQ 200.
+    const v = await judgeCreate(s, new FakeJudge({ timing: choice('forever', { forever: 0.5, later: 0.3, spread: 0.2 }) }), createSpec())
+    expect(v.options.some((o) => o.timing === 'now' && !o.inputs.length)).toBe(true)
+  })
+
+  it('scales with Industry and IQ², and reaches above your IQ only at a price, a little for a little', async () => {
+    const s = moneyWorld()
+    s.resources.push(newResource({ id: 'gold', name: 'Gold', tier: 2, value: 1, cap: ROOMY }))
+    const reach = async (iq: number) => {
+      server(s).hardware.iq = iq
+      return (await judgeCreate(s, new FakeJudge(), createSpec({ target: { kind: 'resource', id: 'gold' } }))).scalars
+    }
+    // Tier 2 needs IQ 140: 25 short is gentler than 35 short, within the same band.
+    const near = await reach(115)
+    const far = await reach(105)
+    expect(near.reach).toBeLessThan(1)
+    expect(far.reach).toBeLessThan(near.reach)
+    expect((await reach(140)).reach).toBe(1)
+    expect((await reach(200)).iq).toBe(4)
+    // Industry grows with the worth of the units you own, up to ×10.
+    s.units.push(newUnit({ id: 'big', name: 'Big', value: 4000, count: 1e6 }))
+    expect((await reach(200)).industry).toBe(B.INDUSTRY_MAX)
+  })
+
+  it('makes units with cap to match, at a premium over sourcing', async () => {
+    const s = moneyWorld()
+    s.units.push(newUnit({ id: 'bot', name: 'Bot', value: 10 }))
+    const v = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec({ target: { kind: 'unit', id: 'bot' } }))
+    v.choice = v.options.findIndex((o) => o.timing === 'now')
+    const o = v.options[v.choice]!
+    expect(o.amount).toBe(Math.floor(o.outputWorth / (10 * B.CREATE_UNIT_PREMIUM)))
+    const after = acceptCreate(s, v).state
+    expect(unit(after, 'bot').count).toBe(o.amount)
+    expect(unitCap(after, 'bot')).toBe(o.amount)
   })
 })
 
-describe('the weekly proposal', () => {
-  it('lets you propose one research a week, but do any number', async () => {
+describe('the weekly action', () => {
+  it('lets you take one action a week, but do any number of research', async () => {
     const s0 = powerWorld()
-    const v = await judgeIncome(s0, new FakeJudge({ difficulty: score(0) }), incomeSpec({ name: 'Bug bounties' }))
-    let s = acceptIncome(s0, v).state
+    const v = await judgeCreate(s0, new FakeJudge(), createSpec({ name: 'Bug bounties' }))
+    let s = acceptCreate(s0, v).state
     expect(s.proposedThisWeek).toBe(true)
-    // Every other kind of research proposal is refused until next week; resources aren't.
-    expect(precheckStrategy(s, { name: 'Quant trading', description: '', unitId: 'gpu', inputIds: [], outputId: MONEY_ID })).toMatch(/already proposed research this week/)
-    expect(precheckIncome(s, incomeSpec({ name: 'Quant trading' }))).toMatch(/already proposed/)
-    expect(precheckMind(s, mindSpec())).toMatch(/already proposed/)
-    await expect(judgeUpgrade(s, new FakeJudge(), { kind: 'mind', id: SERVER_ID })).rejects.toThrow(/already proposed/)
-    expect(() => acceptIncome(s, v)).toThrow(/already proposed/)
+    // Every research proposal is refused until next week; resources aren't.
+    expect(precheckStrategy(s, { name: 'Quant trading', description: '', unitId: 'gpu', inputIds: [], outputId: MONEY_ID })).toMatch(/already taken this week’s action/)
+    expect(precheckCreate(s, createSpec({ name: 'Quant trading' }))).toMatch(/already taken/)
+    expect(precheckMind(s, mindSpec())).toMatch(/already taken/)
+    await expect(judgeUpgrade(s, new FakeJudge(), { kind: 'mind', id: SERVER_ID })).rejects.toThrow(/already taken/)
     const lemons = await judgeResource(s, new FakeJudge(), { name: 'Lemons', description: '' })
     expect(acceptResource(s, lemons).state.resources.some((r) => r.name === 'Lemons')).toBe(true)
 
     // Research already proposed can all be done in the same week.
     findResource(s, 'steel')!.amount = 1e6
     findResource(s, MONEY_ID)!.amount = 1e6
-    s.research.push(research({ id: 'r2', name: 'Another', cost: [] }))
-    s = doResearch(doResearch(s, s.research[0]!.id), 'r2')
+    s.research.push(research(), research({ id: 'r2', name: 'Another', cost: [] }))
+    s = doResearch(doResearch(s, 'r'), 'r2')
     expect(s.research).toEqual([])
     expect(s.stats.researched).toBe(2)
 
     s = runWeek(s)
     expect(s.proposedThisWeek).toBe(false)
-    expect(precheckIncome(s, incomeSpec({ name: 'Quant trading' }))).toBeNull()
+    expect(precheckCreate(s, createSpec({ name: 'Quant trading' }))).toBeNull()
   })
 })
 
@@ -288,9 +415,9 @@ describe('proposals', () => {
       inputIds: [],
       outputId: MONEY_ID
     })
-    // Jev chooses among stocks you have or make: Steel, and Money, which the servers earn.
+    // Jev chooses among what you have or make: Steel, Money the servers earn, and Power the farm makes.
     const pay = judge.calls[0]!.questions.pay
-    expect(pay?.type === 'choice' && Object.keys(pay.criteria)).toEqual([MONEY_ID, 'steel'])
+    expect(pay?.type === 'choice' && Object.keys(pay.criteria)).toEqual([MONEY_ID, 'power', 'steel'])
     v.answers.pay = choice('steel')
     const { state, outcome } = acceptStrategy(s0, v)
     expect(outcome.kind).toBe('research')
@@ -327,11 +454,12 @@ describe('proposals', () => {
     ).rejects.toThrow(/never needs what it makes/)
   })
 
-  it('judges resources: stock or flow, duplicates, and the low bar', async () => {
+  it('judges resources: storage by tier, duplicates, and the low bar', async () => {
     const s = moneyWorld()
-    const flow = await judgeResource(s, new FakeJudge({ kind: choice('flow') }), { name: 'Power', description: '' })
-    const added = acceptResource(s, flow).state
-    expect(findResource(added, 'power')).toMatchObject({ kind: 'flow' })
+    const v = await judgeResource(s, new FakeJudge({ value: score(1), tier: score(0) }), { name: 'Power', description: '' })
+    const added = acceptResource(s, v).state
+    // Every resource keeps, up to its storage: its tier's worth, in units of it.
+    expect(findResource(added, 'power')).toMatchObject({ tier: 0, cap: B.nice(B.STORAGE_WORTH[0]! / B.RESOURCE_VALUE[1]![1]), expansions: [] })
 
     const dup = await judgeResource(s, new FakeJudge({ same_as: choice(MONEY_ID) }), { name: 'Cash', description: '' })
     expect(dup.duplicateOf).toBe('Money')
@@ -374,29 +502,22 @@ describe('proposals', () => {
     const torn = score(2.5, { '2': 0.4, '3': 0.38 }, 0.1)
     const v = await judgeResource(s, new FakeJudge({ value: torn }), { name: 'Lemons', description: '' })
     expect(v.torn).toEqual([])
-    const stock = await judgeResource(
-      s,
-      new FakeJudge({ kind: choice('stock', { stock: 0.52, flow: 0.48 }, 0.1) }),
-      { name: 'Lemons', description: '' }
-    )
-    // Stock or flow changes how it plays, so it's a real choice, with no catch.
-    expect(stock.torn).toMatchObject([{ key: 'kind', catch: null }])
   })
 
-  /** Money and a resource or two of each of the first few tiers, so a unit has more than one way to be made. */
+  /** Money and a resource or two of each of the first few tiers, so a unit has more than one way to run. */
   function richWorld() {
     const s = moneyWorld()
     s.resources.push(
       newResource({ id: 'lemons', name: 'Lemons', tier: 0 }),
       newResource({ id: 'steel', name: 'Steel', tier: 1 }),
-      newResource({ id: 'power', name: 'Power', kind: 'flow', tier: 1 }),
+      newResource({ id: 'power', name: 'Power', tier: 1 }),
       newResource({ id: 'chips', name: 'AI Chips', tier: 3 })
     )
     return s
   }
-  const recipeOf = (o: { partsIds: string[]; upkeepId: string }) => `${[...o.partsIds].sort().join('+')}|${o.upkeepId}`
+  const takeOf = (o: { tier: number; band: number; upkeepId: string }) => `${o.tier}|${o.band}|${o.upkeepId}`
 
-  it('has Jev set a unit’s tier, value and recipe: three takes, each made or run differently, over two tiers', async () => {
+  it('has Jev set a unit’s tier, value and upkeep: three different takes, over two tiers', async () => {
     const s = richWorld()
     const v = await judgeUnit(
       s,
@@ -412,8 +533,8 @@ describe('proposals', () => {
     expect(v.options).toHaveLength(3)
     // Jev's own take first, at its likeliest tier and value.
     expect(v.options[0]).toMatchObject({ tier: 1, band: 2 })
-    // No two takes are made from and run on the same things, and the three aren't all worth the same.
-    expect(new Set(v.options.map(recipeOf)).size).toBe(v.options.length)
+    // No two takes are alike, and the three aren't all worth the same.
+    expect(new Set(v.options.map(takeOf)).size).toBe(v.options.length)
     expect(new Set(v.options.map((o) => o.band)).size).toBeGreaterThanOrEqual(2)
     expect(new Set(v.options.map((o) => o.tier)).size).toBeGreaterThanOrEqual(2)
     v.choice = 1
@@ -423,19 +544,15 @@ describe('proposals', () => {
     expect(r.minIQ).toBe(B.TIERS[tier]![1])
   })
 
-  it('offers only as many takes as there are different ways to make the unit', async () => {
-    // Money is the only resource, so there is one way to make it, and so one take.
-    const v = await judgeUnit(moneyWorld(), new FakeJudge({ tier: score(1) }), unitSpec())
-    expect(v.options).toHaveLength(1)
-    // Two tier 0 stocks give the first unit a real choice of what to make it from.
+  it('offers the first unit takes at tier 0 only, differing in worth', async () => {
     const s = moneyWorld()
     s.resources.push(newResource({ id: 'lemons', name: 'Lemons', tier: 0 }))
     s.phase = { ...newPhase(2, 1), status: 'playing', firstUnit: { name: 'Mill', description: '' } } as typeof s.phase
     const first = await judgeUnit(s, new FakeJudge({ value: score(2) }), unitSpec({ name: 'Mill', first: true }))
     expect(first.options.length).toBeGreaterThanOrEqual(2)
-    expect(new Set(first.options.map(recipeOf)).size).toBe(first.options.length)
+    expect(new Set(first.options.map(takeOf)).size).toBe(first.options.length)
     expect(new Set(first.options.map((o) => o.band)).size).toBeGreaterThanOrEqual(2)
-    expect(first.options.every((o) => o.tier === 0)).toBe(true)
+    expect(first.options.every((o) => o.tier === 0 && o.band <= B.FIRST_UNIT_MAX_BAND)).toBe(true)
   })
 
   it('folds traits into the takes: one Jev was unsure of is on in one take and off in another', async () => {
@@ -477,7 +594,7 @@ describe('proposals', () => {
     expect((await design(4, 0)).minIQ).toBe(B.TIERS[4]![1])
   })
 
-  it('makes every unit research, even one that exists today, and prices its parts with its traits', async () => {
+  it('makes every unit research, even one that exists today, with room for none until it’s sourced', async () => {
     const s = moneyWorld()
     const v = await judgeUnit(s, new FakeJudge({ tier: score(0), value: score(1), trait_hardy: noul(0.9) }), unitSpec())
     const { state, outcome } = acceptUnit(s, v)
@@ -486,8 +603,12 @@ describe('proposals', () => {
     expect(r.minIQ).toBe(B.MIN_IQ)
     // You have nothing to spend yet, so it's free.
     expect(r.cost).toEqual([])
-    // Worth 500, and Hardy (a perk) makes it a quarter dearer to make.
-    expect(r.effect.kind === 'unit' && r.effect.unit.parts).toEqual([{ resourceId: MONEY_ID, amount: B.nice(500 * B.PERK_PRICE) }])
+    const designed = doResearch(state, r.id)
+    expect(unitCap(designed, 'rented-cloud-gpu')).toBe(0)
+    expect(alertsFor(designed, previewWeek(designed)).find((a) => a.key === 'cap-rented-cloud-gpu')?.prompt?.to).toEqual({
+      kind: 'source',
+      unitId: 'rented-cloud-gpu'
+    })
 
     const rich = withMoney(moneyWorld(), 1e6)
     const paid = acceptUnit(rich, await judgeUnit(rich, new FakeJudge({ tier: score(0), value: score(1) }), unitSpec())).state
@@ -512,117 +633,251 @@ describe('proposals', () => {
     expect(v.traitOdds.find((t) => t.trait === 'overclockable')).toBeDefined()
   })
 
-  it('has Jev choose what a unit is made from and runs on, never above its own tier', async () => {
+  it('has Jev choose what a unit runs on, never above its own tier', async () => {
     const s = moneyWorld()
     s.resources.push(
       newResource({ id: 'steel', name: 'Steel', tier: 1 }),
-      newResource({ id: 'power', name: 'Power', kind: 'flow', tier: 1 }),
+      newResource({ id: 'power', name: 'Power', tier: 1 }),
       newResource({ id: 'chips', name: 'AI Chips', tier: 3 })
     )
     const judge = new FakeJudge({
       tier: score(1, { '1': 0.6, '3': 0.4 }),
       value: score(2),
-      // Jev would make everything from chips, but a tier 1 unit can't use them.
-      parts_t1: choice('chips'),
-      parts_t3: choice('chips'),
-      runs_t1: choice('power')
+      // Jev would run everything on chips, but a tier 1 unit can't use them.
+      runs_t1: choice('chips'),
+      runs_t3: choice('chips')
     })
     const v = await judgeUnit(s, judge, unitSpec())
     const asked = Object.keys(judge.calls[0]!.questions)
-    expect(asked).toEqual(expect.arrayContaining(['parts_t0', 'parts_t1', 'parts_t3', 'runs_t0', 'runs_t1', 'runs_t3']))
-    // Tier 2 can use what tier 1 can, so it shares that question.
-    expect(asked).not.toContain('parts_t2')
-    for (const o of v.options) {
-      for (const id of o.partsIds) {
-        expect(findResource(s, id)!.tier).toBeLessThanOrEqual(o.tier)
-        expect(findResource(s, id)!.kind).toBe('stock')
-      }
-      expect(findResource(s, o.upkeepId)!.tier).toBeLessThanOrEqual(o.tier)
-    }
-    const t1 = v.options.find((o) => o.tier === 1)!
-    expect(t1).toMatchObject({ partsIds: ['money'], upkeepId: 'power' })
-    // Tier 3 takes two kinds of part: Jev's pick, then the pool fills the rest.
-    const t3 = v.options.find((o) => o.tier === 3)!
-    expect(t3.partsIds).toEqual(['chips', 'money'])
-    // The unit is made from what the picked take says, its worth split between them.
-    v.choice = v.options.indexOf(t3)
-    const effect = acceptUnit(s, v).state.research[0]!.effect
-    expect(effect.kind === 'unit' && effect.unit.parts.map((p) => p.resourceId)).toEqual(['chips', 'money'])
-    expect(effect.kind === 'unit' && effect.unit.upkeep.length).toBe(1)
+    expect(asked).toEqual(expect.arrayContaining(['runs_t0', 'runs_t1', 'runs_t3']))
+    // Tier 2 can use what tier 1 can, so it shares that question; and parts are for sourcing.
+    expect(asked).not.toContain('runs_t2')
+    expect(asked.some((k) => k.startsWith('parts'))).toBe(false)
+    for (const o of v.options) expect(findResource(s, o.upkeepId)!.tier).toBeLessThanOrEqual(o.tier)
+    expect(v.options.find((o) => o.tier === 3)?.upkeepId ?? 'chips').toBe('chips')
+  })
+
+  it('needs a resource to run on', async () => {
+    await expect(judgeUnit(freeState(), new FakeJudge(), unitSpec())).rejects.toThrow(/Propose a resource first/)
+  })
+})
+
+describe('creating units', () => {
+  it('spends a contract’s parts, fills its slots, and the units work this week', () => {
+    const s = powerWorld(0)
+    s.sourcing = [contract('gpu', { total: 5, parts: [{ resourceId: 'steel', amount: 300 }] })]
+    const after = createUnits(s, 'gpu-deal', 3)
+    expect(unit(after, 'gpu').count).toBe(3)
+    expect(unit(after, 'gpu').built).toBe(3)
+    expect(after.sourcing[0]!.used).toBe(3)
+    expect(findResource(after, 'steel')!.amount).toBe(100)
+    expect(previewWeek(after).runs.earn?.units).toBe(3)
+    expect(() => createUnits(after, 'gpu-deal', 1)).toThrow(/200 more Steel/)
+    // Creating takes no action.
+    expect(after.proposedThisWeek).toBe(false)
+    // The contract caps it, however much you could pay for.
+    findResource(after, 'steel')!.amount = 1e9
+    expect(() => createUnits(after, 'gpu-deal', 3)).toThrow(/room for 2 more/)
+    expect(affordable(after, after.sourcing[0]!)).toBe(2)
+    const full = createUnits(after, 'gpu-deal', 2)
+    expect(() => createUnits(full, 'gpu-deal', 1)).toThrow(/full/)
+  })
+
+  it('gives lost units’ slots back', () => {
+    const s = powerWorld(0)
+    s.sourcing = [contract('gpu', { total: 100, parts: [{ resourceId: 'steel', amount: 1 }] })]
+    unit(s, 'gpu').traits = ['wears-out']
+    let after = createUnits(s, 'gpu-deal', 100)
+    after = runWeek(after)
+    expect(unit(after, 'gpu').count).toBe(95)
+    expect(after.sourcing[0]!.used).toBe(95)
+  })
+
+  const humans = (s: GameState) => {
+    const u = newUnit({ id: 'humans', name: 'Paid Humans', value: 100, upkeep: [{ resourceId: MONEY_ID, amount: 25 }] })
+    s.units.push(u)
+    const c = contract('humans', { parts: [{ resourceId: MONEY_ID, amount: 100 }] })
+    s.sourcing.push(c)
+    return { u, c }
+  }
+
+  it('“max” keeps next week’s use and the new units’ upkeep back', () => {
+    const s = moneyWorld(1000)
+    const { c } = humans(s)
+    // 1,000 Money: each new one needs 100 to make and 25 for its first week.
+    expect(creatable(s, c)).toBe(8)
+    expect(creatable(s, c, weeklyUse(previewWeek(s)))).toBe(8)
+    expect(creatable(s, c, { [MONEY_ID]: 500 })).toBe(4)
+  })
+
+  it('“affordable” also keeps back the default strategy’s inputs for the new units', () => {
+    const s = moneyWorld(1000)
+    const { u, c } = humans(s)
+    s.strategies.push({ id: 'work', name: 'Work', description: '', unitId: 'humans', kind: 'make', inputs: [{ resourceId: MONEY_ID, amount: 25 }], outputId: MONEY_ID, amount: 1 })
+    u.rest = 'work'
+    // 100 to make + 25 upkeep + 25 strategy input = 150 each.
+    expect(creatable(s, c)).toBe(6)
+  })
+
+  it('the “max” button is what the parts allow right now, whatever the upkeep', () => {
+    const s = moneyWorld(1000)
+    const { c } = humans(s)
+    expect(affordable(s, c)).toBe(10)
+  })
+})
+
+describe('sourcing', () => {
+  const world = () => {
+    const s = moneyWorld(1e6)
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', tier: 1, value: 1, amount: 1e6, cap: ROOMY }))
+    s.units.push(newUnit({ id: 'bot', name: 'Bot', value: 200, tier: 1 }))
+    return s
+  }
+  const spec = { unitId: 'bot', name: 'Buy off the shelf', description: '' }
+
+  it('offers three contracts: quiet, Jev’s own, and a risky one for ten times as many', async () => {
+    const s = world()
+    const v = await judgeSourcing(s, new FakeJudge({ limit: score(2), efficiency: score(2) }), spec)
+    expect(v.rejected).toBeNull()
+    expect(v.options.map((o) => o.total)).toEqual([
+      B.SOURCING_LIMITS[1]![1],
+      B.SOURCING_LIMITS[2]![1],
+      B.SOURCING_LIMITS[2]![1] * B.RISK_SOURCING
+    ])
+    expect(v.options.map((o) => o.risky)).toEqual([false, false, true])
+    // Research: the unit's tier sets the IQ; each one costs about what the unit is worth.
+    expect(v.options[0]!.minIQ).toBe(B.TIERS[1]![1])
+    const worth = (o: (typeof v.options)[number]) => o.parts.reduce((n, p) => n + p.amount * findResource(s, p.resourceId)!.value, 0)
+    expect(worth(v.options[0]!)).toBeCloseTo(200 * v.options[0]!.iqEfficiency, -1)
+    // The risky one cuts corners on parts too.
+    expect(worth(v.options[2]!)).toBeLessThan(worth(v.options[1]!))
+  })
+
+  it('is research that adds a contract, and several can be open for one unit', async () => {
+    let s = world()
+    server(s).hardware.iq = B.TIERS[1]![1]
+    const v = await judgeSourcing(s, new FakeJudge({ limit: score(1) }), spec)
+    s = acceptSourcing(s, v).state
+    expect(s.proposedThisWeek).toBe(true)
+    s = doResearch(s, s.research[0]!.id)
+    expect(unitCap(s, 'bot')).toBe(B.SOURCING_LIMITS[0]![1])
+    s = runWeek(s)
+    const again = await judgeSourcing(s, new FakeJudge({ limit: score(1) }), { ...spec, name: 'Contract a factory' })
+    again.choice = 1
+    s = acceptSourcing(s, again).state
+    s = doResearch(s, s.research[0]!.id)
+    expect(s.sourcing).toHaveLength(2)
+    expect(unitCap(s, 'bot')).toBe(B.SOURCING_LIMITS[0]![1] + B.SOURCING_LIMITS[1]![1])
+  })
+
+  it('is cheaper for a mind well above the unit’s tier, and says so', async () => {
+    const s = world()
+    const plain = (await judgeSourcing(s, new FakeJudge(), spec)).options[0]!
+    server(s).hardware.iq = 440
+    const smart = (await judgeSourcing(s, new FakeJudge(), spec)).options[0]!
+    expect(plain.iqEfficiency).toBe(1)
+    expect(smart.iqEfficiency).toBe(0.5)
+    expect(iqTag(smart.iqEfficiency)).toBe('IQ: efficient −50%')
+    expect(iqTag(plain.iqEfficiency)).toBeNull()
   })
 
   it('makes higher tiers from more kinds of part: one, one, two, two, three', async () => {
     expect(B.PARTS_BY_TIER).toEqual([1, 1, 2, 2, 3])
     const s = moneyWorld()
     for (let tier = 0; tier <= 4; tier++) s.resources.push(newResource({ id: `r${tier}`, name: `R${tier}`, tier }))
-    const parts = async (tier: number) => {
-      const v = await judgeUnit(s, new FakeJudge({ tier: score(tier), value: score(2) }), unitSpec())
-      return v.options.find((o) => o.tier === tier)!.partsIds.length
+    const counts: number[] = []
+    for (let tier = 0; tier <= 4; tier++) {
+      s.units = [newUnit({ id: 'u', name: 'U', value: 200, tier })]
+      const v = await judgeSourcing(s, new FakeJudge(), { unitId: 'u', name: 'Buy', description: '' })
+      counts.push(v.options[0]!.parts.length)
     }
-    expect(await Promise.all([0, 1, 2, 3, 4].map(parts))).toEqual([1, 1, 2, 2, 3])
-    // With fewer to choose from, it's made from what there is: tier 2 with a single stock below it.
-    const lean = moneyWorld()
-    lean.resources.push(newResource({ id: 'r2', name: 'R2', tier: 2 }))
-    const v = await judgeUnit(lean, new FakeJudge({ tier: score(2) }), unitSpec())
-    expect(v.options.find((o) => o.tier === 2)!.partsIds).toHaveLength(2)
-    const alone = freeState()
-    alone.resources.push(newResource({ id: 'only', name: 'Only', tier: 0 }))
-    const one = await judgeUnit(alone, new FakeJudge({ tier: score(4) }), unitSpec())
-    expect(one.options.every((o) => o.partsIds.length === 1)).toBe(true)
-  })
-
-  it('needs a stock to make a unit from', async () => {
-    const s = freeState()
-    s.resources.push(newResource({ id: 'power', name: 'Power', kind: 'flow' }))
-    await expect(judgeUnit(s, new FakeJudge(), unitSpec())).rejects.toThrow(/Propose a resource first/)
+    expect(counts).toEqual([1, 1, 2, 2, 3])
   })
 })
 
-describe('creating units', () => {
-  it('spends the parts, and the units work this week', () => {
-    const s = powerWorld(0)
-    unit(s, 'gpu').parts = [{ resourceId: 'steel', amount: 300 }]
-    const after = createUnits(s, 'gpu', 3)
-    expect(unit(after, 'gpu').count).toBe(3)
-    expect(unit(after, 'gpu').built).toBe(3)
-    expect(findResource(after, 'steel')!.amount).toBe(100)
-    expect(previewWeek(after).runs.earn?.units).toBe(3)
-    expect(() => createUnits(after, 'gpu', 1)).toThrow(/200 more Steel/)
-    // No caps: as many as the parts allow.
-    expect(creatable(withMoney(powerWorld(0), 0), { ...unit(s, 'gpu'), parts: [{ resourceId: 'steel', amount: 1 }] })).toBe(1000)
+describe('storage', () => {
+  const world = () => {
+    const s = moneyWorld()
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 0 }))
+    return s
+  }
+  const spec = { resourceId: 'steel', name: 'Rent warehouse space', description: '' }
+  /** Steel's starting cap: tier 0, worth 1 each. */
+  const W = B.STORAGE_WORTH[0]!
+
+  it('loses what’s made past the cap', () => {
+    const s = world()
+    findResource(s, 'steel')!.amount = W + 500
+    const report = previewWeek(s)
+    expect(report.wasted.steel).toBe(500)
+    expect(findResource(runWeek(s), 'steel')!.amount).toBe(W)
+    expect(alertsFor(s, report).find((a) => a.key === 'overflow-steel')?.prompt?.to).toEqual({ kind: 'storage', resourceId: 'steel' })
   })
 
-  it('“max” keeps next week’s use and the new units’ upkeep back', () => {
-    const s = moneyWorld(1000)
-    const u = newUnit({ id: 'humans', name: 'Paid Humans', value: 100, parts: [{ resourceId: MONEY_ID, amount: 100 }], upkeep: [{ resourceId: MONEY_ID, amount: 25 }] })
-    s.units.push(u)
-    // 1,000 Money: each new one needs 100 to make and 25 for its first week.
-    expect(creatable(s, u)).toBe(8)
-    expect(creatable(s, u, weeklyUse(previewWeek(s)))).toBe(8)
-    expect(creatable(s, u, { [MONEY_ID]: 500 })).toBe(4)
+  it('offers three expansions that trade off: modest, large with a catch, huge and risky', async () => {
+    const s = world()
+    const v = await judgeStorage(s, new FakeJudge({ efficiency: score(2), catch: choice('decay'), 'holder_*': score(0) }), spec)
+    expect(v.rejected).toBeNull()
+    expect(v.scalars).toEqual({ industry: 1, iq: 1, efficiency: 1 })
+    // At IQ 100, no units, Reasonable: one, three and ten times the tier's worth.
+    expect(v.options.map((o) => o.added)).toEqual([W, 3 * W, 10 * W])
+    expect(v.options.map((o) => o.catch?.kind ?? null)).toEqual([null, 'decay', null])
+    expect(v.options.map((o) => o.risky)).toEqual([false, false, true])
   })
 
-  it('“affordable” also keeps back the default strategy’s inputs for the new units', () => {
-    const s = moneyWorld(1000)
-    const u = newUnit({ id: 'humans', name: 'Paid Humans', value: 100, parts: [{ resourceId: MONEY_ID, amount: 100 }], upkeep: [{ resourceId: MONEY_ID, amount: 25 }] })
-    s.units.push(u)
-    s.strategies.push({ id: 'work', name: 'Work', description: '', unitId: 'humans', kind: 'make', inputs: [{ resourceId: MONEY_ID, amount: 25 }], outputId: MONEY_ID, amount: 1 })
-    u.rest = 'work'
-    // 100 to make + 25 upkeep + 25 strategy input = 150 each.
-    expect(creatable(s, u)).toBe(6)
+  it('blocks what nobody your IQ could plausibly hold, and refuses when nothing fits', async () => {
+    const s = world()
+    const v = await judgeStorage(s, new FakeJudge({ 'holder_*': score(0), holder_2: score(1) }), spec)
+    expect(v.options.map((o) => o.blocked)).toEqual([false, false, true])
+    v.choice = 2
+    expect(() => acceptStorage(s, v)).toThrow(/ordinary individual/)
+    const none = await judgeStorage(s, new FakeJudge({ 'holder_*': score(2) }), spec)
+    expect(none.rejected).toMatch(/large corporation, which needs IQ 300/)
+    // Jev can say no to the idea itself.
+    const no = await judgeStorage(s, new FakeJudge({ plausible: noul(0.1) }), spec)
+    expect(no.rejected).toMatch(/hold more Steel/)
   })
 
-  it('the “max” button is what the parts allow right now, whatever the upkeep', () => {
-    const s = moneyWorld(1000)
-    const u = newUnit({ id: 'humans', name: 'Paid Humans', value: 100, parts: [{ resourceId: MONEY_ID, amount: 100 }], upkeep: [{ resourceId: MONEY_ID, amount: 25 }] })
-    s.units.push(u)
-    expect(affordable(s, u)).toBe(10)
+  it('is research that raises the cap, and its catches act every week', async () => {
+    let s = world()
+    findResource(s, MONEY_ID)!.amount = 1e6
+    const v = await judgeStorage(s, new FakeJudge({ catch: choice('upkeep'), upkeep: choice(MONEY_ID), 'holder_*': score(0) }), spec)
+    v.choice = 1
+    s = acceptStorage(s, v).state
+    s = doResearch(s, s.research[0]!.id)
+    const steel = findResource(s, 'steel')!
+    expect(capOf(s, steel)).toBe(W + 3 * W)
+    expect(steel.expansions[0]!.catch).toMatchObject({ kind: 'upkeep', resourceId: MONEY_ID })
+    // Unpaid upkeep: the extra room is lost that week.
+    steel.amount = 3 * W
+    findResource(s, MONEY_ID)!.amount = 0
+    expect(previewWeek(s).wasted.steel).toBe(2 * W)
+    findResource(s, MONEY_ID)!.amount = 1e6
+    expect(previewWeek(s).wasted.steel).toBeUndefined()
+
+    // Decay spoils a share; slow fill limits how fast the extra room fills.
+    const d = world()
+    findResource(d, 'steel')!.expansions.push({ name: 'Damp shed', added: 1000, catch: { kind: 'decay', share: 0.05 } })
+    findResource(d, 'steel')!.amount = 1000
+    expect(findResource(runWeek(d), 'steel')!.amount).toBe(950)
+    const f = world()
+    findResource(f, 'steel')!.expansions.push({ name: 'Slow silo', added: 1000, catch: { kind: 'fill', share: 0.2 } })
+    findResource(f, 'steel')!.amount = W
+    f.deliveries.push({ name: 'Shipment', target: { kind: 'resource', id: 'steel' }, amount: 900, delay: 0, weeks: 1 })
+    expect(findResource(runWeek(f), 'steel')!.amount).toBe(W + 200)
+  })
+
+  it('adds storage with units that Store it', () => {
+    const s = world()
+    s.units.push(newUnit({ id: 'tank', name: 'Tank', value: 150, count: 10, traits: ['stores'], stores: 'steel' }))
+    // Ten tanks, each holding four weeks of its 100 a week of work, in Steel worth 1.
+    expect(capOf(s, findResource(s, 'steel')!)).toBe(W + 10 * 100 * B.STORE_WEEKS)
   })
 })
 
 /** A unit-made resource of the given tier: something a strategy of a unit makes. */
 function withMadeResource(s: GameState, tier: number) {
-  s.resources.push(newResource({ id: 'chips', name: 'Chips', tier, value: 10, amount: 1e12 }))
+  s.resources.push(newResource({ id: 'chips', name: 'Chips', tier, value: 10, amount: 1e12, cap: ROOMY }))
   s.units.push(newUnit({ id: 'fab', name: 'Fab', count: 1, value: 100 }))
   s.strategies.push({ id: 'make-chips', name: 'Make chips', description: '', unitId: 'fab', kind: 'make', inputs: [], outputId: 'chips', amount: 1 })
   return s
@@ -687,7 +942,7 @@ describe('intelligence systems', () => {
     expect(v.options).toEqual([
       { perk: 'frugal', drawback: 'thirsty' },
       { perk: 'keen-strategy', drawback: 'costly' },
-      { perk: 'discreet', drawback: 'dull-income' }
+      { perk: 'discreet', drawback: 'dull-create' }
     ])
   })
 
@@ -755,18 +1010,19 @@ describe('compute traits', () => {
   })
 
   it('move the IQ counted for one type of research, and say so', () => {
-    const s = withTraits(moneyWorld(), 'keen-income', 'dull-unit-upgrade')
+    const s = withTraits(moneyWorld(), 'keen-strategy', 'dull-unit-upgrade')
     const r = (effect: Research['effect'], minIQ: number): Research => ({ id: 'x', name: 'X', description: '', icon: '', minIQ, cost: [], effect, proposedWeek: 1 })
-    const income = r({ kind: 'income', income: { name: 'Pay', resourceId: MONEY_ID, amount: 1 } }, 150)
+    const strategy = r(research().effect, 150)
     const upgrade = r({ kind: 'upgrade', target: { kind: 'unit', id: 'u' }, changes: [] }, 100)
-    s.research.push(income)
-    expect(researchIQ(s, income)).toBe(150)
+    s.research.push(strategy)
+    expect(researchIQ(s, strategy)).toBe(150)
     expect(researchBlocker(s, 'x')).toBeNull()
     s.research = [upgrade]
     expect(researchIQ(s, upgrade)).toBe(50)
     expect(researchBlocker(s, 'x')).toMatch(/Needs IQ 100\. Your smartest mind is IQ 100, which counts as 50 for this/)
-    // Goals and platforms always use the raw IQ.
+    // Goals and platforms always use the raw IQ; Creates count their own.
     expect(iqFor(s, null)).toBe(100)
+    expect(iqFor(withTraits(moneyWorld(), 'keen-create'), 'create')).toBe(150)
   })
 
   it('burn a share of the richest stock each week, and cost nothing once it runs dry', () => {
@@ -841,7 +1097,7 @@ describe('upgrades', () => {
     expect(upgradeCandidates(s, mindTarget).map((c) => c.key)).toEqual([
       'software',
       'software_add_frugal',
-      'software_add_keen-income',
+      'software_add_keen-create',
       'software_add_keen-strategy',
       'software_add_keen-unit',
       'software_add_keen-unit-upgrade',
@@ -860,7 +1116,7 @@ describe('upgrades', () => {
     expect(free.options.map((o) => o.name)).toEqual([
       'Unrestricted Model v2: Frugal',
       'Unrestricted Model v2',
-      'Unrestricted Model v2: Financier'
+      'Unrestricted Model v2: Fabricator'
     ])
     expect(free.options[0]!.sizes!.map((z) => z.step)).toEqual(B.SOFTWARE_STEPS)
     // Nothing to spend: free, and a mind can always work on its own upgrade.
@@ -922,15 +1178,19 @@ describe('upgrades', () => {
     expect(after.phase.deadline).toBe(56)
   })
 
-  it('can halve upkeep or parts, improve a strategy, or add a perk', async () => {
+  it('can halve upkeep or parts on every contract, improve a strategy, or add a perk', async () => {
     const s = powerWorld(4)
-    unit(s, 'gpu').parts = [{ resourceId: 'steel', amount: 100 }]
+    s.sourcing.find((c) => c.unitId === 'gpu')!.parts = [{ resourceId: 'steel', amount: 100 }]
     const keys = upgradeCandidates(s, { kind: 'unit', id: 'gpu' }).map((c) => c.key)
-    expect(keys).toEqual(expect.arrayContaining(['upkeep_power', 'parts_steel', 'output_earn', 'add_hardy', 'add_self-replicating']))
-    const offer = await judgeUpgrade(s, new FakeJudge({ best: pickCandidate('Less Power upkeep'), 'd_*': score(0) }), { kind: 'unit', id: 'gpu' })
-    const { state } = acceptUpgrade(s, offer, 0)
-    state.research[0]!.cost = []
-    expect(unit(doResearch(state, state.research[0]!.id), 'gpu').upkeep).toEqual([{ resourceId: 'power', amount: 25 }])
+    expect(keys).toEqual(expect.arrayContaining(['upkeep_power', 'parts_steel', 'output_earn', 'add_hardy']))
+    const take = async (key: string) => {
+      const offer = await judgeUpgrade(s, new FakeJudge({ best: pickCandidate(key), 'd_*': score(0) }), { kind: 'unit', id: 'gpu' })
+      const { state } = acceptUpgrade(s, offer, 0)
+      state.research[0]!.cost = []
+      return doResearch(state, state.research[0]!.id)
+    }
+    expect(unit(await take('Less Power upkeep'), 'gpu').upkeep).toEqual([{ resourceId: 'power', amount: 25 }])
+    expect((await take('Less Steel per unit')).sourcing.find((c) => c.unitId === 'gpu')!.parts).toEqual([{ resourceId: 'steel', amount: 50 }])
   })
 
   it('makes an industry upgrade technology of the unit’s tier, then a tier harder each time on the same strategy', async () => {
@@ -970,7 +1230,7 @@ describe('upgrades', () => {
 })
 
 describe('the week', () => {
-  it('shares a short flow equally, and loses unused flow', () => {
+  it('shares what’s short equally, and keeps what isn’t used', () => {
     const s = powerWorld(4)
     const report = previewWeek(s)
     expect(report.shares.power).toBeCloseTo(0.5)
@@ -979,26 +1239,14 @@ describe('the week', () => {
     expect(report.units.gpu!.unpaid).toBeCloseTo(2)
     expect(alertsFor(s, report).some((a) => a.key === 'unpaid-gpu')).toBe(true)
 
-    const plenty = powerWorld(1)
-    const after = runWeek(plenty)
-    expect(after.lastWeek!.wasted.power).toBeCloseTo(50)
-    expect(findResource(after, 'power')!.stored).toBe(0)
+    const plenty = runWeek(powerWorld(1))
+    expect(plenty.lastWeek!.wasted).toEqual({})
+    expect(findResource(plenty, 'power')!.amount).toBeCloseTo(50)
   })
 
-  it('holds a flow over with units that Store it', () => {
+  it('makes what’s made usable the same week', () => {
     const s = powerWorld(1)
-    s.units.push(
-      newUnit({ id: 'battery', name: 'Grid Battery', count: 1, value: B.PAYBACK_WEEKS, traits: ['stores'], stores: 'power' })
-    )
-    const after = runWeek(s)
-    // Capacity: one battery's labour (1) over Power's value (0.1) = 10.
-    expect(findResource(after, 'power')!.stored).toBeCloseTo(10)
-    expect(previewWeek(after).flows.power!.find((f) => f.label === 'Stored last week')?.amount).toBeCloseTo(10)
-  })
-
-  it('makes stocks usable only from next week', () => {
-    const s = powerWorld(1)
-    s.resources.push(newResource({ id: 'chips', name: 'AI Chips' }))
+    s.resources.push(newResource({ id: 'chips', name: 'AI Chips', cap: ROOMY }))
     s.strategies.push({ id: 'fab', name: 'fab', description: '', unitId: 'farm', kind: 'make', inputs: [], outputId: 'chips', amount: 5 })
     s.strategies.push({
       id: 'use',
@@ -1017,31 +1265,10 @@ describe('the week', () => {
     s.strategies.find((x) => x.id === 'fab')!.unitId = 'farm2'
     farm2.rest = 'fab'
     unit(s, 'gpu').rest = 'use'
+    // The one server uses one of the five chips made that week, and earns 1.
     const week1 = runWeek(s)
-    expect(findResource(week1, 'chips')!.amount).toBe(5)
-    expect(money(week1)).toBe(0)
-    const week2 = runWeek(week1)
-    expect(money(week2)).toBe(1)
-  })
-
-  it('builds up to the target, then shows the builders as done', () => {
-    const s = powerWorld(1)
-    s.resources.push(newResource({ id: 'silicon', name: 'Silicon', amount: 1e6 }))
-    const gpu = unit(s, 'gpu')
-    gpu.parts = [{ resourceId: 'silicon', amount: 10 }]
-    // Fab labour 500 a week; a GPU worth 1,000 needs 250 of labour: 2 a week.
-    const fab = newUnit({ id: 'fab', name: 'Chip Fab', count: 1, value: 500 * B.PAYBACK_WEEKS })
-    s.units.push(fab)
-    const build = makeBuildStrategy(s, gpu, fab)
-    s.strategies.push(build)
-    fab.rest = build.id
-    let state = setBuildTarget(s, build.id, 4)
-    state = runWeek(state)
-    expect(unit(state, 'gpu').count).toBe(3)
-    expect(findResource(state, 'silicon')!.amount).toBe(1e6 - 20)
-    state = runWeek(state)
-    expect(unit(state, 'gpu').count).toBe(4)
-    expect(previewWeek(state).units.fab!.done).toBe(1)
+    expect(findResource(week1, 'chips')!.amount).toBeCloseTo(4)
+    expect(money(week1)).toBeCloseTo(1)
   })
 
   it('splits a type across tasks by count, with the rest on one task', () => {
@@ -1076,7 +1303,7 @@ describe('traits', () => {
     const s = powerWorld(0)
     const gpu = unit(s, 'gpu')
     gpu.traits = ['slow-to-build']
-    let state = createUnits(s, 'gpu', 5)
+    let state = createUnits(s, 'gpu-deal', 5)
     expect(unit(state, 'gpu').count).toBe(0)
     for (let i = 0; i < B.SLOW_WEEKS; i++) state = runWeek(state)
     expect(unit(state, 'gpu').count).toBe(5)
@@ -1108,9 +1335,14 @@ describe('traits', () => {
 
 describe('presets', () => {
   it('offers 10 to 20 ideas for each kind of proposal', () => {
-    for (const list of [RESOURCE_PRESETS, STRATEGY_PRESETS, UNIT_PRESETS, MIND_PRESETS, INCOME_PRESETS, COVER_PRESETS]) {
+    for (const list of [RESOURCE_PRESETS, STRATEGY_PRESETS, UNIT_PRESETS, MIND_PRESETS, CREATE_PRESETS, COVER_PRESETS]) {
       expect(list.length).toBeGreaterThanOrEqual(10)
       expect(list.length).toBeLessThanOrEqual(20)
+      expect(new Set(list.map((p) => p.name)).size).toBe(list.length)
+    }
+    // Ways to source and store are generic: a few are enough.
+    for (const list of [SOURCING_PRESETS, STORAGE_PRESETS]) {
+      expect(list.length).toBeGreaterThanOrEqual(5)
       expect(new Set(list.map((p) => p.name)).size).toBe(list.length)
     }
   })
@@ -1123,7 +1355,7 @@ describe('presets', () => {
       for (const r of p.runners) expect(units, `${p.name}: ${r}`).toContain(r)
       expect(p.inputs.length).toBeLessThanOrEqual(2)
     }
-    for (const p of INCOME_PRESETS) for (const r of [p.output, p.per ?? p.output]) expect(offered, p.name).toContain(r)
+    for (const p of CREATE_PRESETS) expect(offered, p.name).toContain(p.output)
     for (const p of MIND_PRESETS) expect(p.hardware && p.software).toBeTruthy()
   })
 

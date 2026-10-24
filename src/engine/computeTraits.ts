@@ -6,11 +6,11 @@ import * as B from './balance'
  */
 
 /** The kinds of research a platform's IQ can be adjusted for. Goals and minds always use the raw IQ. */
-export const RESEARCH_TYPES = ['income', 'strategy', 'unit', 'unit-upgrade', 'cover'] as const
+export const RESEARCH_TYPES = ['create', 'strategy', 'unit', 'unit-upgrade', 'cover'] as const
 export type ResearchType = (typeof RESEARCH_TYPES)[number]
 
 export const RESEARCH_TYPE_LABEL: Record<ResearchType, string> = {
-  income: 'passive incomes',
+  create: 'Create',
   strategy: 'strategies',
   unit: 'unit designs',
   'unit-upgrade': 'unit upgrades',
@@ -78,7 +78,7 @@ export const COMPUTE_TRAITS: ComputeTrait[] = [
     family: 'clock',
     effect: { kind: 'clock', weeks: B.COMPUTE_CLOCK }
   },
-  keen('income', 'Financier', '💼'),
+  keen('create', 'Fabricator', '⚗️'),
   keen('strategy', 'Strategist', '♟️'),
   keen('unit', 'Inventor', '🛠️'),
   keen('unit-upgrade', 'Tinkerer', '🔩'),
@@ -110,7 +110,7 @@ export const COMPUTE_TRAITS: ComputeTrait[] = [
     family: 'drain',
     effect: { kind: 'drain', share: B.COMPUTE_DRAIN }
   },
-  dull('income', 'Blind to income', '🙈'),
+  dull('create', 'Butterfingers', '🧈'),
   dull('strategy', 'Short-sighted', '👓'),
   dull('unit', 'Unimaginative', '🧱'),
   dull('unit-upgrade', 'Clumsy', '🧤'),

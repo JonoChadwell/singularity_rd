@@ -1,18 +1,11 @@
 import * as B from './balance'
 import { drainOf } from './computeTraits'
-import {
-  allocation,
-  findResource,
-  findUnit,
-  incomeYield,
-  labour,
-  owned
-} from './model'
+import { allocation, capOf, contractsFor, findResource, makeId, OVERFLOW } from './model'
 import { strategyRate } from './research'
 import { has } from './traits'
-import type { GameState, Strategy, UnitType, UnitWeek, WeekReport } from './types'
+import type { Expansion, GameState, Sourcing, Strategy, UnitType, UnitWeek, WeekReport } from './types'
 
-/** Crew is rationed like a flow, under a pseudo-resource per crewed unit type. */
+/** Crew is rationed like a resource, under a pseudo-resource per crewed unit type. */
 const crewId = (unitId: string) => `crew:${unitId}`
 const isCrew = (id: string) => id.startsWith('crew:')
 
@@ -24,8 +17,6 @@ interface Runner {
   needs: Map<string, number>
   upkeep: Set<string>
   makes: Map<string, number>
-  /** Build strategies: units per machine per week. */
-  builds: { unitId: string; perMachine: number; cap: number } | null
   strategy: Strategy
   /** Share of machines running, which sets what they use. */
   f: number
@@ -37,15 +28,7 @@ interface Runner {
 }
 
 function emptyUnitWeek(): UnitWeek {
-  return {
-    unassigned: 0,
-    unpaid: 0,
-    unpaidFor: null,
-    done: 0,
-    resting: false,
-    built: 0,
-    lost: 0
-  }
+  return { unassigned: 0, unpaid: 0, unpaidFor: null, resting: false, built: 0, lost: 0 }
 }
 
 /** Output multiplier from traits and warm-up. */
@@ -102,7 +85,6 @@ function buildRunners(state: GameState, report: WeekReport): Runner[] {
         needs: new Map(),
         upkeep: new Set(),
         makes: new Map(),
-        builds: null,
         strategy,
         f: 1,
         o: 1,
@@ -124,24 +106,8 @@ function buildRunners(state: GameState, report: WeekReport): Runner[] {
           const value = rate.amount * factor * out.value * B.BY_PRODUCT_SHARE
           runner.makes.set(by.id, (runner.makes.get(by.id) ?? 0) + value / by.value)
         }
-      } else if (strategy.kind === 'crew') {
-        runner.makes.set(crewId(strategy.outputId), rate.amount)
       } else {
-        const target = findUnit(state, strategy.outputId)
-        if (!target) continue
-        const goal = strategy.target ?? 0
-        const needed = Math.max(0, goal - owned(target) - (strategy.carry ?? 0))
-        const perMachine = rate.amount * factor
-        const useful = perMachine > 0 ? Math.ceil(needed / perMachine - 1e-9) : 0
-        const used = Math.min(machines, useful)
-        week.done += machines - used
-        if (used <= 0) continue
-        runner.machines = used
-        runner.builds = { unitId: target.id, perMachine, cap: needed }
-        // Builders that only need to build part of a batch use a matching share of parts.
-        const share = Math.min(1, needed / (used * perMachine))
-        for (const [id, amount] of runner.needs) runner.needs.set(id, amount * share)
-        runner.builds.perMachine *= share
+        runner.makes.set(crewId(strategy.outputId), rate.amount)
       }
       upkeepNeeds(u, runner)
       runners.push(runner)
@@ -182,25 +148,47 @@ function useOf(runner: Runner, id: string, settled: ReturnType<typeof settle>): 
   return need * settled.f
 }
 
+/** The contract that takes units made by Creates: created on first use, always full. */
+function createdContract(state: GameState, u: UnitType): Sourcing {
+  let c = contractsFor(state, u.id).find((x) => x.name === CREATED)
+  if (!c) {
+    c = { id: makeId(state, `${u.name} created`), unitId: u.id, name: CREATED, description: 'Made by Create.', parts: [], total: 0, used: 0, risky: false }
+    state.sourcing.push(c)
+  }
+  return c
+}
+export const CREATED = 'Created directly'
+
+/** Units made by a Create arrive with cap to match. */
+export function deliverUnits(state: GameState, u: UnitType, n: number) {
+  if (n <= 0) return
+  const c = createdContract(state, u)
+  c.total += n
+  c.used += n
+  u.built += n
+  addUnits(u, n, true)
+}
+
+/** Lost units give their slots back, to the most recent contract that has some filled. */
+export function releaseSlots(state: GameState, unitId: string, n: number) {
+  for (const c of [...contractsFor(state, unitId)].reverse()) {
+    if (n <= 0) return
+    const back = Math.min(n, c.used)
+    c.used -= back
+    n -= back
+  }
+}
+
 /**
  * Simulates one week and mutates `state` to the start of the next. Deterministic: the same
  * state always gives the same week. The preview runs it on a copy.
  */
 export function simulateWeek(state: GameState): WeekReport {
-  const report: WeekReport = {
-    flows: {},
-    shares: {},
-    runs: {},
-    units: {},
-    wasted: {}
-  }
-  // Growing incomes count what was owned at the start of the week.
-  const yields = state.incomes.map((income) => incomeYield(state, income))
+  const report: WeekReport = { flows: {}, shares: {}, runs: {}, units: {}, wasted: {} }
   const runners = buildRunners(state, report)
-  const isFlow = (id: string) => isCrew(id) || findResource(state, id)?.kind === 'flow'
 
-  // Shares of each resource. Users of a scarce resource all get the same share; iterate
-  // because flows made this week depend on who could run.
+  // Shares of each resource: what's on hand plus what's made this week. Users of a scarce
+  // resource all get the same share; iterate because what's made depends on who could run.
   const ids = new Set<string>()
   for (const r of runners) {
     for (const id of r.needs.keys()) ids.add(id)
@@ -216,13 +204,8 @@ export function simulateWeek(state: GameState): WeekReport {
       r.limitedBy = s.limitedBy
     }
     for (const id of ids) {
-      let supply = 0
-      if (isFlow(id)) {
-        supply = isCrew(id) ? 0 : (findResource(state, id)?.stored ?? 0)
-        for (const r of runners) supply += (r.makes.get(id) ?? 0) * r.machines * r.o
-      } else {
-        supply = findResource(state, id)?.amount ?? 0
-      }
+      let supply = isCrew(id) ? 0 : (findResource(state, id)?.amount ?? 0)
+      for (const r of runners) supply += (r.makes.get(id) ?? 0) * r.machines * r.o
       let demand = 0
       for (const r of runners) {
         if (!r.needs.has(id)) continue
@@ -244,8 +227,6 @@ export function simulateWeek(state: GameState): WeekReport {
   for (const [id, s] of shares) if (!isCrew(id)) report.shares[id] = s
 
   // Use and make.
-  const flowPool = new Map<string, number>()
-  const stockIn = new Map<string, number>()
   const note = (id: string, label: string, amount: number) => {
     if (isCrew(id) || Math.abs(amount) < 1e-12) return
     const list = (report.flows[id] ??= [])
@@ -253,34 +234,21 @@ export function simulateWeek(state: GameState): WeekReport {
     if (row) row.amount += amount
     else list.push({ label, amount })
   }
-  for (const res of state.resources) {
-    if (res.kind === 'flow' && res.stored > 0) {
-      flowPool.set(res.id, res.stored)
-      note(res.id, 'Stored last week', res.stored)
-    }
-  }
-  const built = new Map<string, number>()
+  const start = new Map(state.resources.map((r) => [r.id, r.amount]))
+  const delta = new Map<string, number>()
+  const change = (id: string, amount: number) => delta.set(id, (delta.get(id) ?? 0) + amount)
   for (const r of runners) {
     const settled = settle(r, shares)
     for (const id of r.needs.keys()) {
       const used = useOf(r, id, settled) * r.machines
       const label = r.upkeep.has(id) ? `${r.unit.name} upkeep` : r.label
-      if (isFlow(id)) flowPool.set(id, (flowPool.get(id) ?? 0) - used)
-      else {
-        const res = findResource(state, id)
-        if (res) res.amount = Math.max(0, res.amount - used)
-      }
+      if (!isCrew(id)) change(id, -used)
       note(id, label, -used)
     }
     for (const [id, per] of r.makes) {
       const made = per * r.machines * r.o
-      if (isFlow(id)) flowPool.set(id, (flowPool.get(id) ?? 0) + made)
-      else stockIn.set(id, (stockIn.get(id) ?? 0) + made)
+      if (!isCrew(id)) change(id, made)
       note(id, r.label, made)
-    }
-    if (r.builds) {
-      const amount = Math.min(r.builds.cap, r.builds.perMachine * r.machines * r.o)
-      built.set(r.builds.unitId, (built.get(r.builds.unitId) ?? 0) + amount)
     }
     const run = (report.runs[r.strategy.id] ??= { units: 0, fraction: 0, limitedBy: null })
     run.units += r.machines
@@ -293,30 +261,67 @@ export function simulateWeek(state: GameState): WeekReport {
     }
   }
 
-  // Passive incomes arrive with the week's other stock.
-  state.incomes.forEach((income, i) => {
-    if (!findResource(state, income.resourceId)) return
-    stockIn.set(income.resourceId, (stockIn.get(income.resourceId) ?? 0) + yields[i]!)
-    note(income.resourceId, income.name, yields[i]!)
+  // Creates deliver.
+  const unitsIn = new Map<string, number>()
+  state.deliveries = state.deliveries.filter((d) => {
+    if (d.delay > 0) {
+      d.delay -= 1
+      return true
+    }
+    if (d.target.kind === 'resource') {
+      if (findResource(state, d.target.id)) {
+        change(d.target.id, d.amount)
+        note(d.target.id, d.name, d.amount)
+      }
+    } else {
+      unitsIn.set(d.target.id, (unitsIn.get(d.target.id) ?? 0) + Math.floor(d.amount + 1e-9))
+    }
+    if (d.weeks === null) return true
+    d.weeks -= 1
+    return d.weeks > 0
   })
+
+  for (const res of state.resources) res.amount = Math.max(0, res.amount + (delta.get(res.id) ?? 0))
 
   // ---- End of the week.
 
-  // Leftover flows are lost, unless something Stores them.
+  // Storage upkeep: an expansion whose upkeep can't be paid holds nothing extra this week.
+  const unpaid = new Set<Expansion>()
   for (const res of state.resources) {
-    if (res.kind !== 'flow') continue
-    const left = Math.max(0, flowPool.get(res.id) ?? 0)
-    const capacity = state.units
-      .filter((u) => u.stores === res.id && has(u, 'stores'))
-      .reduce((n, u) => n + (u.count * labour(u)) / Math.max(1e-9, res.value), 0)
-    res.stored = Math.min(left, capacity)
-    if (left - res.stored > 1e-9 && (report.flows[res.id]?.length ?? 0) > 0) {
-      report.wasted[res.id] = left - res.stored
+    for (const e of res.expansions) {
+      if (e.catch?.kind !== 'upkeep') continue
+      const payer = findResource(state, e.catch.resourceId)
+      if (!payer || payer.amount < e.catch.amount - 1e-9) {
+        unpaid.add(e)
+        continue
+      }
+      payer.amount -= e.catch.amount
+      note(payer.id, `${e.name} upkeep`, -e.catch.amount)
     }
   }
-  for (const [id, amount] of stockIn) {
-    const res = findResource(state, id)
-    if (res) res.amount += amount
+  for (const res of state.resources) {
+    // Decay spoils a share of what's stored.
+    for (const e of res.expansions) {
+      if (e.catch?.kind !== 'decay' || res.amount <= 0) continue
+      const lost = res.amount * e.catch.share
+      res.amount -= lost
+      note(res.id, `${e.name} spoils`, -lost)
+    }
+    // Slow fill: the space it adds fills only so fast.
+    const cap = capOf(state, res, unpaid)
+    const slow = res.expansions.filter((e) => e.catch?.kind === 'fill' && !unpaid.has(e))
+    let limit = cap
+    if (slow.length) {
+      const slowSpace = slow.reduce((n, e) => n + e.added, 0)
+      const perWeek = slow.reduce((n, e) => n + e.added * (e.catch as { share: number }).share, 0)
+      limit = Math.min(cap, Math.max(cap - slowSpace, start.get(res.id) ?? 0) + perWeek)
+    }
+    // Overflow is lost.
+    if (res.amount > limit + 1e-9) {
+      report.wasted[res.id] = res.amount - limit
+      note(res.id, OVERFLOW, -(res.amount - limit))
+      res.amount = limit
+    }
   }
 
   // A thirsty platform burns a share of the richest stock (by worth). Running dry costs nothing.
@@ -324,7 +329,7 @@ export function simulateWeek(state: GameState): WeekReport {
     const share = drainOf(mind.traits)
     if (share <= 0) continue
     const richest = state.resources
-      .filter((r) => r.kind === 'stock' && r.amount > 0)
+      .filter((r) => r.amount > 0)
       .sort((a, b) => b.amount * b.value - a.amount * a.value)[0]
     if (!richest) continue
     const burned = richest.amount * share
@@ -334,7 +339,7 @@ export function simulateWeek(state: GameState): WeekReport {
 
   // Units arrive.
   for (const u of state.units) {
-    const week = report.units[u.id]!
+    const week = report.units[u.id] ?? (report.units[u.id] = emptyUnitWeek())
     for (const p of u.pending) p.weeks -= 1
     const arrived = u.pending.filter((p) => p.weeks <= 0).reduce((n, p) => n + p.count, 0)
     u.pending = u.pending.filter((p) => p.weeks > 0)
@@ -342,30 +347,22 @@ export function simulateWeek(state: GameState): WeekReport {
     u.ramp = u.ramp.filter((r) => r.weeks < B.SLOW_WEEKS)
     if (arrived) addUnits(u, arrived, false)
 
-    const raw = built.get(u.id) ?? 0
-    if (raw > 0) {
-      const builders = state.strategies.filter((s) => s.kind === 'build' && s.outputId === u.id)
-      const carrier = builders[0]
-      const total = raw + (carrier?.carry ?? 0)
-      const whole = Math.floor(total + 1e-9)
-      if (carrier) carrier.carry = total - whole
-      if (whole > 0) {
-        addUnits(u, whole, true)
-        u.built += whole
-        week.built = whole
-      }
+    const delivered = unitsIn.get(u.id) ?? 0
+    if (delivered > 0) {
+      deliverUnits(state, u, delivered)
+      week.built = delivered
     }
 
-    // Traits that act at the end of the week.
-    if (has(u, 'wears-out') && u.count > 0) {
-      const lost = Math.round(u.count * B.WEAR)
-      u.count -= lost
-      week.lost += lost
+    // Traits that act at the end of the week. Lost units give their slots back.
+    let lost = 0
+    if (has(u, 'wears-out') && u.count > 0) lost += Math.round(u.count * B.WEAR)
+    if (has(u, 'fragile') && week.unpaid > 0 && u.count > lost) {
+      lost += Math.min(u.count - lost, Math.ceil(B.FRAGILE * week.unpaid))
     }
-    if (has(u, 'fragile') && week.unpaid > 0 && u.count > 0) {
-      const lost = Math.min(u.count, Math.ceil(B.FRAGILE * week.unpaid))
+    if (lost > 0) {
       u.count -= lost
       week.lost += lost
+      releaseSlots(state, u.id, lost)
     }
     if (runners.some((r) => r.unit === u && r.o > 0)) u.weeksRun += 1
   }

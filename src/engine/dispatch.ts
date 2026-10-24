@@ -1,6 +1,6 @@
 import type { Judge } from '@/ai/jev'
+import { acceptCreate, judgeCreate, type CreateSpec, type CreateVerdict } from './createProposal'
 import { acceptCover, judgeCover, type CoverSpec, type CoverVerdict } from './coverProposal'
-import { acceptIncome, judgeIncome, type IncomeSpec, type IncomeVerdict } from './incomeProposal'
 import { acceptMind, judgeMind, type MindSpec, type MindVerdict } from './mindProposal'
 import { acceptPlan, judgePlan, type PlanSpec, type PlanVerdict } from './planProposal'
 import {
@@ -14,6 +14,8 @@ import {
   type StrategySpec,
   type StrategyVerdict
 } from './proposals'
+import { acceptSourcing, judgeSourcing, type SourcingSpec, type SourcingVerdict } from './sourcingProposal'
+import { acceptStorage, judgeStorage, type StorageSpec, type StorageVerdict } from './storageProposal'
 import type { GameState } from './types'
 import { acceptUnit, judgeUnit, type UnitSpec, type UnitVerdict } from './unitProposal'
 
@@ -24,7 +26,9 @@ export type ProposalInput =
   | { kind: 'strategy'; spec: StrategySpec }
   | { kind: 'unit'; spec: UnitSpec }
   | { kind: 'mind'; spec: MindSpec }
-  | { kind: 'income'; spec: IncomeSpec }
+  | { kind: 'sourcing'; spec: SourcingSpec }
+  | { kind: 'storage'; spec: StorageSpec }
+  | { kind: 'create'; spec: CreateSpec }
   | { kind: 'cover'; spec: CoverSpec }
   | { kind: 'plan'; spec: PlanSpec }
 
@@ -33,7 +37,9 @@ export type Verdict =
   | StrategyVerdict
   | UnitVerdict
   | MindVerdict
-  | IncomeVerdict
+  | SourcingVerdict
+  | StorageVerdict
+  | CreateVerdict
   | CoverVerdict
   | PlanVerdict
 
@@ -48,8 +54,12 @@ export function judgeAny(s: GameState, judge: Judge, input: ProposalInput): Prom
       return judgeUnit(s, judge, input.spec)
     case 'mind':
       return judgeMind(s, judge, input.spec)
-    case 'income':
-      return judgeIncome(s, judge, input.spec)
+    case 'sourcing':
+      return judgeSourcing(s, judge, input.spec)
+    case 'storage':
+      return judgeStorage(s, judge, input.spec)
+    case 'create':
+      return judgeCreate(s, judge, input.spec)
     case 'cover':
       return judgeCover(s, judge, input.spec)
     case 'plan':
@@ -68,8 +78,12 @@ export function acceptAny(s: GameState, verdict: Verdict): Accepted {
       return acceptUnit(s, verdict)
     case 'mind':
       return acceptMind(s, verdict)
-    case 'income':
-      return acceptIncome(s, verdict)
+    case 'sourcing':
+      return acceptSourcing(s, verdict)
+    case 'storage':
+      return acceptStorage(s, verdict)
+    case 'create':
+      return acceptCreate(s, verdict)
     case 'cover':
       return acceptCover(s, verdict)
     case 'plan':

@@ -17,38 +17,54 @@ import { runWeek } from '@/engine/cycle'
 import { previewWeek } from '@/engine/economy'
 import { coverBlocker, draftCover } from '@/engine/coverProposal'
 import { acceptAny, judgeAny, type ProposalInput, type Verdict } from '@/engine/dispatch'
-import { draftIncome } from '@/engine/incomeProposal'
+import { describeOption, optionBlocker, overflowOf } from '@/engine/createProposal'
 import { createInitialState } from '@/engine/initialState'
 import { computeTrait } from '@/engine/computeTraits'
 import { draftMind } from '@/engine/mindProposal'
 import {
   allocation,
+  capOf,
+  contractsFor,
   creatable,
   bestIQ,
   costShortfall,
   currentIQ,
   describeCost,
+  describeDelivery,
   describeFlows,
-  describeIncome,
   efficiencyWord,
   findResource,
+  findSourcing,
   findUnit,
   fmt,
   fmtCount,
+  openSlots,
   partsFor,
   softwareLabel,
   tasksFor,
   tierFit,
   tierLabel,
+  unitCap,
   unitValueText,
   weeklyUse
 } from '@/engine/model'
-import { COVER_PRESETS, INCOME_PRESETS, MIND_PRESETS, RESOURCE_PRESETS, STRATEGY_PRESETS, UNIT_PRESETS } from '@/engine/presets'
+import {
+  CREATE_PRESETS,
+  COVER_PRESETS,
+  MIND_PRESETS,
+  RESOURCE_PRESETS,
+  SOURCING_PRESETS,
+  STORAGE_PRESETS,
+  STRATEGY_PRESETS,
+  UNIT_PRESETS
+} from '@/engine/presets'
 import { cardsFor, clockMoved, lockReason, PHASE_NAMES, weeksLeft, type Feature } from '@/engine/phase'
 import { plansFor, planIdeas } from '@/engine/planPresets'
 import { draftPlan } from '@/engine/planProposal'
 import { goalOf, projectGoal, projectionText } from '@/engine/projection'
-import { alarmLabel, alarmQuestions, noticeAt, RISK_BONUS, riskFrom, riskText } from '@/engine/risk'
+import { alarmLabel, alarmQuestions, expansionRiskText, RISK_BONUS, riskFrom, riskText } from '@/engine/risk'
+import { iqTag } from '@/engine/sourcingProposal'
+import { describeCatch } from '@/engine/storageProposal'
 import { proposalText } from '@/engine/stateText'
 import { catchesOf, complicationName, draftResource, draftStrategy, payOptions } from '@/engine/proposals'
 import { TRAITS, type TraitId } from '@/engine/traits'
@@ -121,7 +137,7 @@ function load(slot: string): Save {
   const path = savePath(slot)
   if (!existsSync(path)) throw new Error(`No game in slot "${slot}". Start one with: new`)
   const save = JSON.parse(readFileSync(path, 'utf8')) as Save
-  if (save.state.version !== 13) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
+  if (save.state.version !== 15) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
   return save
 }
 
@@ -157,7 +173,7 @@ const say = (line = '') => out.push(line)
 /** Traits with their rules, so a player can see what they do. */
 const traitText = (ids: TraitId[]) => ids.map((id) => `${TRAITS[id].name} (${TRAITS[id].rule})`).join('; ')
 
-const FEATURES: Feature[] = ['income', 'upgrade', 'strategy', 'unit', 'cover', 'mind', 'unit-upgrade']
+const FEATURES: Feature[] = ['create', 'storage', 'upgrade', 'strategy', 'unit', 'sourcing', 'cover', 'mind', 'unit-upgrade']
 
 /** A platform's traits with their rules. */
 const computeTraitText = (ids: string[]) =>
@@ -183,7 +199,7 @@ function printPhase(s: GameState) {
       )
     }
     for (const h of s.history) say(`Won Phase ${h.n} (${h.plan.goal}) in week ${h.week}.`)
-    if (s.clock.length) say(`Clock: −${clockMoved(s, -1)} weeks to risk and notices, +${clockMoved(s, 1)} from cover.`)
+    if (s.clock.length) say(`Clock: −${clockMoved(s, -1)} weeks to risk and expansions, +${clockMoved(s, 1)} from cover.`)
     say(`Invented: ${s.inventions.map((i) => `${i.icon} ${i.name}`).join(', ') || 'nothing'}`)
     return
   }
@@ -200,7 +216,7 @@ function printPhase(s: GameState) {
     say(`  ${projectionText(s, proj)}${proj.week === null ? '' : ' (if you build nothing more)'}`)
   }
   if (p.firstUnit) {
-    say(`FIRST UNIT waiting (designed free, tier 0; you build the copies from parts): ${p.firstUnit.name}: ${p.firstUnit.description} → propose unit with "first": true`)
+    say(`FIRST UNIT waiting (designed free, tier 0, with a starter batch of ${B.STARTER_CONTRACT}): ${p.firstUnit.name}: ${p.firstUnit.description} → propose unit with "first": true`)
   }
   const locked = FEATURES.filter((f) => lockReason(s, f))
   if (locked.length) say(`Locked: ${locked.map((f) => `${f} (${lockReason(s, f)})`).join('; ')}`)
@@ -215,15 +231,18 @@ function printStatus(s: GameState) {
   say(`WEEK ${s.week} · Jev calls ${s.stats.jevCalls}`)
   say(
     `Best IQ ${Math.round(bestIQ(s))}${lockReason(s, 'mind') ? '' : ` · a new platform can be up to ${B.MAX_IQ_STEP} IQ smarter (steps ${B.PLATFORM_STEPS.join('/')}) and replaces this one for good`} · ` +
-      (s.proposedThisWeek ? 'research PROPOSED this week' : 'can propose one research this week')
+      (s.proposedThisWeek ? 'action TAKEN this week' : 'one action this week (a research proposal or Create)')
   )
   say('\nRESOURCES')
   for (const r of s.resources) {
     const sources = (preview.flows[r.id] ?? []).map((f) => `${f.label} ${f.amount >= 0 ? '+' : ''}${fmt(f.amount)}`).join(', ')
     const share = preview.shares[r.id]
+    const wasted = preview.wasted[r.id]
     say(
-      `  ${r.id} "${r.name}" ${r.kind} tier ${r.tier} worth ${fmt(r.value)} · have ${fmt(r.amount)}${r.stored ? ` (+${fmt(r.stored)} stored)` : ''} · net ${fmt(net(r.id))}` +
+      `  ${r.id} "${r.name}" tier ${r.tier} worth ${fmt(r.value)} · have ${fmt(r.amount)} of ${fmt(capOf(s, r))} storage · net ${fmt(net(r.id))}` +
         `${share !== undefined && share < 1 ? ` · SHORT: ${pct(share)} met` : ''}` +
+        `${wasted ? ` · OVERFLOWS ${fmt(wasted)}` : ''}` +
+        `${r.expansions.length ? `\n      storage: ${r.expansions.map((e) => `${e.name} +${fmt(e.added)}${e.catch ? ` (${describeCatch(s, e.catch)})` : ''}`).join('; ')}` : ''}` +
         `${sources ? `\n      ${sources}` : ''}`
     )
   }
@@ -240,22 +259,27 @@ function printStatus(s: GameState) {
     for (const u of s.units) {
       const w = preview.units[u.id]
       const { byTask, free } = allocation(s, u)
+      say(`  ${u.id} "${u.name}" ${tierLabel(u.tier)} ×${fmtCount(u.count)} of ${fmtCount(unitCap(s, u.id))} allowed (built ${fmtCount(u.built)})`)
       say(
-        `  ${u.id} "${u.name}" ${tierLabel(u.tier)} ×${fmtCount(u.count)} (built ${fmtCount(u.built)}) · create up to ${fmtCount(creatable(s, u, weeklyUse(preview)))} now` +
-          (s.phase.n === 2 ? ` · humans notice at ${fmt(noticeAt(u))}${u.risky ? ' (RISKY: −2 weeks each)' : ''}` : '')
+        `      upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · value ${fmt(u.value)} (${unitValueText(u.value)})` +
+          `${u.crew ? ` · crew ${u.crew.per} ${u.crew.unitId}` : ''}`
       )
-      say(
-        `      upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · parts ${describeFlows(s, partsFor(u))} each · value ${fmt(u.value)} (${unitValueText(u.value)})` +
-          `${u.crew ? ` · crew ${u.crew.per} ${u.crew.unitId}` : ''}${u.builderId ? ` · built by ${u.builderId}` : ''}`
-      )
+      const contracts = contractsFor(s, u.id)
+      if (!contracts.length) say('      NO SOURCING: propose sourcing to own any')
+      for (const c of contracts) {
+        say(
+          `      contract ${c.id} "${c.name}" ${fmtCount(c.used)}/${fmtCount(c.total)}${c.risky ? ' RISKY' : ''}` +
+            (c.parts.length ? ` · parts ${describeFlows(s, partsFor(u, c))} each · create up to ${fmtCount(creatable(s, c, weeklyUse(preview)))} now` : ' · made by Creates')
+        )
+      }
       if (u.traits.length) say(`      traits: ${traitText(u.traits)}`)
       say(
         `      upgrades done: ${s.upgrades.filter((x) => x.targetId === u.id).map((x) => x.name.split(': ').pop()).join(', ') || 'none'}`
       )
       const tasks = Object.entries(byTask).map(([t, n]) => `${t}=${fmtCount(n)}${t === u.rest ? '(rest)' : ''}`)
       say(`      tasks: ${tasks.join(', ') || 'none'}${free ? ` · ${fmtCount(free)} UNASSIGNED` : ''} · can do: ${tasksFor(s, u).join(', ') || 'nothing'}`)
-      if (w && (w.unpaid || w.done || w.resting || w.built || w.lost)) {
-        say(`      next week: ${w.unpaid ? `${fmtCount(w.unpaid)} unpaid (${w.unpaidFor}) ` : ''}${w.done ? `${fmtCount(w.done)} builders done ` : ''}${w.resting ? 'resting ' : ''}${w.built ? `builds ${fmtCount(w.built)} ` : ''}${w.lost ? `loses ${fmtCount(w.lost)}` : ''}`)
+      if (w && (w.unpaid || w.resting || w.built || w.lost)) {
+        say(`      next week: ${w.unpaid ? `${fmtCount(w.unpaid)} unpaid (${w.unpaidFor}) ` : ''}${w.resting ? 'resting ' : ''}${w.built ? `${fmtCount(w.built)} delivered ` : ''}${w.lost ? `loses ${fmtCount(w.lost)}` : ''}`)
       }
     }
   }
@@ -266,25 +290,28 @@ function printStatus(s: GameState) {
       const outName = st.kind === 'make' ? findResource(s, st.outputId)?.name : findUnit(s, st.outputId)?.name
       say(
         `  ${st.id} "${st.name}" [${st.unitId}] ${st.kind}: ${st.inputs.length ? `${describeFlows(s, st.inputs)} → ` : ''}${fmt(st.amount)} ${outName}` +
-          `${st.target !== undefined ? ` · target ${fmtCount(st.target)}` : ''}${st.quirk ? ` · quirk ${st.quirk}` : ''}` +
+          `${st.quirk ? ` · quirk ${st.quirk}` : ''}` +
           `${strategyTags(s, st)}` +
           `${run ? ` · next week ${fmtCount(run.units)} running at ${pct(run.fraction)}${run.limitedBy ? ` (short of ${run.limitedBy})` : ''}` : ''}`
       )
     }
   }
-  if (s.incomes.length) say(`\nPASSIVE INCOME: ${s.incomes.map((i) => `${i.name}: ${describeIncome(s, i)}`).join(' · ')}`)
+  if (s.deliveries.length) say(`\nSTILL TO COME FROM CREATE: ${s.deliveries.map((d) => `${d.name}: ${describeDelivery(s, d)}`).join(' · ')}`)
   say('\nRESEARCH')
   if (!s.research.length) say('  none')
   for (const r of s.research) {
     const blocker = actions.researchBlocker(s, r.id)
+    const e = r.effect
     const what =
-      r.effect.kind === 'income'
-        ? ` · gives ${describeIncome(s, r.effect.income)}`
-        : r.effect.kind === 'cover'
-          ? ` · adds ${r.effect.weeks} weeks before decay`
-          : r.effect.kind === 'goal'
-            ? ' · THE GOAL'
-            : ''
+      e.kind === 'sourcing'
+        ? ` · a contract for ${fmt(e.sourcing.total)}, parts ${describeFlows(s, e.sourcing.parts)} each`
+        : e.kind === 'storage'
+          ? ` · room for ${fmt(e.expansion.added)} more${e.expansion.catch ? ` (${describeCatch(s, e.expansion.catch)})` : ''}`
+          : e.kind === 'cover'
+            ? ` · adds ${e.weeks} weeks before decay`
+            : e.kind === 'goal'
+              ? ' · THE GOAL'
+              : ''
     const risk = r.risk ? ` · RISKY −${r.risk.weeks} weeks (${alarmLabel(r.risk)})` : ''
     say(`  ${r.id} "${r.name}" needs IQ ${r.minIQ} · uses up ${describeCost(s, r.cost)}${what}${risk} · ${blocker ? `can’t: ${blocker}` : 'READY'}`)
   }
@@ -298,7 +325,7 @@ function printStatus(s: GameState) {
 /** A strategy's quality in words, as the player sees it: Jev's efficiency, and how its unit's tier fits. */
 function strategyTags(s: GameState, st: Strategy): string {
   const unit = findUnit(s, st.unitId)
-  const target = st.kind === 'make' ? findResource(s, st.outputId) : st.kind === 'build' ? findUnit(s, st.outputId) : undefined
+  const target = st.kind === 'make' ? findResource(s, st.outputId) : undefined
   const fit = unit && target ? tierFit(unit.tier, target.tier) : null
   const tags = [efficiencyWord(st), fit?.text].filter(Boolean)
   return tags.length ? ` · ${tags.join(', ')}` : ''
@@ -324,7 +351,7 @@ function printVerdict(s: GameState, v: Verdict) {
     if (v.rejected) return
     const d = draftPlan(s, v)
     say(`  → goal "${v.spec.goal}": needs IQ ${d.goal.minIQ}, uses up ${describeCost(d.state, d.goal.cost)}`)
-    say(`  → new resources: ${d.added.map((r) => `${r.id === d.top.id ? 'GOAL ' : ''}${r.name} (${r.kind}, tier ${r.tier}, worth ${fmt(r.value)})`).join(', ')}`)
+    say(`  → new resources: ${d.added.map((r) => `${r.id === d.top.id ? 'GOAL ' : ''}${r.name} (tier ${r.tier}, worth ${fmt(r.value)}, holds ${fmt(r.cap)})`).join(', ')}`)
     return
   }
   if (v.kind === 'cover') {
@@ -335,9 +362,47 @@ function printVerdict(s: GameState, v: Verdict) {
     if (blocked) say(`  CAN’T USE IT NOW: ${blocked}`)
     return
   }
+  if (v.kind === 'create') {
+    const c = v.scalars
+    say(`  factors: Industry ×${fmt(c.industry)} · IQ ×${fmt(c.iq)} · Efficiency ×${fmt(c.efficiency)}${c.reach < 1 ? ` · Reach ×${fmt(c.reach)} (${c.short.toFixed(1)} tiers over)` : ''}`)
+    say(`  Jev's offers [option <n>] (taking one uses this week's action):`)
+    v.options.forEach((o, i) => {
+      const blocked = optionBlocker(s, o)
+      const over = overflowOf(s, v, o)
+      say(
+        `    ${i}${i === v.choice ? ' *' : ''}: ${describeOption(s, v, o)} · uses ${o.inputs.length ? describeFlows(s, o.inputs) : 'nothing'}` +
+          `${blocked ? ` · CAN’T: ${blocked}` : over ? ` · ${fmt(over)} WON’T FIT in storage` : ''}`
+      )
+    })
+    return
+  }
+  if (v.kind === 'sourcing') {
+    say(`  contracts [option <n>]:`)
+    v.options.forEach((o, i) => {
+      const tag = iqTag(o.iqEfficiency)
+      say(
+        `    ${i}${i === v.choice ? ' *' : ''}: ${o.label}: up to ${fmt(o.total)}${o.risky ? ' RISKY' : ''} · parts ${describeFlows(s, o.parts)} each · needs IQ ${o.minIQ}, uses up ${describeCost(s, o.cost)}` +
+          ` · ${expansionRiskText(o.risk)}${tag ? ` · ${tag}` : ''}`
+      )
+    })
+    return
+  }
+  if (v.kind === 'storage') {
+    const c = v.scalars
+    say(`  factors: Industry ×${fmt(c.industry)} · IQ ×${fmt(c.iq)} · Efficiency ×${fmt(c.efficiency)}`)
+    say(`  expansions [option <n>]:`)
+    v.options.forEach((o, i) => {
+      const tag = iqTag(o.iqEfficiency)
+      say(
+        `    ${i}${i === v.choice ? ' *' : ''}: ${o.label}: room for ${fmt(o.added)} more${o.risky ? ' RISKY' : ''} · ${describeCatch(s, o.catch)} · needs IQ ${o.minIQ}, uses up ${describeCost(s, o.cost)}` +
+          ` · ${expansionRiskText(o.risk)} · needs ${B.HOLDERS[o.holder]![0].toLowerCase()}${o.blocked ? ' (BLOCKED at your IQ)' : ''}${tag ? ` · ${tag}` : ''}`
+      )
+    })
+    return
+  }
   if (v.kind === 'resource') {
     const r = draftResource(s, v)
-    say(`  → ${r.name}: ${r.kind}, tier ${r.tier}, worth ${fmt(r.value)}`)
+    say(`  → ${r.name}: tier ${r.tier}, worth ${fmt(r.value)}, holds ${fmt(r.cap)} to start`)
   } else if (v.kind === 'strategy') {
     const d = draftStrategy(s, v)
     say(`  → ${describeFlows(s, d.strategy.inputs)} → ${fmt(d.strategy.amount)} ${findResource(s, d.strategy.outputId)?.name} per unit${d.strategy.quirk ? ` · quirk ${d.strategy.quirk}` : ''}${strategyTags(s, d.strategy)}`)
@@ -345,17 +410,17 @@ function printVerdict(s: GameState, v: Verdict) {
   } else if (v.kind === 'unit') {
     const d = draftUnit(s, v)
     const u = d.unit
-    say(v.spec.first ? '  → the plan’s first unit: designed at once, free (no free copies: create them from parts)' : research(d))
+    say(v.spec.first ? `  → the plan’s first unit: designed at once, free, with a starter batch of ${B.STARTER_CONTRACT}` : research(d))
     say(`  Jev's takes [option <n>]:`)
     v.options.forEach((o, i) => {
       const od = draftUnit(s, { ...v, choice: i })
       say(
-        `    ${i}${i === v.choice ? ' *' : ''}: ${tierLabel(o.tier)} · ${unitValueText(od.unit.value)} · made from ${o.partsIds.map((id) => findResource(s, id)?.name).join(' + ')}, runs on ${findResource(s, o.upkeepId)?.name} · traits: ${o.traits.length ? o.traits.map((t) => TRAITS[t].name).join(', ') : 'none'}` +
+        `    ${i}${i === v.choice ? ' *' : ''}: ${tierLabel(o.tier)} · ${unitValueText(od.unit.value)} · runs on ${findResource(s, o.upkeepId)?.name} · traits: ${o.traits.length ? o.traits.map((t) => TRAITS[t].name).join(', ') : 'none'}` +
           (v.spec.first ? '' : ` · needs IQ ${od.minIQ}, uses up ${describeCost(s, od.cost)}`)
       )
     })
-    say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}, parts ${describeFlows(s, u.parts)}`)
-    say(`  → traits: ${u.traits.length ? traitText(u.traits) : 'none'}${u.builderId ? ` · also built by ${u.builderId}` : ''}`)
+    say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}${v.spec.first ? '' : ' · room for none until you propose sourcing'}`)
+    say(`  → traits: ${u.traits.length ? traitText(u.traits) : 'none'}`)
   } else if (v.kind === 'mind') {
     say(`  Jev's perk-and-drawback pairs [option <n>]:`)
     v.options.forEach((o, i) => {
@@ -363,10 +428,6 @@ function printVerdict(s: GameState, v: Verdict) {
     })
     const d = draftMind(s, v)
     say(`  → IQ ${d.mind.hardware.iq} (${d.mind.hardware.name}, ${softwareLabel(d.mind)}), replacing the current platform for good`)
-    say(research(d))
-  } else {
-    const d = draftIncome(s, v)
-    say(`  → ${describeIncome(s, d.income)} a week`)
     say(research(d))
   }
   const extra = catchesOf(v)
@@ -428,24 +489,27 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   plans [all|shuffle]          the three plan ideas for this phase (all: the whole bank; shuffle: three others)
   propose plan '{"goal":"..","means":"..","resources":[{"name":"..","description":".."}],"firstUnit":{"name":"..","description":".."}}'
                                (firstUnit only in Phase 2; Jev picks which resource the goal is built from and uses up)
-  presets <resource|strategy|unit|mind|income|cover>
+  presets <resource|strategy|unit|mind|create|sourcing|storage|cover>
   propose resource '{"name":"..","description":".."}'
+  propose create '{"target":{"kind":"resource","id":".."},"name":"..","description":".."}'
+                               (the week's action: make something now; target kind "unit" makes units with cap. Pick an offer with option <n>)
+  propose storage '{"resourceId":"..","name":"..","description":".."}'   (three expansions; pick with option <n>)
   propose strategy '{"name":"..","description":"..","unitId":"..","inputIds":[],"outputId":".."}'
-  propose unit '{"name":"..","description":"..","builderId":null,"first":false}'   (Jev picks what it's made from and runs on)
+  propose unit '{"name":"..","description":"..","first":false}'   (Jev picks its tier, value and what it runs on)
+  propose sourcing '{"unitId":"..","name":"..","description":".."}'   (a contract: how many you may own, and their parts; pick with option <n>)
   propose mind '{"name":"..","description":"..","step":100,"hardware":"..","software":".."}'
                                (step: IQ over your best, one of 25/50/75/100. It replaces your platform for good; Jev offers three perk+drawback pairs, pick with option <n>)
-  propose income '{"name":"..","description":"..","outputId":"..","perId":null}'   (perId: a stock it grows with)
   propose cover '{"name":"..","description":".."}'
   dismiss <cardId|all>         dismiss explainer cards
-  verdict | pick <key> <value> | option <n> (a unit's take: tier, value, what it's made from and runs on, traits; or a platform's perk+drawback pair)
+  verdict | pick <key> <value> | option <n> (a unit's take, a platform's perk+drawback pair, a Create offer, a contract or an expansion)
   accept | discard
   upgrade <unit|mind> <id>      ask Jev for three ways to improve it (a platform gets one software upgrade, ever)
   choose <n> [size]            take upgrade option n as research (a platform upgrade also takes a size: 25/50/75/100 IQ, default 100)
-  research <researchId>        do a research now (any number a week; proposing is one a week)
+  research <researchId>        do a research now (any number a week; proposing is the week's one action)
   drop <researchId>            drop a research
-  create <unitId> <n|max>       create units from their parts
+  create <contractId> <n|max>   create units from a sourcing contract's parts (no action; up to its open slots)
   assign <unitId> <strategyId> <n> | rest <unitId> <strategyId|none> | all <unitId> <strategyId>
-  target <strategyId> <n> | overclock <unitId> on|off
+  overclock <unitId> on|off
   next [n]                     run up to n weeks (default 1), stopping when something happens
   log [n]                      the last n log lines
   calibrate-alarm ["<stance>"] (tuning) ask Jev how alarming some sample Phase 2 actions are; no game needed`
@@ -493,10 +557,12 @@ async function run(args: string[], slot: string): Promise<number> {
       strategy: STRATEGY_PRESETS,
       unit: UNIT_PRESETS,
       mind: MIND_PRESETS,
-      income: INCOME_PRESETS,
+      create: CREATE_PRESETS,
+      sourcing: SOURCING_PRESETS,
+      storage: STORAGE_PRESETS,
       cover: COVER_PRESETS
     }[rest[0] as 'unit']
-    if (!list) throw new Error('presets resource|strategy|unit|mind|income|cover')
+    if (!list) throw new Error('presets resource|strategy|unit|mind|create|sourcing|storage|cover')
     for (const p of list) say(JSON.stringify(p))
     return 0
   }
@@ -572,7 +638,7 @@ async function run(args: string[], slot: string): Promise<number> {
     }
     case 'option': {
       const v = needVerdict()
-      if (v.kind !== 'unit' && v.kind !== 'mind') throw new Error('Only unit and platform verdicts have options.')
+      if (!('options' in v)) throw new Error('This verdict has no options.')
       const choice = Number(rest[0])
       if (!v.options[choice]) throw new Error(`Choose 0 to ${v.options.length - 1}.`)
       v.choice = choice
@@ -586,7 +652,7 @@ async function run(args: string[], slot: string): Promise<number> {
       save.verdict = null
       await log(save.state, 'accept', { kind: v.kind, picks: v.picks, outcome: result.outcome })
       say(result.outcome.kind === 'added' ? `added: ${result.outcome.name}` : `research: ${result.outcome.research.id} needs IQ ${result.outcome.research.minIQ}`)
-      if (v.kind === 'unit' && v.spec.first) say('Next: give it something to do with `propose strategy` (this doesn’t use up the free first unit).')
+      if (v.kind === 'unit' && v.spec.first) say('Next: create some from its starter batch, and give them something to do with `propose strategy`.')
       if (v.kind === 'cover') for (const e of save.state.log.slice(-1)) say(`  ${e.text}`)
       if (v.kind === 'plan') {
         say('')
@@ -636,13 +702,13 @@ async function run(args: string[], slot: string): Promise<number> {
       await act('drop_research', { researchId: rest[0] }, (st) => actions.dropResearch(st, rest[0]!))
       break
     case 'create': {
-      const u = findUnit(s(), rest[0]!)
-      if (!u) throw new Error(`No unit ${rest[0]}`)
-      const n = rest[1] === 'max' ? creatable(s(), u, weeklyUse(previewWeek(structuredClone(s())))) : num(rest[1])
-      if (n < 1) throw new Error('Can’t afford any.')
-      const notice = actions.createNotice(s(), u.id, n)
-      await act('create', { unitId: u.id, n }, (st) => actions.createUnits(st, u.id, n))
-      say(`created ${fmtCount(n)} ${u.name}${notice ? ` · humans noticed: −${notice} week${notice === 1 ? '' : 's'}` : ''}`)
+      const c = findSourcing(s(), rest[0]!)
+      const u = c && findUnit(s(), c.unitId)
+      if (!c || !u) throw new Error(`No contract ${rest[0]}. Contracts are listed under each unit in status.`)
+      const n = rest[1] === 'max' ? creatable(s(), c, weeklyUse(previewWeek(structuredClone(s())))) : num(rest[1])
+      if (n < 1) throw new Error(openSlots(c) ? 'Can’t afford any.' : `${c.name} is full.`)
+      await act('create', { sourcingId: c.id, n }, (st) => actions.createUnits(st, c.id, n))
+      say(`created ${fmtCount(n)} ${u.name} from ${c.name}`)
       break
     }
     case 'assign':
@@ -655,9 +721,6 @@ async function run(args: string[], slot: string): Promise<number> {
     }
     case 'all':
       await act('assign_all', { unitId: rest[0], taskId: rest[1] }, (st) => actions.assignAll(st, rest[0]!, rest[1]!))
-      break
-    case 'target':
-      await act('build_target', { strategyId: rest[0], target: num(rest[1]) }, (st) => actions.setBuildTarget(st, rest[0]!, num(rest[1])))
       break
     case 'overclock':
       await act('overclock', { unitId: rest[0], on: rest[1] === 'on' }, (st) => actions.setOverclock(st, rest[0]!, rest[1] === 'on'))

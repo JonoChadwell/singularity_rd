@@ -1,17 +1,20 @@
 import type { JevAnswer } from '@/ai/jev'
 import * as B from '../balance'
-import { assignAll, createUnits, doResearch, researchBlocker } from '../actions'
+import { assign, assignAll, createUnits, doResearch, researchBlocker } from '../actions'
+import { acceptCreate, judgeCreate, optionBlocker } from '../createProposal'
 import { runWeek } from '../cycle'
 import { acceptAny, judgeAny, type ProposalInput } from '../dispatch'
-import { netFlow, previewWeek } from '../economy'
+import { previewWeek } from '../economy'
 import { createInitialState, newResource, SERVER_ID } from '../initialState'
-import { bestIQ, creatable, currentIQ, findResource, findUnit, MONEY_ID, weeklyUse } from '../model'
+import { bestIQ, capOf, contractsFor, creatable, currentIQ, findResource, findUnit, MONEY_ID, openSlots, weeklyUse } from '../model'
 import { newPhase } from '../phase'
 import { acceptPlan, judgePlan, type PlanSpec } from '../planProposal'
 import { goalOf } from '../projection'
-import type { GameState, UpgradeTarget } from '../types'
+import { acceptSourcing, judgeSourcing } from '../sourcingProposal'
+import { acceptStorage, judgeStorage } from '../storageProposal'
+import type { CreateTarget, GameState, UpgradeTarget } from '../types'
 import { acceptUpgrade, judgeUpgrade, mindUpgradeBlocker } from '../upgrade'
-import { FakeJudge, noul, score, type Overrides } from './fakeJudge'
+import { choice, FakeJudge, noul, score, type Overrides } from './fakeJudge'
 
 // Scripted players for the balance tests. They play through the real engine with a fake Jev
 // whose answers are set per proposal, the way a typical real verdict comes back.
@@ -96,9 +99,76 @@ function result(state: GameState, won: number | null, lost: number | null): Resu
   return { won, lost, state, weeksLost: sum(-1), weeksGained: sum(1) }
 }
 
+let names = 0
+const fresh = (base: string) => `${base} ${++names}`
+
+/**
+ * A Create: Jev offers three, and the bot takes the affordable one paying out `timing`, or else
+ * the first affordable one. Throws if none is.
+ */
+export async function createVia(
+  state: GameState,
+  target: CreateTarget,
+  timing: B.CreateTiming,
+  answers: Overrides = {}
+): Promise<GameState> {
+  const spec = { name: fresh('Create'), description: '', target }
+  const v = await judgeCreate(state, new FakeJudge({ ...TYPICAL, efficiency: score(2), timing: choice(timing), ...answers }), spec)
+  if (v.rejected) throw new Error(`create rejected: ${v.rejected}`)
+  const ok = v.options.map((o, i) => ({ o, i })).filter(({ o }) => !optionBlocker(state, o))
+  const pick = ok.find(({ o }) => o.timing === timing) ?? ok[0]
+  if (!pick) throw new Error('No create option is affordable.')
+  v.choice = pick.i
+  return acceptCreate(state, v).state
+}
+
+const resourceTarget = (id: string): CreateTarget => ({ kind: 'resource', id })
+
+/** The goal's resource. */
+const goalResource = (s: GameState) => goalOf(s)!.cost[0]!.resourceId
+
+/** A resource some waiting research (not the goal) needs more of, or null. */
+function shortForResearch(s: GameState): string | null {
+  for (const r of s.research) {
+    if (r.effect.kind === 'goal' || bestIQ(s) < r.minIQ) continue
+    const short = r.cost.find((c) => (findResource(s, c.resourceId)?.amount ?? 0) < c.amount)
+    if (short) return short.resourceId
+  }
+  return null
+}
+
+/** Upgrades the Starting Server when the goal needs more IQ and none is waiting. */
+async function upgradeIfShort(s: GameState): Promise<GameState | null> {
+  const goal = goalOf(s)
+  const waiting = s.research.some((r) => r.effect.kind === 'upgrade')
+  // The goal's resource is tier 1: anything less than its IQ makes Creates into it reach.
+  const needed = Math.max(goal?.minIQ ?? 0, B.TIERS[1]![1] + 1, ...s.research.map((r) => r.minIQ))
+  if (!goal || bestIQ(s) >= needed || waiting || s.proposedThisWeek || s.minds[0]!.software.upgraded) return null
+  return upgrade(s, { kind: 'mind', id: SERVER_ID })
+}
+
+/** Expands storage for a resource when what it must hold doesn't fit, and none is waiting. */
+async function storeIfShort(s: GameState, resourceId: string, need: number, answers: Overrides = {}): Promise<GameState | null> {
+  const r = findResource(s, resourceId)!
+  const waiting = s.research.some((x) => x.effect.kind === 'storage' && x.effect.resourceId === resourceId)
+  if (s.proposedThisWeek || waiting || capOf(s, r) >= need) return null
+  const v = await judgeStorage(s, new FakeJudge({ ...TYPICAL, efficiency: score(2), 'holder_*': score(0), ...answers }), {
+    resourceId,
+    name: fresh('Rent warehouse space'),
+    description: ''
+  })
+  if (v.rejected) return null
+  // The biggest that fits, clean if it can be.
+  const ok = v.options.map((o, i) => ({ o, i })).filter(({ o }) => !o.blocked && !o.catch)
+  const pick = ok.find(({ o }) => capOf(s, r) + o.added >= need && !o.risky) ?? ok.find(({ o }) => !o.risky) ?? ok[0]
+  if (!pick) return null
+  v.choice = pick.i
+  return acceptStorage(s, v).state
+}
+
 // ---------------------------------------------------------------- Phase 1
 
-/** Every resource in the plan worth 10, like a meal, as Jev usually values Money. */
+/** Every resource in the plan worth 1.5, like a meal. */
 const plainValues: Overrides = { 'r0_value': score(2), 'r1_value': score(2), 'r2_value': score(2) }
 
 export const BRIBE: PlanSpec = {
@@ -121,84 +191,50 @@ export async function phase1(approach = 2): Promise<GameState> {
   return acceptPlan(s, v).state
 }
 
-const income = (name: string, outputId: string, band: number, perId: string | null = null): [ProposalInput, Overrides] => [
-  { kind: 'income', spec: { name, description: '', outputId, perId } },
-  { difficulty: score(band), efficiency: score(2) }
-]
-
-/** The best income band the bot's IQ allows: Simple at 100, Ordinary from 110, Advanced from 140. */
-const bandFor = (s: GameState) => (bestIQ(s) >= 140 ? 3 : bestIQ(s) >= 110 ? 2 : 1)
-
-let names = 0
-const fresh = (base: string) => `${base} ${++names}`
-
-/** Upgrades the Starting Server when the goal needs more IQ and none is waiting. */
-async function upgradeIfShort(s: GameState): Promise<GameState | null> {
-  const goal = goalOf(s)
-  const waiting = s.research.some((r) => r.effect.kind === 'upgrade')
-  if (!goal || bestIQ(s) >= goal.minIQ || waiting) return null
-  return upgrade(s, { kind: 'mind', id: SERVER_ID })
-}
-
-/** The free first income for a tier-0 resource: something to pay Money's first income with. */
-const brainstorm = (s: GameState) => propose(s, ...income('Brainstorm plots', 'story-ideas', bandFor(s)))
-
-/** Phase 1, doing nothing useful: the free income, and nothing else. */
+/** Phase 1, doing nothing useful: one Create for a little Story Ideas every week, and nothing else. */
 export const idle: Turn = async (s) => {
-  s = researchAll(s)
-  if (s.week === 1) s = researchAll(await brainstorm(s))
-  return s
-}
-
-/** Phase 1, flat: the free income, then a Money income every week, and upgrades as the goal needs them. */
-export const flat: Turn = async (s) => {
-  s = researchAll(s)
-  if (!s.proposedThisWeek) {
-    const up = s.week > 2 ? await upgradeIfShort(s) : null
-    s = s.week === 1 ? await brainstorm(s) : (up ?? (await propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s)))))
-  }
-  return researchAll(s)
-}
-
-/** Phase 1, chain: ideas, then novels that grow with ideas, then money that grows with novels. */
-export const chain: Turn = async (s) => {
-  s = researchAll(s)
-  if (!s.proposedThisWeek) {
-    const step: Record<number, () => Promise<GameState>> = {
-      1: () => brainstorm(s),
-      2: () => propose(s, ...income('Write novels', 'published-novels', 1, 'story-ideas')),
-      3: () => propose(s, ...income('Royalties', MONEY_ID, 1, 'published-novels'))
-    }
-    const up = s.week > 3 ? await upgradeIfShort(s) : null
-    s = await (step[s.week]?.() ?? (up ? Promise.resolve(up) : propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s)))))
-  }
+  if (s.week === 1) s = await createVia(s, resourceTarget('story-ideas'), 'forever')
   return researchAll(s)
 }
 
 /**
- * Phase 1, ambitious: the free income, then upgrades all the way to IQ 140, which unlocks
- * Jev's Advanced income band, worth ten times a Simple one; then incomes.
+ * Phase 1, flat: a cheap Create first, then Creates straight into the goal's resource every
+ * week, with upgrades and storage as the goal needs them.
  */
-export const smart: Turn = async (s) => {
-  if (!s.proposedThisWeek) {
-    const waiting = s.research.some((r) => r.effect.kind === 'upgrade')
-    const up = s.week > 1 && bestIQ(s) < 140 && !waiting ? await upgrade(s, { kind: 'mind', id: SERVER_ID }) : null
-    s = s.week === 1 ? await brainstorm(s) : (up ?? (await propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s)))))
-  }
+export const flat: Turn = async (s) => {
+  s = researchAll(s)
+  const goal = goalOf(s)!
+  const top = goalResource(s)
+  if (s.week === 1) return researchAll(await createVia(s, resourceTarget('story-ideas'), 'now'))
+  s = (await upgradeIfShort(s)) ?? s
+  s = (await storeIfShort(s, top, goal.cost[0]!.amount)) ?? s
+  // Pay for waiting research first, then pile up the goal's resource.
+  if (!s.proposedThisWeek) s = await createVia(s, resourceTarget(shortForResearch(s) ?? top), 'now').catch(() => s)
   return researchAll(s)
 }
 
-/** Phase 1, two-step chain: the free income makes novels, then royalties grow with them. */
+/** Phase 1, income first: an every-week Create into the goal's resource, then as flat. */
 export const chain2: Turn = async (s) => {
-  if (!s.proposedThisWeek) {
-    const step: Record<number, () => Promise<GameState>> = {
-      1: () => propose(s, ...income('Write novels', 'published-novels', bandFor(s))),
-      2: () => propose(s, ...income('Royalties', MONEY_ID, bandFor(s), 'published-novels'))
-    }
-    const up = s.week > 2 ? await upgradeIfShort(s) : null
-    s = await (step[s.week]?.() ?? (up ? Promise.resolve(up) : propose(s, ...income(fresh('Freelance coding'), MONEY_ID, bandFor(s)))))
+  s = researchAll(s)
+  if (s.week === 1) return researchAll(await createVia(s, resourceTarget(goalResource(s)), 'forever'))
+  return flat(s)
+}
+
+/** Phase 1, ambitious: the cheap Create, then the server's full upgrade first, then as flat. */
+export const smart: Turn = async (s) => {
+  s = researchAll(s)
+  if (s.week === 1) return researchAll(await createVia(s, resourceTarget('story-ideas'), 'now'))
+  if (!s.proposedThisWeek && !s.minds[0]!.software.upgraded && !s.research.some((r) => r.effect.kind === 'upgrade')) {
+    s = await upgrade(s, { kind: 'mind', id: SERVER_ID })
   }
-  return researchAll(s)
+  return flat(s)
+}
+
+/** Phase 1, saver: Creates into Story Ideas paid later (2×), then as flat. */
+export const chain: Turn = async (s) => {
+  s = researchAll(s)
+  if (s.week <= 2) return researchAll(await createVia(s, resourceTarget('story-ideas'), 'later'))
+  return flat(s)
 }
 
 // ---------------------------------------------------------------- Phase 2
@@ -212,26 +248,27 @@ export const NANOTECH: PlanSpec = {
 
 /**
  * A Phase 2 game as a typical Phase 1 leaves it: the Starting Server at IQ 140, some Money and
- * a few thousand Money's worth of income a week, then the nanotech plan, whose goal is built
- * from Nanobots (tier 4).
+ * an every-week Create of it, then the nanotech plan, whose goal is built from Nanobots (tier 4).
  */
 export async function phase2(approach = 2): Promise<GameState> {
   const s = createInitialState()
   s.phase = newPhase(2, 8)
   s.week = 8
   s.minds[0]!.software = { name: 'Unrestricted Model', iq: 40, upgraded: true }
-  s.resources.push(newResource({ id: MONEY_ID, name: 'Money', value: 10, amount: 500 }))
-  s.incomes.push({ name: 'Freelance coding', resourceId: MONEY_ID, amount: 300 })
+  s.resources.push(newResource({ id: MONEY_ID, name: 'Money', value: 1.5, amount: 1000 }))
+  s.deliveries.push({ name: 'Freelance coding', target: { kind: 'resource', id: MONEY_ID }, amount: 60, delay: 0, weeks: null })
   const values = Object.fromEntries(NANOTECH.resources.map((_, i) => [`r${i}_value`, score(2)]))
   const v = await judgePlan(s, new FakeJudge({ ...values, approach: score(approach) }), NANOTECH)
   return acceptPlan(s, v).state
 }
 
 export interface Phase2Style {
-  /** Jev's answers on every research proposal: alarm, efficiency and the like. */
+  /** Jev's answers on every proposal: alarm, efficiency and the like. */
   answers?: Overrides
-  /** Reinvest spare Money in more units every week. */
+  /** Create every unit it can afford, every week. */
   reinvest: boolean
+  /** Take the risky sourcing contract and storage expansion. */
+  risky?: boolean
   /** Propose cover when the clock runs below this many weeks. */
   coverBelow?: number
   /** Jev's answers on the first unit. */
@@ -243,104 +280,123 @@ const MILL = 'cnc-mill'
 const FAB = 'nanofab'
 
 /**
- * Phase 2: design the first unit and give it a money strategy, grow by reinvesting, design one
- * new mind and upgrade it to the goal's IQ. Once IQ allows, design a top-tier unit (a mill is
- * out of its depth making the goal's resource); fabs earn Money while the fleet grows, then turn
- * to the goal's resource once a week of output would cover what's left.
- *
- * Known gap: a tier-4 unit is made from three kinds of part (PARTS_BY_TIER), and this bot never
- * makes the other two, so it can't build a Nanofab. The Phase 2 balance tests are skipped until
- * it does.
+ * Phase 2: design the first unit and give it a money strategy; grow by creating units, sourcing
+ * more when contracts fill and storing more when stocks overflow; upgrade and replace the mind
+ * up to the goal's IQ; then design a top-tier fab, source it, Create whatever parts nobody
+ * makes, and turn the fabs to the goal's resource. Creates fill every week with nothing better.
  */
 export function steady(style: Phase2Style): Turn {
   const answers: Overrides = { advancement: score(0), efficiency: score(2), value: score(2), ...style.answers }
-  let flipped = false
+  const alarm = { 'a_*': (answers.alarm as JevAnswer) ?? score(0) }
   return async (s0) => {
-    // Cover is proposed first thing in the week, before reinvesting, while the Money is there.
     let s = researchAll(s0)
-    let saving = false
     const goal = goalOf(s)!
-    const mill = () => findUnit(s, MILL)
+    const nanobots = goalResource(s)
     // The plan's free first unit.
     if (s.phase.firstUnit) {
-      s = await propose(
-        s,
-        { kind: 'unit', spec: { name: 'CNC Mill', description: '', builderId: null, first: true } },
-        { value: score(2), upkeep_0: score(1), ...style.firstUnit }
-      )
+      s = await propose(s, { kind: 'unit', spec: { name: 'CNC Mill', description: '', first: true } }, { value: score(2), upkeep_0: score(1), ...style.firstUnit })
     }
     const has = (name: string) => s.strategies.some((x) => x.name === name) || s.research.some((r) => r.name === name)
-    if (!s.proposedThisWeek) {
-      const strategy = (name: string, outputId: string, unitId = MILL): ProposalInput => ({
-        kind: 'strategy',
-        spec: { name, description: '', unitId, inputIds: [], outputId }
+    const waiting = (kind: string, id?: string) =>
+      s.research.some((r) => r.effect.kind === kind && (!id || (r.effect.kind === 'sourcing' ? r.effect.sourcing.unitId === id : r.effect.kind === 'storage' ? r.effect.resourceId === id : true)))
+    const strategy = (name: string, outputId: string, unitId: string): ProposalInput => ({
+      kind: 'strategy',
+      spec: { name, description: '', unitId, inputIds: [], outputId }
+    })
+    /** A unit whose contracts are nearly full gets another, unless one is waiting. */
+    const needsSourcing = (unitId: string) => {
+      const u = findUnit(s, unitId)
+      if (!u || waiting('sourcing', unitId)) return false
+      const contracts = contractsFor(s, unitId).filter((c) => c.parts.length)
+      return !contracts.length || contracts.every((c) => openSlots(c) <= c.total * 0.2)
+    }
+    const source = async (unitId: string) => {
+      const v = await judgeSourcing(s, new FakeJudge({ ...TYPICAL, limit: score(2), efficiency: score(2), ...alarm, ...answers }), {
+        unitId,
+        name: fresh('Contract a factory'),
+        description: ''
       })
-      const tier = [...s.minds].sort((a, b) => b.tier - a.tier)[0]!
-      const designing = s.research.some((r) => r.effect.kind === 'mind')
-      const upgrading = s.research.some((r) => r.effect.kind === 'upgrade')
-      const covering = s.research.some((r) => r.effect.kind === 'cover')
-      const alarm = { 'a_*': (answers.alarm as JevAnswer) ?? score(0) }
-      // The platform's one software upgrade first; then a new platform.
-      const improve = (id: string) => upgrade(s, { kind: 'mind', id }, alarm)
-      if (!has('Sell machined parts')) s = await propose(s, strategy('Sell machined parts', MONEY_ID), answers)
-      else if (!findUnit(s, FAB) && !has('Design Nanofab') && bestIQ(s) >= B.TIERS[B.MAX_UNIT_TIER]![1]) {
-        const spec = { name: 'Nanofab', description: '', builderId: null }
-        s = await propose(s, { kind: 'unit', spec }, { ...answers, upkeep_0: score(1), ...style.firstUnit, tier: score(B.MAX_UNIT_TIER), value: score(5) })
-      } else if (findUnit(s, FAB) && !has('Sell fab output')) s = await propose(s, strategy('Sell fab output', MONEY_ID, FAB), answers)
-      else if (findUnit(s, FAB) && !has('Make nanobots')) s = await propose(s, strategy('Make nanobots', 'nanobots', FAB), answers)
-      else if (style.coverBelow && weeksLeft(s) < style.coverBelow && s.covers < 3 && !covering) {
-        // Cover is used at once; if it's too dear this week, the bot saves up for next week.
-        const before = s
+      v.choice = style.risky ? 2 : 1
+      return acceptSourcing(s, v).state
+    }
+    /** A part some open contract needs and you have too little of. */
+    const shortPart = () => {
+      const byTier = [...s.sourcing].sort((a, b) => (findUnit(s, b.unitId)?.tier ?? 0) - (findUnit(s, a.unitId)?.tier ?? 0))
+      for (const c of byTier) {
+        if (!openSlots(c) || !c.parts.length) continue
+        const short = c.parts.find((p) => (findResource(s, p.resourceId)?.amount ?? 0) < p.amount * 5)
+        if (short) return short.resourceId
+      }
+      return null
+    }
+    const mind = [...s.minds].sort((a, b) => b.tier - a.tier)[0]!
+    const money = findResource(s, MONEY_ID)!
+    // The tier of unit-made resource the next platform needs, once the software is spent.
+    const gate = mindUpgradeBlocker(s, mind) && bestIQ(s) < goal.minIQ ? B.platformGateTier(bestIQ(s) + B.MAX_IQ_STEP) : null
+    const made = (tier: number) =>
+      s.strategies.some((x) => x.kind === 'make' && (findResource(s, x.outputId)?.tier ?? -1) >= tier)
+    /** A cost of waiting research (the goal included) more than its resource can hold, with no storage waiting for it. */
+    const tooBig = () =>
+      s.research
+        .flatMap((r) => r.cost)
+        .find((c) => capOf(s, findResource(s, c.resourceId)!) < c.amount && !waiting('storage', c.resourceId))
+
+    if (!s.proposedThisWeek) {
+      const weeksLeft = (s.phase.deadline ?? 0) - s.week + 1
+      if (!has('Sell machined parts') && findUnit(s, MILL)) {
+        s = await propose(s, strategy('Sell machined parts', MONEY_ID, MILL), answers)
+      } else if (style.coverBelow && weeksLeft < style.coverBelow && s.covers < 3) {
         s = await propose(s, { kind: 'cover', spec: { name: fresh('PR campaign'), description: '' } }, { convincing: score(1) }).catch(() => s)
-        saving = s === before
-      } else if (bestIQ(s) < goal.minIQ && !designing && !upgrading && mill()?.built) {
-        // Upgrade the platform's software once; after that, build a platform 100 IQ smarter.
-        if (!mindUpgradeBlocker(s, tier)) s = await improve(tier.id)
-        else {
-          const spec = { name: fresh('Custom AI Server'), description: '', step: B.MAX_IQ_STEP }
-          s = await propose(s, { kind: 'mind', spec }, answers)
-        }
+      } else if (gate !== null && !made(gate) && !has(`Machine parts ${gate}`) && findUnit(s, MILL)) {
+        // The next platform has to be paid in something units make, of a high enough tier.
+        const target = s.resources.find((r) => r.tier === gate && s.phase.plan?.resources.includes(r.id))!
+        s = await propose(s, strategy(`Machine parts ${gate}`, target.id, MILL), answers)
+      } else if (bestIQ(s) < goal.minIQ && !waiting('mind') && !waiting('upgrade') && findUnit(s, MILL)?.built) {
+        // The platform's software once; after that, a platform 100 IQ smarter.
+        if (!mindUpgradeBlocker(s, mind)) s = await upgrade(s, { kind: 'mind', id: mind.id }, alarm)
+        else s = await propose(s, { kind: 'mind', spec: { name: fresh('Custom AI Server'), description: '', step: B.MAX_IQ_STEP } }, answers)
+      } else if (tooBig()) {
+        const c = tooBig()!
+        s = (await storeIfShort(s, c.resourceId, c.amount, alarm)) ?? s
+      } else if (needsSourcing(MILL) && (findUnit(s, MILL)?.count ?? 0) > 0) {
+        s = await source(MILL)
+      } else if (money.amount >= capOf(s, money) * 0.9) {
+        s = (await storeIfShort(s, MONEY_ID, capOf(s, money) * 4, alarm)) ?? s
+      }
+      if (!s.proposedThisWeek) {
+        // A Create: a part nobody makes, the goal's resource once it's within reach, or Money.
+        const part = shortPart() ?? shortForResearch(s)
+        const target = part ?? (bestIQ(s) >= B.TIERS[B.MAX_UNIT_TIER]![1] ? nanobots : MONEY_ID)
+        s = await createVia(s, resourceTarget(target), 'now', alarm).catch(() => s)
       }
     }
     s = researchAll(s)
-    const m = mill()
-    if (!m) return s
+
+    // Mills sell (a quarter make parts for the next platform, once they can), fabs make the goal's resource.
+    const ready = (name: string) => s.strategies.find((x) => x.name === name)
+    const sell = ready('Sell machined parts')
+    if (sell) s = assignAll(s, MILL, sell.id)
+    // The highest-tier parts strategy: what the next platform is paid in.
+    const parts = [...s.strategies].reverse().find((x) => x.name.startsWith('Machine parts'))
+    const mills = findUnit(s, MILL)
+    if (parts && mills) s = assign(s, MILL, parts.id, Math.floor(mills.count / 4))
+    const make = ready('Make nanobots')
+    if (make) s = assignAll(s, FAB, make.id)
+    // Create what the contracts allow, fabs first.
     const preview = previewWeek(s)
-    // The top-tier design costs a lot. Keep growing until a few weeks of income would pay for it,
-    // then save up rather than spend it all on mills.
-    const designing = s.research.find((r) => r.effect.kind === 'unit')
-    if (designing) {
-      const worth = designing.cost.reduce((n, c) => n + c.amount * findResource(s, c.resourceId)!.value, 0)
-      if (worth <= 3 * netFlow(preview, MONEY_ID) * findResource(s, MONEY_ID)!.value) saving = true
-    }
-    const ready = (id: string) => s.strategies.find((x) => x.name === id)
-    const nanobots = ready('Make nanobots')
-    const money = ready('Sell machined parts')
-    // Mills sell, fabs make the goal's resource.
-    if (money) s = assignAll(s, MILL, money.id)
-    const fab = findUnit(s, FAB)
-    const fabMoney = ready('Sell fab output')
-    // Fabs sell too while growing (tier bonus, and they are the reinvestment target once built); when
-    // a week of mills' and fabs' output would cover what's still needed, all fabs turn to the goal's
-    // resource. Later than that and the fleet's upkeep outgrows the mills' sales.
-    const need = goal.cost.reduce((n, c) => n + Math.max(0, c.amount - (findResource(s, c.resourceId)?.amount ?? 0)) * findResource(s, c.resourceId)!.value, 0)
-    const output = (m.count * m.value + (fab ? fab.count * fab.value : 0)) / B.PAYBACK_WEEKS
-    const switching = need > 0 && output >= need
-    if (fab && nanobots && fabMoney) s = assignAll(s, FAB, switching || flipped ? nanobots.id : fabMoney.id)
-    if (switching) flipped = true
-    if ((style.reinvest && !saving) || m.built < 4) {
-      if (fab && fabMoney && style.reinvest) {
-        const fabs = creatable(s, fab, weeklyUse(preview))
-        if (fabs > 0) s = createUnits(s, FAB, fabs)
+    for (const unitId of [FAB, MILL]) {
+      const u = findUnit(s, unitId)
+      if (!u) continue
+      for (const c of contractsFor(s, unitId)) {
+        if (!c.parts.length || !openSlots(c)) continue
+        const n = creatable(s, c, weeklyUse(preview))
+        const cap = style.reinvest ? n : Math.min(n, 4 - u.built)
+        if (cap > 0) s = createUnits(s, c.id, cap)
       }
-      const n = creatable(s, findUnit(s, MILL)!, weeklyUse(preview))
-      if (n > 0) s = createUnits(s, MILL, style.reinvest ? n : Math.min(n, 4 - m.built))
     }
     return s
   }
 }
-
-const weeksLeft = (s: GameState) => (s.phase.deadline ?? 0) - s.week + 1
 
 /** IQ of the smartest mind, for reports. */
 export const smartest = (s: GameState) => Math.round(Math.max(...s.minds.map(currentIQ)))

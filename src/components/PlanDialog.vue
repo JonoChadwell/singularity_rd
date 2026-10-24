@@ -105,7 +105,7 @@
         <ul class="plain-list added">
           <li v-for="r in draft.added" :key="r.id" :title="r.description">
             {{ r.id === draft.top.id ? '🎯' : '' }} {{ r.icon }} <strong>{{ r.name }}</strong>
-            <span class="muted">{{ r.kind }} · {{ tierText(r) }} · worth: {{ bandText(r) }}</span>
+            <span class="muted">{{ tierText(r) }} · worth: {{ bandText(r) }} · holds {{ fmt(r.cap) }}</span>
           </li>
         </ul>
       </div>
@@ -117,7 +117,7 @@
 import { computed, onMounted, reactive, ref, toRaw, watch } from 'vue'
 import { GOAL_APPROACH, GOAL_TIER, PHASE_WEEKS, PLAN_RESOURCES } from '@/engine/balance'
 import type { Verdict } from '@/engine/dispatch'
-import { bandText, describeCost, tierText } from '@/engine/model'
+import { bandText, describeCost, fmt, tierText } from '@/engine/model'
 import { PHASE_NAMES } from '@/engine/phase'
 import { planIdeas } from '@/engine/planPresets'
 import { draftPlan, planPhase, precheckPlan, type PlanSpec, type PlanVerdict } from '@/engine/planProposal'
