@@ -182,6 +182,17 @@ export interface Delivery {
   weeks: number | null
 }
 
+/**
+ * An idea the player has accepted, for spotting repeats: Jev is asked whether a new one is the
+ * same idea, and a repeat is one step less effective.
+ */
+export interface Idea {
+  kind: 'create' | 'strategy' | 'sourcing' | 'storage'
+  name: string
+  description: string
+  week: number
+}
+
 /** One change an upgrade makes. */
 export type Change =
   /** A platform's one software upgrade: adds `iq`. */
@@ -347,6 +358,8 @@ export interface GameState {
   research: Research[]
   /** What Creates still have to deliver, including every-week ones. */
   deliveries: Delivery[]
+  /** Ideas accepted so far, for spotting repeats. */
+  ideas: Idea[]
   /** Names of finished upgrades, for the log and the end of a run. */
   upgrades: { name: string; targetId: string; week: number; key?: string }[]
   /** One action a week: a research proposal (not a resource) or a Create. */

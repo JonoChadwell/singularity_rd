@@ -11,9 +11,12 @@ import {
   logProposal,
   options,
   proposalSlotBlocker,
-  reader,
   refuseUnaccepted,
   scale,
+  efficiencyLevel,
+  recordIdea,
+  repeatOf,
+  repeatQuestion,
   type Accepted,
   type VerdictBase
 } from './proposals'
@@ -117,7 +120,8 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
           } satisfies JevQuestion
         }
       : {}),
-    ...alarmQuestions(state)
+    ...alarmQuestions(state),
+    ...repeatQuestion(state, 'create')
   }
   const answers = await judge.ask(
     proposalText(state, [
@@ -128,8 +132,8 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
     questions,
     'create'
   )
-  const base = baseVerdict('create', questions, answers, 'plausible', [])
-  const efficiency = B.pick(B.EFFICIENCY, reader(base).level('efficiency', B.EFFICIENCY.length))[1]
+  const base = { ...baseVerdict('create', questions, answers, 'plausible', []), repeatOf: repeatOf(state, answers) }
+  const efficiency = B.pick(B.EFFICIENCY, efficiencyLevel(base))[1]
   const v: CreateVerdict = {
     ...base,
     kind: 'create',
@@ -251,6 +255,7 @@ export function acceptCreate(current: GameState, v: CreateVerdict): Accepted {
   }
   if (v.risk) moveClock(state, -v.risk.weeks, `${name} alarmed humans`)
   state.inventions.push({ week: state.week, icon: '⚗️', name, kind: 'create' })
+  recordIdea(state, 'create', name, `${v.spec.description} (makes ${targetLabel(state, t)})`)
   state.decidedThisWeek = true
   logProposal(state, 'good', `⚗️ ${name}: ${describeOption(state, v, option)}.`)
   return { state, outcome: { kind: 'added', name } }

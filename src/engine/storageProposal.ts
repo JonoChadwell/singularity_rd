@@ -17,6 +17,10 @@ import {
   reader,
   refuseUnaccepted,
   scale,
+  efficiencyLevel,
+  recordIdea,
+  repeatOf,
+  repeatQuestion,
   type Accepted,
   type VerdictBase
 } from './proposals'
@@ -107,7 +111,8 @@ export async function judgeStorage(state: GameState, judge: Judge, raw: StorageS
         }
       : {}),
     ...payQuestion(state, `building storage for ${r.name}`),
-    ...alarmQuestions(state)
+    ...alarmQuestions(state),
+    ...repeatQuestion(state, 'storage')
   }
   const text = [
     `The player proposes a way to hold more ${r.name}: ${r.description}`,
@@ -115,8 +120,8 @@ export async function judgeStorage(state: GameState, judge: Judge, raw: StorageS
     `How: "${spec.description || '(not said)'}"`
   ]
   const answers = await judge.ask(proposalText(state, text), questions, 'storage')
-  const base = baseVerdict('storage', questions, answers, 'plausible', [])
-  const efficiency = B.pick(B.EFFICIENCY, reader(base).level('efficiency', B.EFFICIENCY.length))[1]
+  const base = { ...baseVerdict('storage', questions, answers, 'plausible', []), repeatOf: repeatOf(state, answers) }
+  const efficiency = B.pick(B.EFFICIENCY, efficiencyLevel(base))[1]
   const v: StorageVerdict = {
     ...base,
     kind: 'storage',
@@ -228,6 +233,7 @@ export function acceptStorage(current: GameState, v: StorageVerdict): Accepted {
   if (!r) throw new Error('That resource is gone.')
   const expansion: Expansion = { name: v.spec.name, added: option.added, catch: option.catch }
   state.inventions.push({ week: state.week, icon: r.icon, name: v.spec.name, kind: 'storage' })
+  recordIdea(state, 'storage', `${r.name}: ${v.spec.name}`, v.spec.description)
   state.decidedThisWeek = true
   return addResearch(
     state,

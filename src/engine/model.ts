@@ -170,12 +170,27 @@ export function targetLabel(state: GameState, t: CreateTarget): string {
   return thing ? `${thing.icon} ${thing.name}` : '?'
 }
 
-/** A delivery in words: "+300 💰 Money every week" or "+40 🤖 Robots a week for 3 more weeks". */
+const weeksText = (n: number) => `${n} week${n === 1 ? '' : 's'}`
+
+/**
+ * When a delivery pays, in words: "next week", "in 4 weeks", "every week for 3 more weeks", "every
+ * week, for good". A delivery pays at the end of the week its delay runs out, so one with a delay of
+ * 3 pays in 4 weeks.
+ */
+export function deliveryTiming(d: Delivery): string {
+  const first = d.delay + 1
+  const start = first === 1 ? 'from next week' : `from ${weeksText(first)}’ time`
+  if (d.weeks === null) return d.delay ? `every week, for good, ${start}` : 'every week, for good'
+  if (d.weeks === 1) return first === 1 ? 'next week' : `in ${weeksText(first)}`
+  return d.delay ? `every week for ${weeksText(d.weeks)}, ${start}` : `every week for ${weeksText(d.weeks)} more`
+}
+
+/** What a delivery has still to pay in all, or Infinity for one that pays for good. */
+export const deliveryLeft = (d: Delivery) => (d.weeks === null ? Infinity : d.amount * d.weeks)
+
+/** A delivery in words: "+300 💰 Money every week, for good" or "+40 🤖 Robots in 4 weeks". */
 export function describeDelivery(state: GameState, d: Delivery): string {
-  const what = `+${fmt(d.amount)} ${targetLabel(state, d.target)}`
-  if (d.weeks === null) return `${what} every week${d.delay ? `, from ${d.delay} weeks’ time` : ''}`
-  if (d.delay) return `${what} in ${d.delay} week${d.delay === 1 ? '' : 's'}`
-  return `${what} a week for ${d.weeks} more week${d.weeks === 1 ? '' : 's'}`
+  return `+${fmt(d.amount)} ${targetLabel(state, d.target)} ${deliveryTiming(d)}`
 }
 
 /** What a resource can hold: its cap, its expansions (unless one's upkeep went unpaid), and units that Store it. */

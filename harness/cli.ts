@@ -138,6 +138,8 @@ function load(slot: string): Save {
   if (!existsSync(path)) throw new Error(`No game in slot "${slot}". Start one with: new`)
   const save = JSON.parse(readFileSync(path, 'utf8')) as Save
   if (save.state.version !== 15) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
+  // Saves from before repeat ideas were tracked.
+  save.state.ideas ??= []
   return save
 }
 
@@ -335,6 +337,7 @@ function printVerdict(s: GameState, v: Verdict) {
   say(`VERDICT (${v.kind}): plausibility ${pct(v.plausibility)} vs bar ${pct(v.bar)}`)
   if (v.rejected) say(`  REJECTED: ${v.rejected}`)
   if (v.duplicateOf) say(`  DUPLICATE of ${v.duplicateOf}`)
+  if (v.repeatOf) say(`  REPEAT of ${v.repeatOf}: one step less effective`)
   for (const t of v.torn) {
     say(`  torn on ${t.topic} [pick ${t.key} <value>]: now ${v.picks[t.key] ?? '(Jev’s top)'}`)
     t.options.forEach((o, i) =>

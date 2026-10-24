@@ -62,6 +62,8 @@ weeks off the clock; cover research buys some back.
 - **IQ steps.** Both a new platform and a software upgrade add a flat step to your best IQ, never
   more than 100. Two new platforms, each with its software upgrade at full size, take 100 to 500.
 - **Jev is torn** sometimes. The game then shows its top two answers and you pick.
+- **Repeats are worth less.** Jev checks a new Create, strategy, sourcing contract or storage
+  expansion against the ones you've already done; a repeat is one step less effective.
 
 ## Setup
 

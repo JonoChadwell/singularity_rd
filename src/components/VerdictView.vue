@@ -18,6 +18,9 @@
     <p v-else-if="verdict.duplicateOf" class="ai">🔁 Jev thinks that’s the same as {{ verdict.duplicateOf }}.</p>
     <template v-else>
       <p v-if="riskLine" class="risk small">⚠️ {{ riskLine }}</p>
+      <p v-if="verdict.repeatOf" class="warn small">
+        🔁 Jev thinks you’ve done this before ({{ verdict.repeatOf }}), so it’s one step less effective.
+      </p>
       <fieldset v-if="payChoices.length > 1" class="torn pay">
         <legend class="small">Pay for it with</legend>
         <label v-for="(p, i) in payChoices" :key="p.resourceId" class="choice">

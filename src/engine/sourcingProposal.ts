@@ -16,6 +16,10 @@ import {
   reader,
   refuseUnaccepted,
   scale,
+  efficiencyLevel,
+  recordIdea,
+  repeatOf,
+  repeatQuestion,
   type Accepted,
   type VerdictBase
 } from './proposals'
@@ -92,7 +96,8 @@ export async function judgeSourcing(state: GameState, judge: Judge, raw: Sourcin
       criteria: Object.fromEntries(partPool(state, unit.tier).map((r) => [r.id, `${r.name}: ${r.description}`]))
     },
     ...payQuestion(state, `setting up a supply of ${unit.name}`),
-    ...alarmQuestions(state)
+    ...alarmQuestions(state),
+    ...repeatQuestion(state, 'sourcing')
   }
   const answers = await judge.ask(
     proposalText(state, [
@@ -104,7 +109,7 @@ export async function judgeSourcing(state: GameState, judge: Judge, raw: Sourcin
     'sourcing'
   )
   const base = baseVerdict('sourcing', questions, answers, 'plausible', [])
-  const v: SourcingVerdict = { ...base, kind: 'sourcing', spec, options: [], choice: 0 }
+  const v: SourcingVerdict = { ...base, kind: 'sourcing', spec, options: [], choice: 0, repeatOf: repeatOf(state, answers) }
   v.options = sourcingOptions(state, v)
   gate(v, `Jev doesn’t think the AI could get ${unit.name} this way`, null)
   return v
@@ -115,11 +120,11 @@ export async function judgeSourcing(state: GameState, judge: Judge, raw: Sourcin
  * take, and a risky one that cuts corners for many more. Each is made from a different mix of
  * parts where there's a choice.
  */
-export function sourcingOptions(state: GameState, v: Pick<SourcingVerdict, 'answers' | 'picks' | 'spec' | 'plausibility' | 'bar'>): SourcingOption[] {
+export function sourcingOptions(state: GameState, v: Pick<SourcingVerdict, 'answers' | 'picks' | 'spec' | 'plausibility' | 'bar' | 'repeatOf'>): SourcingOption[] {
   const read = reader(v)
   const unit = findUnit(state, v.spec.unitId)!
   const limit = read.level('limit', B.SOURCING_LIMITS.length)
-  const efficiency = B.pick(B.EFFICIENCY, read.level('efficiency', B.EFFICIENCY.length))[1]
+  const efficiency = B.pick(B.EFFICIENCY, efficiencyLevel(v))[1]
   const parts = rankedIds(v.answers, 'parts', partPool(state, unit.tier))
   const count = Math.min(parts.length, B.PARTS_BY_TIER[unit.tier] ?? 1)
   const mix = (i: number) => {
@@ -172,6 +177,7 @@ export function acceptSourcing(current: GameState, v: SourcingVerdict): Accepted
     risky: option.risky
   }
   state.inventions.push({ week: state.week, icon: unit.icon, name: v.spec.name, kind: 'sourcing' })
+  recordIdea(state, 'sourcing', `${unit.name}: ${v.spec.name}`, v.spec.description)
   state.decidedThisWeek = true
   return addResearch(
     state,

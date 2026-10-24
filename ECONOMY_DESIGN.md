@@ -112,6 +112,14 @@ The mind makes something directly: a resource, or units of a designed type.
 - **Units:** cost twice what sourcing would, and arrive with cap to match.
 - **Passive incomes are gone:** the every-week payout replaces them.
 
+## Repeat ideas
+
+The game remembers every Create, strategy, sourcing contract and storage expansion the player
+accepts. When a new one of the same kind is proposed, Jev is shown up to the last 40 and asked
+whether it's the same idea, perhaps under another name. A repeat is one step lower on the
+effectiveness scale (Brilliant becomes Clever, and so on), never below Wasteful. The verdict says
+which earlier idea it repeats.
+
 ## Risk
 
 - **Expansions:** a contract adds units × value, and storage adds room × value. Either costs a

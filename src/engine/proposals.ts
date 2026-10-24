@@ -16,7 +16,7 @@ import { lockReason, moveClock } from './phase'
 import { alarmQuestions, riskFrom } from './risk'
 import { proposalText } from './stateText'
 import { QUIRK_IDS, QUIRKS, TRAITS, type QuirkId, type TraitId } from './traits'
-import type { Cost, GameState, Research, Resource, Risk, Strategy } from './types'
+import type { Cost, GameState, Idea, Research, Resource, Risk, Strategy } from './types'
 
 export const NAME_MAX = 40
 export const DESCRIPTION_MAX = 240
@@ -65,6 +65,8 @@ export interface VerdictBase {
   duplicateOf: string | null
   /** Phase 2: research humans would notice. */
   risk: Risk | null
+  /** The earlier idea Jev thinks this repeats, if any: it's one step less effective. */
+  repeatOf: string | null
 }
 
 export type Outcome =
@@ -272,8 +274,49 @@ export function baseVerdict(
     bar,
     rejected: null,
     duplicateOf: null,
-    risk: riskFrom(answers)
+    risk: riskFrom(answers),
+    repeatOf: null
   }
+}
+
+// ---------------------------------------------------------------- repeat ideas
+
+/**
+ * Asks whether a new idea repeats one the player has already had, of the same kind. Nothing to
+ * ask before there are any.
+ */
+export function repeatQuestion(state: GameState, kind: Idea['kind']): Record<string, JevQuestion> {
+  const past = state.ideas
+    .map((idea, i) => ({ idea, i }))
+    .filter(({ idea }) => idea.kind === kind)
+    .slice(-B.REPEAT_LOOKBACK)
+  if (!past.length) return {}
+  return {
+    repeat: {
+      type: 'choice',
+      instructions:
+        'Has the AI already done essentially this before, perhaps under another name? Only pick one if it is the same idea: the same method for the same thing, not just a similar goal.',
+      criteria: { none: 'It is a new idea', ...Object.fromEntries(past.map(({ idea, i }) => [`i${i}`, `${idea.name}: ${idea.description}`])) }
+    }
+  }
+}
+
+/** The earlier idea Jev picked as repeated, or null. */
+export function repeatOf(state: GameState, answers: Record<string, JevAnswer>): string | null {
+  const a = answers.repeat
+  if (a?.type !== 'choice' || a.choice === 'none') return null
+  return state.ideas[Number(a.choice.slice(1))]?.name ?? null
+}
+
+/** Jev's effectiveness rating as a level of EFFICIENCY, a step lower for a repeat, never below Wasteful. */
+export function efficiencyLevel(v: Pick<VerdictBase, 'answers' | 'picks' | 'repeatOf'>): number {
+  const level = reader(v).level('efficiency', B.EFFICIENCY.length)
+  return Math.max(0, level - (v.repeatOf ? B.REPEAT_PENALTY : 0))
+}
+
+/** Remembers an accepted idea, so later ones can be checked against it. */
+export function recordIdea(state: GameState, kind: Idea['kind'], name: string, description: string) {
+  state.ideas.push({ kind, name, description: description || name, week: state.week })
 }
 
 const pct = (p: number) => `${Math.round(p * 100)}%`
@@ -533,7 +576,8 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
       criteria: scale(B.ADVANCEMENT)
     },
     ...payQuestion(state, `how ${unit.name} could do this`),
-    ...alarmQuestions(state)
+    ...alarmQuestions(state),
+    ...repeatQuestion(state, 'strategy')
   }
   const quirks = QUIRK_IDS.filter((q) => q !== 'picky' || inputs.length > 0 || unit.upkeep.length > 0)
   questions.catch = quirkQuestion(quirks)
@@ -566,7 +610,8 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
       shared: true
     }),
     kind: 'strategy',
-    spec
+    spec,
+    repeatOf: repeatOf(state, answers)
   }
   gate(v, `Jev doesn’t think ${unit.name} could do this`, null)
   return v
@@ -585,7 +630,7 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
     inputValue += value
     return { resourceId: id, amount: B.nice(value / r.value) }
   })
-  const efficiency = B.pick(B.EFFICIENCY, read.level('efficiency', B.EFFICIENCY.length))[1]
+  const efficiency = B.pick(B.EFFICIENCY, efficiencyLevel(v))[1]
   const [, advancementIQ, weeks] = B.pick(B.ADVANCEMENT, read.level('advancement', B.ADVANCEMENT.length))
   const strategy: Strategy = {
     id: makeId(state, v.spec.name),
@@ -618,6 +663,8 @@ export function acceptStrategy(current: GameState, v: StrategyVerdict): Accepted
   const { strategy, minIQ, cost } = draftStrategy(state, v)
   const unit = findUnit(state, strategy.unitId)!
   state.inventions.push({ week: state.week, icon: unit.icon, name: strategy.name, kind: 'strategy' })
+  const output = findResource(state, strategy.outputId)
+  recordIdea(state, 'strategy', `${unit.name}: ${strategy.name}`, `${strategy.description} (makes ${output?.name ?? '?'})`)
   state.decidedThisWeek = true
   if (!minIQ) {
     addStrategy(state, strategy)

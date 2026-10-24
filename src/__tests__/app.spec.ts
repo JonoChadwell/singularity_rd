@@ -118,18 +118,37 @@ describe('App', () => {
     for (const text of ['Freelance coding', 'Rented Cloud GPU', 'First income', 'Rent them']) expect(html).toContain(text)
   })
 
-  it('offers a Create for a resource nothing makes, and a strategy too once you own a unit', async () => {
-    const before = await render((game) => {
-      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money' }))
+  it('offers + Create on every resource, made by something or not', async () => {
+    const html = await render((game) => {
+      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money' }), newResource({ id: 'power', name: 'Power' }))
+      game.state.deliveries.push({ name: 'Coding', target: { kind: 'resource', id: MONEY_ID }, amount: 10, delay: 0, weeks: null })
     })
-    expect(before).toContain('How will you get this?')
-    expect(before).not.toContain('A strategy')
-    const after = await render((game) => {
-      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money' }))
-      game.state.units.push(newUnit({ id: 'humans', name: 'Paid Humans', count: 1 }))
+    expect(html.match(/\+ Create/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(html).not.toContain('How will you get this?')
+  })
+
+  it('lists Create payouts still to come in the resource’s hover card', async () => {
+    const html = await render((game) => {
+      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 4000 }))
+      const pay = (name: string, amount: number, delay: number, weeks: number | null) =>
+        game.state.deliveries.push({ name, target: { kind: 'resource', id: MONEY_ID }, amount, delay, weeks })
+      pay('Royalties', 900, 3, 1)
+      pay('Serial fiction', 100, 0, 4)
+      pay('Freelance coding', 50, 0, null)
     })
-    expect(after).toContain('Create it')
-    expect(after).toContain('A strategy')
+    for (const text of [
+      'Still to come from Create',
+      'Royalties',
+      'in 4 weeks',
+      'Serial fiction',
+      'every week for 4 weeks more',
+      'Freelance coding',
+      'every week, for good',
+      '+1,300 and +50/wk for good',
+      'More than its storage holds'
+    ]) {
+      expect(html).toContain(text)
+    }
   })
 
   it('shows storage and contracts: how full each is, and how to get more', async () => {

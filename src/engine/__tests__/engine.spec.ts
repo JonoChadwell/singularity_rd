@@ -16,6 +16,8 @@ import {
   capOf,
   creatable,
   currentIQ,
+  deliveryLeft,
+  deliveryTiming,
   findMind,
   findResource,
   findUnit,
@@ -42,7 +44,7 @@ import {
 } from '../presets'
 import { acceptResource, acceptStrategy, judgeResource, judgeStrategy, precheckStrategy } from '../proposals'
 import { priceCost } from '../research'
-import type { GameState, Research, Sourcing, Strategy } from '../types'
+import type { Delivery, GameState, Research, Sourcing, Strategy } from '../types'
 import { acceptSourcing, iqTag, judgeSourcing } from '../sourcingProposal'
 import { acceptStorage, judgeStorage } from '../storageProposal'
 import { acceptUnit, judgeUnit, type UnitSpec } from '../unitProposal'
@@ -269,6 +271,64 @@ describe('create', () => {
     expect(money(s)).toBeCloseTo(forever.amount * 10)
     expect(s.deliveries).toHaveLength(1)
     expect(s.milestones.map((m) => m.key)).toContain('first-income')
+  })
+
+  it('remembers ideas, and makes a repeat one step less effective, never below Wasteful', async () => {
+    let s = moneyWorld()
+    // Nothing done yet: nothing to ask.
+    const first = new FakeJudge({ efficiency: score(2), timing: choice('now') })
+    s = acceptCreate(s, await judgeCreate(s, first, createSpec())).state
+    expect(Object.keys(first.calls[0]!.questions)).not.toContain('repeat')
+    expect(s.ideas).toEqual([expect.objectContaining({ kind: 'create', name: 'Freelance coding' })])
+    s = runWeek(s)
+
+    const again = new FakeJudge({ efficiency: score(2), repeat: choice('i0') })
+    const v = await judgeCreate(s, again, createSpec({ name: 'Gig coding' }))
+    const repeat = again.calls[0]!.questions.repeat
+    expect(repeat?.type === 'choice' && Object.values(repeat.criteria)).toContain('Freelance coding: Take coding jobs on freelance sites. (makes 💰 Money)')
+    expect(v.repeatOf).toBe('Freelance coding')
+    // Reasonable becomes Mediocre.
+    expect(v.scalars.efficiency).toBe(B.EFFICIENCY[1]![1])
+    const fresh = await judgeCreate(s, new FakeJudge({ efficiency: score(2), repeat: choice('none') }), createSpec({ name: 'Sell art' }))
+    expect(fresh.repeatOf).toBeNull()
+    expect(fresh.scalars.efficiency).toBe(B.EFFICIENCY[2]![1])
+    // Wasteful stays Wasteful.
+    const floor = await judgeCreate(s, new FakeJudge({ efficiency: score(0), repeat: choice('i0') }), createSpec({ name: 'Bad coding' }))
+    expect(floor.scalars.efficiency).toBe(B.EFFICIENCY[0]![1])
+    // Only ideas of the same kind are asked about.
+    const strategy = new FakeJudge({ advancement: score(0) })
+    await judgeStrategy(powerWorld(), strategy, { name: 'Coding', description: '', unitId: 'gpu', inputIds: [], outputId: MONEY_ID })
+    expect(Object.keys(strategy.calls[0]!.questions)).not.toContain('repeat')
+  })
+
+  it('makes a repeated strategy one step less effective', async () => {
+    let s = powerWorld()
+    const spec = { name: 'Freelance coding', description: 'Take coding jobs.', unitId: 'farm', inputIds: [], outputId: MONEY_ID }
+    s = acceptStrategy(s, await judgeStrategy(s, new FakeJudge({ advancement: score(0), efficiency: score(2) }), spec)).state
+    s = runWeek(s)
+    const v = await judgeStrategy(s, new FakeJudge({ advancement: score(0), efficiency: score(2), repeat: choice('i0') }), { ...spec, name: 'Gig coding' })
+    expect(v.repeatOf).toBe('Solar Farm: Freelance coding')
+    const made = acceptStrategy(s, v).state.strategies.find((x) => x.name === 'Gig coding')!
+    // A Solar Farm does 667 of work a week; Mediocre makes three quarters of it.
+    expect(made.efficiency).toBe(B.EFFICIENCY[1]![1])
+    expect(made.amount).toBe(B.nice(667 * B.EFFICIENCY[1]![1]))
+  })
+
+  it('says when each payout lands, matching when it does', () => {
+    const d = (delay: number, weeks: number | null): Delivery => ({ name: 'x', target: { kind: 'resource', id: MONEY_ID }, amount: 10, delay, weeks })
+    expect(deliveryTiming(d(0, 1))).toBe('next week')
+    expect(deliveryTiming(d(3, 1))).toBe('in 4 weeks')
+    expect(deliveryTiming(d(0, 4))).toBe('every week for 4 weeks more')
+    expect(deliveryTiming(d(2, 4))).toBe('every week for 4 weeks, from 3 weeks’ time')
+    expect(deliveryTiming(d(0, null))).toBe('every week, for good')
+    expect(deliveryLeft(d(0, 4))).toBe(40)
+    expect(deliveryLeft(d(0, null))).toBe(Infinity)
+    // "In 4 weeks" really is four weeks: nothing for three, then the payout.
+    let s = moneyWorld()
+    s.deliveries.push(d(3, 1))
+    for (let w = 0; w < 3; w++) s = runWeek(s)
+    expect(money(s)).toBe(0)
+    expect(money(runWeek(s))).toBe(10)
   })
 
   it('uses up a different resource on each option, and returns its worth with interest', async () => {

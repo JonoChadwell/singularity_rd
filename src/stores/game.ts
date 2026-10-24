@@ -22,7 +22,10 @@ function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    return parsed?.version === 15 ? parsed : null
+    if (parsed?.version !== 15) return null
+    // Saves from before repeat ideas were tracked.
+    parsed.ideas ??= []
+    return parsed
   } catch {
     return null
   }

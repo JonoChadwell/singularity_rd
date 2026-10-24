@@ -319,6 +319,11 @@ export const UNIT_OPTIONS = 3
 /** A second resource shares the cost when Jev likes it at least this share as much. */
 export const SECOND_PAYER = 0.5
 
+/** A repeat of an idea already accepted is this many steps lower on the EFFICIENCY scale, never below Wasteful. */
+export const REPEAT_PENALTY = 1
+/** Jev is shown at most this many past ideas of a kind when asked whether a new one repeats them. */
+export const REPEAT_LOOKBACK = 40
+
 /** Less plausible ideas cost more: one that barely passes its bar costs this many times more. */
 export const IMPLAUSIBLE_COST = 3
 

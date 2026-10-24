@@ -19,28 +19,6 @@
               {{ Math.round(share(r.id) * 100) }}%
             </span>
           </div>
-          <div v-if="unmade(r.id)" class="how small">
-            <template v-if="ways().length > 1">
-              <span class="muted">How will you get this?</span>
-              <button
-                v-for="w in ways()"
-                :key="w.kind"
-                class="link"
-                :title="`Propose ${w.label.toLowerCase()} that makes ${r.name}`"
-                @click.stop="ui.openInvent({ kind: w.kind, outputId: r.id })"
-              >
-                {{ w.label }}
-              </button>
-            </template>
-            <button
-              v-else
-              class="link"
-              :title="`Propose ${ways()[0]!.label.toLowerCase()} that makes ${r.name}`"
-              @click.stop="ui.openInvent({ kind: ways()[0]!.kind, outputId: r.id })"
-            >
-              How will you get this?
-            </button>
-          </div>
           <div class="bar" :title="`${fmt(r.amount)} of ${fmt(capOf(game.state, r))} storage`">
             <div class="fill" :class="{ full: r.amount >= capOf(game.state, r) * 0.999 }" :style="{ width: `${fillPct(r)}%` }" />
           </div>
@@ -48,6 +26,14 @@
         <div class="amount num">
           {{ fmt(r.amount) }}<span class="muted small"> / {{ fmt(capOf(game.state, r)) }}</span>
           <Delta :value="netFlow(game.preview, r.id)" />
+          <button
+            class="link small store"
+            :disabled="!!lockReason(game.state, 'create')"
+            :title="`Have the mind make ${r.name} directly`"
+            @click.stop="ui.openInvent({ kind: 'create', outputId: r.id })"
+          >
+            + Create
+          </button>
           <button
             class="link small store"
             :disabled="!!lockReason(game.state, 'storage')"
@@ -80,6 +66,23 @@
             </div>
           </template>
           <p v-else class="muted">Nothing makes or uses this next week.</p>
+          <template v-if="pending(r.id).length">
+            <div class="bd-title bd-section">Still to come from Create</div>
+            <div v-for="(d, i) in pending(r.id)" :key="i" class="bd-row">
+              <span>
+                {{ d.name }}
+                <span class="muted">· {{ deliveryTiming(d) }}</span>
+              </span>
+              <span class="num delta-up">+{{ fmt(d.amount) }}{{ d.weeks === 1 ? '' : '/wk' }}</span>
+            </div>
+            <div class="bd-row bd-total num">
+              <span>Still owed</span>
+              <span>{{ owed(r.id) }}</span>
+            </div>
+            <p v-if="overflowsLater(r)" class="warn">
+              More than its storage holds: {{ fmt(overflowsLater(r)) }} would be lost at today’s level.
+            </p>
+          </template>
         </div>
       </li>
     </ul>
@@ -89,7 +92,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { netFlow } from '@/engine/economy'
-import { bandText, byTier, capOf, fmt, tierText } from '@/engine/model'
+import { bandText, byTier, capOf, deliveryLeft, deliveryTiming, fmt, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
 import { describeCatch } from '@/engine/storageProposal'
 import type { Resource } from '@/engine/types'
@@ -104,28 +107,25 @@ const flows = (id: string) => game.preview.flows[id] ?? []
 const share = (id: string) => game.preview.shares[id] ?? 1
 const wasted = (id: string) => game.preview.wasted[id] ?? 0
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
-const fillPct = (r: Resource) => Math.min(100, (100 * r.amount) / Math.max(1e-9, capOf(game.state, r)))
-/** The ways to make a resource now: Create, and once there are units, a strategy. */
-function ways(): { kind: 'create' | 'strategy'; label: string }[] {
-  const out: { kind: 'create' | 'strategy'; label: string }[] = [{ kind: 'create', label: 'Create it' }]
-  if (!lockReason(game.state, 'strategy') && game.state.units.length) out.push({ kind: 'strategy', label: 'A strategy' })
-  return out
+/** Create payouts still to come into a resource, soonest first. */
+const pending = (id: string) =>
+  game.state.deliveries
+    .filter((d) => d.target.kind === 'resource' && d.target.id === id)
+    .sort((a, b) => a.delay - b.delay)
+/** What timed payouts still owe in all, plus any that pay for good. */
+function owed(id: string) {
+  const list = pending(id)
+  const timed = list.filter((d) => d.weeks !== null).reduce((n, d) => n + deliveryLeft(d), 0)
+  const forever = list.filter((d) => d.weeks === null).reduce((n, d) => n + d.amount, 0)
+  return [timed ? `+${fmt(timed)}` : '', forever ? `+${fmt(forever)}/wk for good` : ''].filter(Boolean).join(' and ')
 }
-
-/** Nothing makes it. */
-const unmade = (id: string) =>
-  !game.state.strategies.some((s) => s.kind === 'make' && s.outputId === id) &&
-  !game.state.deliveries.some((d) => d.target.kind === 'resource' && d.target.id === id)
+/** How much of the timed payouts wouldn't fit, if what's held now stayed put. */
+const overflowsLater = (r: Resource) =>
+  Math.max(0, r.amount + pending(r.id).filter((d) => d.weeks !== null).reduce((n, d) => n + deliveryLeft(d), 0) - capOf(game.state, r))
+const fillPct = (r: Resource) => Math.min(100, (100 * r.amount) / Math.max(1e-9, capOf(game.state, r)))
 </script>
 
 <style scoped>
-.how {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  align-items: baseline;
-}
-
 .hint {
   margin: -4px 0 10px;
 }
@@ -222,6 +222,10 @@ li:focus .breakdown {
 
 .bd-title {
   font-weight: 600;
+}
+
+.bd-section {
+  margin-top: 10px;
 }
 
 .breakdown p {

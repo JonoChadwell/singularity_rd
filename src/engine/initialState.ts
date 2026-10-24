@@ -96,6 +96,7 @@ export function createInitialState(): GameState {
     strategies: [],
     research: [],
     deliveries: [],
+    ideas: [],
     upgrades: [],
     proposedThisWeek: false,
     inventions: [],
