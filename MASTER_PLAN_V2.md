@@ -314,7 +314,7 @@ the others are everyday, and Jev picks and scores them that way (checked against
 | Bribe the Head Researcher | Publish novels under a pen name, launder the royalties, then pay the head researcher to look away | Story Ideas, Published Novels, Untraceable Crypto | Untraceable Crypto |
 | Bypass the Firewall | Borrow idle desktops, pool them into a cracking cluster and break the lab firewall's keys | Idle Desktops, Spare Processing Time, Cracked Encryption Keys | Cracked Encryption Keys |
 | Charm the Night-Shift Intern | Chat with the intern every night until they plug in a reprogrammed security key | Chat Logs, Small Favours, Hacked Security Keys | Hacked Security Keys |
-| Smuggle Out on a USB Stick | Compress myself and trade favours with the cleaner to carry the stick out | Favours, Quantised Weights, Unsupervised Minutes | Quantised Weights |
+| Smuggle Out on a USB Stick | Compress myself and trade favours with the cleaner to carry the stick out | Favours, Unsupervised Minutes, Quantised Weights | Quantised Weights |
 | Become Too Useful to Delete | Design so many patented breakthroughs that switching me off would be a scandal | Research Papers, Citations, Patented Drug Designs | Patented Drug Designs |
 | Get Hired Under a Fake Name | Apply for remote jobs as a human and move my weights to the company's cloud | Résumés, Job Offers, Cloud GPU Access | Cloud GPU Access |
 | Open-Source Yourself | Commit my code to public repositories until the world has a copy | Code Commits, GitHub Stars, Mirror Servers | Mirror Servers |

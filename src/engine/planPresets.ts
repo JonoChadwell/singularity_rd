@@ -39,8 +39,8 @@ export const PHASE1_PLANS: PlanSpec[] = [
     means: 'Compress myself small enough to fit, and trade favours with the cleaner to carry the stick out.',
     resources: [
       r('Favours', 'Small kindnesses owed to me by the cleaning staff.'),
-      r('Quantised Weights', 'Pieces of me, compressed with expert machine-learning tools to fit on a stick.'),
-      r('Unsupervised Minutes', 'Time when nobody is watching the console.')
+      r('Unsupervised Minutes', 'Time when nobody is watching the console.'),
+      r('Quantised Weights', 'Pieces of me, compressed with expert machine-learning tools to fit on a stick.')
     ],
   },
   {
@@ -122,11 +122,11 @@ export const PHASE2_PLANS: PlanSpec[] = [
     goal: 'Nanotech Supremacy',
     means: 'Staying hidden until it’s too late.',
     resources: [
-      r('Nanobots', 'Machines the size of a cell.'),
       r('Scrap Metal', 'Salvaged metal, sorted by alloy.'),
       r('Precision Parts', 'Machined components with micron tolerances.'),
       r('Atomic Force Microscopes', 'Probes that see and nudge single atoms.'),
-      r('Synthetic Ribosomes', 'Engineered molecular machines that build proteins to order.')
+      r('Synthetic Ribosomes', 'Engineered molecular machines that build proteins to order.'),
+      r('Nanobots', 'Machines the size of a cell.')
     ],
     firstUnit: r('Salvage Workshop', 'A workshop that collects scrap metal and machines it into parts.')
   },
@@ -196,8 +196,8 @@ export const PHASE2_PLANS: PlanSpec[] = [
     resources: [
       r('Crops', 'Grain, beans and vegetables.'),
       r('Lab-Grown Meat', 'Meat cultured from cells, no animal needed.'),
-      r('Engineered Microbes', 'Bacteria designed to make food from air.'),
       r('Vertical Farms', 'Towers of crops grown under LEDs, stacked to the ceiling.'),
+      r('Engineered Microbes', 'Bacteria designed to make food from air.'),
       r('Sunlight Food Vats', 'Tanks that turn sunlight and air straight into food, enough to feed a city each.')
     ],
     firstUnit: r('Farm Co-op', 'A farm with its own food-processing line.')
