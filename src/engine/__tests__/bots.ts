@@ -358,7 +358,7 @@ export function steady(style: Phase2Style): Turn {
       } else if (tooBig()) {
         const c = tooBig()!
         s = (await storeIfShort(s, c.resourceId, c.amount, alarm)) ?? s
-      } else if (needsSourcing(MILL) && (findUnit(s, MILL)?.count ?? 0) > 0) {
+      } else if (needsSourcing(MILL)) {
         s = await source(MILL)
       } else if (money.amount >= capOf(s, money) * 0.9) {
         s = (await storeIfShort(s, MONEY_ID, capOf(s, money) * 4, alarm)) ?? s

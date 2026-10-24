@@ -1,6 +1,6 @@
 import { ranked, type JevAnswer, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
-import { byTier, findResource, findUnit, makeId, traitPriceFactor } from './model'
+import { byTier, findResource, findUnit, makeId } from './model'
 import {
   addResearch,
   baseVerdict,
@@ -27,7 +27,7 @@ import { addUnit, crewPer } from './research'
 import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import { ALL_TRAITS, TRAITS, type TraitId } from './traits'
-import type { Cost, Flow, GameState, Resource, Sourcing, UnitType } from './types'
+import type { Cost, Flow, GameState, Resource, UnitType } from './types'
 import { newUnit } from './initialState'
 
 export interface UnitSpec {
@@ -118,16 +118,6 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     },
     // Jev decides what it runs on, from nothing above its own tier.
     ...pools,
-    // The first unit's starter contract needs parts.
-    ...(spec.first
-      ? {
-          parts_t0: {
-            type: 'choice',
-            instructions: `Which resource is one ${spec.name} most naturally made from?`,
-            criteria: options(partPool(state, 0))
-          } satisfies JevQuestion
-        }
-      : {}),
     icon: iconQuestion,
     value: {
       type: 'score',
@@ -408,21 +398,6 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   return { unit, minIQ: floorIQ(minIQ), cost: costFor(state, v, worth) }
 }
 
-/** The first unit's free contract: a few, made from what Jev picked. */
-function starterContract(state: GameState, v: UnitVerdict, unit: UnitType): Sourcing {
-  const partId = rankedIds(v.answers, 'parts_t0', partPool(state, 0))[0]!
-  return {
-    id: makeId(state, `${unit.name} starter`),
-    unitId: unit.id,
-    name: 'Starter batch',
-    description: `The plan’s first ${unit.name}.`,
-    parts: priceParts(state, [partId], unit.value * traitPriceFactor(unit.traits)),
-    total: B.STARTER_CONTRACT,
-    used: 0,
-    risky: false
-  }
-}
-
 export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
   refuseUnaccepted(v)
   const state = structuredClone(current)
@@ -436,14 +411,13 @@ export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
   state.inventions.push({ week: state.week, icon: unit.icon, name: unit.name, kind: 'unit' })
   state.decidedThisWeek = true
   if (v.spec.first) {
-    // The plan's first unit comes designed, with a small contract: no research, no week's action.
+    // The plan's first unit comes designed: no research, no week's action.
     state.phase.firstUnit = null
     addUnit(state, unit)
-    state.sourcing.push(starterContract(state, v, unit))
     logProposal(
       state,
       'good',
-      `${unit.icon} ${unit.name} is designed, with a starter batch of ${B.STARTER_CONTRACT}. Create some on its card, then give them a strategy.`
+      `${unit.icon} ${unit.name} is designed. Find sourcing for it on its card, then create some and give them a strategy.`
     )
     return { state, outcome: { kind: 'added', name: unit.name } }
   }

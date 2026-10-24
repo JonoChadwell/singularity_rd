@@ -201,7 +201,7 @@
               <span v-if="o.risky" class="chip bad">risky</span>
               <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
               <br />
-              <span class="muted">Each takes {{ describeFlows(game.state, o.parts) }}. {{ researchText(o) }}</span>
+              <span class="muted">Each takes {{ describeFlows(game.state, o.parts) }}.</span>
               <br />
               <span :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</span>
             </span>
@@ -251,7 +251,7 @@
       </div>
       <div v-else-if="verdict.kind === 'unit' && unitDraft" class="outcome">
         <p v-if="first" class="small good">
-          Your plan’s first unit: no research needed, and it doesn’t use this week’s action. It comes with a starter batch.
+          Your plan’s first unit: no research needed, and it doesn’t use this week’s action. Find sourcing on its card to own some.
         </p>
         <fieldset v-if="unitOptions.length > 1" class="options">
           <legend class="small muted">Jev’s takes: pick one</legend>
@@ -665,7 +665,8 @@ const acceptLabel = computed(() => {
   if (v?.kind === 'strategy' && strategyDraft.value?.minIQ) return 'Add as research'
   if (v?.kind === 'cover') return 'Use it now'
   if (v?.kind === 'create') return 'Do it'
-  if (v?.kind === 'unit' || v?.kind === 'mind' || v?.kind === 'sourcing' || v?.kind === 'storage') return 'Add as research'
+  if (v?.kind === 'sourcing') return 'Sign it'
+  if (v?.kind === 'unit' || v?.kind === 'mind' || v?.kind === 'storage') return 'Add as research'
   return 'Accept'
 })
 

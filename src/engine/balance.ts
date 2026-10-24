@@ -184,10 +184,9 @@ export function reachFactor(tiersShort: number): number {
 export const PARTS_BY_TIER = [1, 1, 2, 2, 3]
 /**
  * The plan's first unit is designed free: tier 0, no dearer than this value band ("modest, like
- * a car"), with a small free sourcing contract.
+ * a car").
  */
 export const FIRST_UNIT_MAX_BAND = 2
-export const STARTER_CONTRACT = 20
 
 // ---------------------------------------------------------------- caps
 
@@ -205,8 +204,6 @@ export const SOURCING_LIMITS: [string, number][] = [
 ]
 /** A risky contract cuts corners for this many times the units. */
 export const RISK_SOURCING = 10
-/** A sourcing contract's fee: this share of the unit's tier technology cost. */
-export const SOURCING_FEE = 0.5
 /** Sourcing takes Jev offers. */
 export const SOURCING_OPTIONS = 3
 

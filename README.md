@@ -48,8 +48,8 @@ weeks off the clock; cover research buys some back.
   counted for one type of research. The smartest platforms (IQ 300 and up) must be paid for in a
   resource your units make, of a high enough tier.
 - **Industry units** are anything you own many of. A new design has room for none: **sourcing
-  contracts** (research: you say how, Jev says how many and from what, and you pick quiet, Jev's
-  take or risky) set how many you may own. You **create** them from a contract's parts at no
+  contracts** (you say how, Jev says how many and from what, and you pick quiet, Jev's take or
+  risky; it applies at once, with no research) set how many you may own. You **create** them from a contract's parts at no
   action. Each has upkeep and up to three **traits** from a fixed list of 14. Split a type across
   its strategies by count; the strategy marked **rest** takes every unit not counted elsewhere.
 - **Upgrade** a unit or your platform: Jev offers its three most natural improvements, and the

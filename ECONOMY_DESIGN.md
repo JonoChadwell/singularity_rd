@@ -74,10 +74,12 @@ share what's on hand plus what's made that week.
     weeks.
 - **Parts:** each contract uses a different mix of parts where there's a choice, with more kinds
   of part at higher tiers (`PARTS_BY_TIER`).
-- **Research:** a contract needs the unit's tier IQ and a fee of half its tier technology cost.
+- **No research:** a contract takes effect as soon as you pick it, with no IQ gate or fee. It
+  still uses the week's action, and its risk weeks come off the clock at once. Its only cost is
+  the parts, paid per unit created.
 - **Creating units:** this takes no action. You pay the contract's parts, up to its open slots.
   Several contracts can be open for one unit type, and lost units give their slots back.
-- **The plan's first unit:** comes with a free starter batch of 20.
+- **The plan's first unit:** is designed free, but with room for none, like any new design.
 - **Removed:** build strategies, and the Builder and Self-replicating traits. There are 14 unit
   traits now.
 

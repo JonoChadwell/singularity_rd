@@ -52,6 +52,18 @@ Type-check, lint and tests all passed at the time of writing.
 - The client side is `src/telemetry.ts` (sending) and `src/logging.ts` (crash handlers, UI
   watchers).
 
+**Finding the live game** (the game the user is playing right now on the dev server):
+- It's the run whose `game.jsonl` was written most recently. Find it by file time, not folder
+  time: on Windows a folder's modified time doesn't change when a file inside it is appended to,
+  so `ls -t logs/runs` shows when runs were *created*. For example:
+  `ls -t logs/runs/*/game.jsonl | head -1`.
+- Ignore runs that hold only `game_start`. Page reloads and HMR start a new `runId` each time, so
+  stubs like these pile up alongside the real game.
+- The last `week` event in `game.jsonl` carries a full state snapshot. Later `proposal`/`accept`/
+  `action` events show what happened during the current week. Check `errors.jsonl` for crashes.
+- To check the endpoint works: `POST /api/log` should return 204. Delete any probe run you
+  create.
+
 **Repository:**
 - One commit (`91895d2 Initial commit`). All work from this session is uncommitted (about 37
   changed paths).

@@ -282,7 +282,7 @@ describe('the first unit', () => {
     expect(precheckUnit(s, spec())).toMatch(/tier 0 resource/)
   })
 
-  it('is free, designed at once with a starter batch, and doesn’t use the week’s action', async () => {
+  it('is free, designed at once with no units, and doesn’t use the week’s action', async () => {
     const s = phase2(1e6)
     s.phase.firstUnit = { name: 'CNC Mill', description: '' }
     s.proposedThisWeek = true
@@ -296,9 +296,7 @@ describe('the first unit', () => {
     expect(state.research).toEqual([])
     expect(state.phase.firstUnit).toBeNull()
     expect(findResource(state, MONEY_ID)!.amount).toBe(1e6)
-    const starter = contractsFor(state, 'cnc-mill')
-    expect(starter).toHaveLength(1)
-    expect(starter[0]).toMatchObject({ total: B.STARTER_CONTRACT, used: 0, risky: false, parts: [{ resourceId: MONEY_ID }] })
+    expect(contractsFor(state, 'cnc-mill')).toEqual([])
     // Only once.
     await expect(judgeUnit(state, judge, spec({ name: 'Lathe' }))).rejects.toThrow(/already designed/)
   })
@@ -382,7 +380,7 @@ describe('expansions', () => {
     expect(expansionWeeks(B.EXPANSION_NOTICE_FROM * 10, true)).toBe(4)
   })
 
-  it('make big sourcing contracts cost weeks when they’re researched, the risky one most', async () => {
+  it('make big sourcing contracts cost weeks when they’re signed, the risky one most', async () => {
     const s = phase2(1e9)
     const u = addRobots(s, 1)
     u.built = 1
@@ -395,10 +393,7 @@ describe('expansions', () => {
     expect(quiet!.risk?.weeks ?? 0).toBeLessThan(own!.risk!.weeks)
     expect(risky!.risk!.weeks).toBeGreaterThan(own!.risk!.weeks * 2)
     v.choice = 1
-    let state = acceptSourcing(s, v).state
-    // Proposing costs nothing yet.
-    expect(state.phase.deadline).toBe(100)
-    state = doResearch(state, state.research[0]!.id)
+    const state = acceptSourcing(s, v).state
     expect(state.phase.deadline).toBe(100 - own!.risk!.weeks)
   })
 

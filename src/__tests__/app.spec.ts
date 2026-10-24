@@ -96,9 +96,8 @@ describe('App', () => {
       expect(game.state.sourcing).toEqual([])
       game.nextWeek()
       const deal = await game.propose({ kind: 'sourcing', spec: { unitId: unit.id, name: 'Rent them', description: '' } })
-      const contract = game.accept(deal!)
-      if (contract?.kind !== 'research') throw new Error('expected research')
-      expect(game.research(contract.research.id), game.lastError).toBe(true)
+      expect(game.accept(deal!)?.kind, game.lastError).toBe('added')
+      expect(game.state.research.some((r) => r.effect.kind === 'sourcing')).toBe(false)
       findResource(game.state, MONEY_ID)!.amount = 1000
       expect(game.createUnits(game.state.sourcing[0]!.id, 2), game.lastError).toBe(true)
       // Sourcing used this week's action; the strategy waits for next week.

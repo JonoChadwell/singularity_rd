@@ -1,17 +1,13 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
-import { findUnit, iqFor, makeId, traitPriceFactor } from './model'
-import { lockReason } from './phase'
+import { findUnit, fmt, iqFor, makeId, traitPriceFactor } from './model'
+import { lockReason, moveClock } from './phase'
 import {
-  addResearch,
   baseVerdict,
   claimProposal,
   cleanText,
-  floorIQ,
   gate,
-  newResearch,
-  payers,
-  payQuestion,
+  logProposal,
   proposalSlotBlocker,
   reader,
   refuseUnaccepted,
@@ -23,10 +19,9 @@ import {
   type Accepted,
   type VerdictBase
 } from './proposals'
-import { costMultiplier, priceCost } from './research'
 import { alarmQuestions, expansionRisk, riskFrom } from './risk'
 import { proposalText } from './stateText'
-import type { Cost, Flow, GameState, Risk, Sourcing } from './types'
+import type { Flow, GameState, Risk, Sourcing } from './types'
 import { partPool, priceParts, rankedIds } from './unitProposal'
 
 /** A way to get more of a unit: the player says how; Jev says how many, and from what. */
@@ -44,9 +39,6 @@ export interface SourcingOption {
   parts: Flow[]
   risky: boolean
   risk: Risk | null
-  /** The contract's fee, as research. */
-  minIQ: number
-  cost: Cost
   /** IQ efficiency baked into its prices: below 1 is a discount. */
   iqEfficiency: number
 }
@@ -95,7 +87,6 @@ export async function judgeSourcing(state: GameState, judge: Judge, raw: Sourcin
       instructions: `Got this way, which resource would each ${unit.name} most naturally take to make or buy? Advanced things take several kinds, so how likely each is matters too.`,
       criteria: Object.fromEntries(partPool(state, unit.tier).map((r) => [r.id, `${r.name}: ${r.description}`]))
     },
-    ...payQuestion(state, `setting up a supply of ${unit.name}`),
     ...alarmQuestions(state),
     ...repeatQuestion(state, 'sourcing')
   }
@@ -134,7 +125,6 @@ export function sourcingOptions(state: GameState, v: Pick<SourcingVerdict, 'answ
   const alarm = riskFrom(v.answers)
   const tierIQ = B.techIQ(unit.tier)
   const iqEfficiency = B.iqEfficiency(tierIQ, iqFor(state, 'unit'))
-  const pay = payers(v.answers)
   const takes: { label: string; band: number; mult: number; risky: boolean; quiet: boolean }[] = [
     { label: 'Quiet', band: Math.max(0, limit - 1), mult: 1, risky: false, quiet: true },
     { label: 'Jev’s take', band: limit, mult: 1, risky: false, quiet: false },
@@ -144,15 +134,12 @@ export function sourcingOptions(state: GameState, v: Pick<SourcingVerdict, 'answ
     const total = B.pick(B.SOURCING_LIMITS, t.band)[1] * t.mult
     const each = (unit.value * traitPriceFactor(unit.traits) * iqEfficiency * (t.risky ? B.RISK_PARTS : 1)) / efficiency
     const risk = expansionRisk(state, t.quiet ? null : alarm, total * unit.value, t.risky)
-    const fee = B.techCost(unit.tier) * B.SOURCING_FEE * iqEfficiency * costMultiplier(v.plausibility, v.bar)
     return {
       label: t.label,
       total,
       parts: priceParts(state, mix(i), each),
       risky: t.risky,
       risk,
-      minIQ: floorIQ(tierIQ),
-      cost: priceCost(state, fee, pay),
       iqEfficiency
     }
   })
@@ -179,18 +166,11 @@ export function acceptSourcing(current: GameState, v: SourcingVerdict): Accepted
   state.inventions.push({ week: state.week, icon: unit.icon, name: v.spec.name, kind: 'sourcing' })
   recordIdea(state, 'sourcing', `${unit.name}: ${v.spec.name}`, v.spec.description)
   state.decidedThisWeek = true
-  return addResearch(
-    state,
-    newResearch(state, {
-      name: `${unit.name}: ${v.spec.name}`,
-      description: `A contract for up to ${option.total} ${unit.name}.`,
-      icon: '📦',
-      minIQ: option.minIQ,
-      cost: option.cost,
-      effect: { kind: 'sourcing', sourcing },
-      risk: option.risk
-    })
-  )
+  // A contract takes effect at once: no research, and its parts are paid per unit created.
+  state.sourcing.push(sourcing)
+  if (option.risk?.weeks) moveClock(state, -option.risk.weeks, `${unit.name}: ${v.spec.name} alarmed humans`)
+  logProposal(state, 'good', `📦 ${v.spec.name}: up to ${fmt(option.total)} more ${unit.name}. Create them on its card.`)
+  return { state, outcome: { kind: 'added', name: v.spec.name } }
 }
 
 /** The IQ efficiency as a tag: "IQ: efficient −20%", or null at the usual price. */

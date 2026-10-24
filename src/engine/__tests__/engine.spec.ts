@@ -805,27 +805,24 @@ describe('sourcing', () => {
       B.SOURCING_LIMITS[2]![1] * B.RISK_SOURCING
     ])
     expect(v.options.map((o) => o.risky)).toEqual([false, false, true])
-    // Research: the unit's tier sets the IQ; each one costs about what the unit is worth.
-    expect(v.options[0]!.minIQ).toBe(B.TIERS[1]![1])
+    // No fee: each one costs about what the unit is worth.
     const worth = (o: (typeof v.options)[number]) => o.parts.reduce((n, p) => n + p.amount * findResource(s, p.resourceId)!.value, 0)
     expect(worth(v.options[0]!)).toBeCloseTo(200 * v.options[0]!.iqEfficiency, -1)
     // The risky one cuts corners on parts too.
     expect(worth(v.options[2]!)).toBeLessThan(worth(v.options[1]!))
   })
 
-  it('is research that adds a contract, and several can be open for one unit', async () => {
+  it('adds a contract at once, and several can be open for one unit', async () => {
     let s = world()
-    server(s).hardware.iq = B.TIERS[1]![1]
     const v = await judgeSourcing(s, new FakeJudge({ limit: score(1) }), spec)
     s = acceptSourcing(s, v).state
     expect(s.proposedThisWeek).toBe(true)
-    s = doResearch(s, s.research[0]!.id)
+    expect(s.research).toEqual([])
     expect(unitCap(s, 'bot')).toBe(B.SOURCING_LIMITS[0]![1])
     s = runWeek(s)
     const again = await judgeSourcing(s, new FakeJudge({ limit: score(1) }), { ...spec, name: 'Contract a factory' })
     again.choice = 1
     s = acceptSourcing(s, again).state
-    s = doResearch(s, s.research[0]!.id)
     expect(s.sourcing).toHaveLength(2)
     expect(unitCap(s, 'bot')).toBe(B.SOURCING_LIMITS[0]![1] + B.SOURCING_LIMITS[1]![1])
   })
