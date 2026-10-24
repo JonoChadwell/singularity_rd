@@ -71,7 +71,6 @@ describe('resource traits', () => {
     expect(effectiveTier(crude, 'make')).toBe(0)
     expect(effectiveTier({ tier: 2, traits: ['crude'] }, 'make')).toBe(1)
     expect(effectiveTier({ tier: 2, traits: ['crude'] }, 'reach')).toBe(2)
-    expect(effectiveTier({ tier: 4, traits: ['exotic'] }, 'payout')).toBe(4)
     expect(effectiveTier({ tier: 1, traits: ['prestigious'] }, 'platform')).toBe(2)
   })
 

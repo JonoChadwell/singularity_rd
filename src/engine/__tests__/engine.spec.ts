@@ -230,9 +230,9 @@ describe('create', () => {
     expect(v.scalars).toEqual({ industry: 1, iq: 1, efficiency: 1, reach: 1, short: 0 })
     // With nothing to use up, each pays the tier's base worth, times its timing.
     const worth = (t: string) => v.options.find((o) => o.timing === t)?.outputWorth
-    if (worth('now') !== undefined) expect(worth('now')).toBe(B.CREATE_VALUE[0])
-    if (worth('later') !== undefined) expect(worth('later')).toBe(B.CREATE_VALUE[0]! * 2)
-    if (worth('forever') !== undefined) expect(worth('forever')).toBe(B.CREATE_VALUE[0]! * 0.125)
+    if (worth('now') !== undefined) expect(worth('now')).toBe(B.CREATE_WORTH)
+    if (worth('later') !== undefined) expect(worth('later')).toBe(B.CREATE_WORTH * 2)
+    if (worth('forever') !== undefined) expect(worth('forever')).toBe(B.CREATE_WORTH * 0.125)
   })
 
   it('pays now, later, spread over weeks, or every week for good, and uses the week’s action', async () => {
@@ -342,8 +342,8 @@ describe('create', () => {
     expect(used.slice(0, 2)).toEqual(['steel', 'lemons'])
     // Inputs worth the base come back ×1.2, on top of the base.
     const o = v.options[0]!
-    expect(o.inputWorth).toBe(B.CREATE_VALUE[0]! * B.CREATE_INPUT_SHARE)
-    expect(o.outputWorth).toBeCloseTo(o.inputWorth * B.CREATE_INPUT_RETURN + B.CREATE_VALUE[0]!)
+    expect(o.inputWorth).toBe(B.CREATE_WORTH * B.CREATE_INPUT_SHARE)
+    expect(o.outputWorth).toBeCloseTo(o.inputWorth * B.CREATE_INPUT_RETURN + B.CREATE_WORTH)
     const after = acceptCreate(s, v).state
     expect(findResource(after, 'steel')!.amount).toBe(1000 - o.inputs[0]!.amount)
   })
@@ -357,7 +357,7 @@ describe('create', () => {
       return v.options.find((o) => o.timing === timing && o.inputs.length)?.inputs[0]?.amount
     }
     const now = await inputFor('now')
-    expect(now).toBe(B.CREATE_VALUE[0]! * B.CREATE_INPUT_SHARE)
+    expect(now).toBe(B.CREATE_WORTH * B.CREATE_INPUT_SHARE)
     for (const timing of ['spread', 'later', 'forever']) expect(await inputFor(timing), timing).toBe(now)
     // Wasteful halves what the mind makes, and so the input.
     expect(await inputFor('now', { efficiency: score(0) })).toBe(now! * B.EFFICIENCY[0]![1])
@@ -365,7 +365,7 @@ describe('create', () => {
     s.resources.push(newResource({ id: 'gold', name: 'Gold', tier: 2, value: 1, cap: ROOMY }))
     const gold = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec({ target: { kind: 'resource', id: 'gold' } }))
     const used = gold.options.find((o) => o.inputs.length)!
-    expect(used.inputs[0]!.amount).toBeCloseTo(B.nice(B.CREATE_VALUE[2]! * gold.scalars.reach))
+    expect(used.inputs[0]!.amount).toBeCloseTo(B.nice(B.CREATE_WORTH * gold.scalars.reach))
     // With less on hand than it would take, it takes exactly what you have, so it's always affordable.
     findResource(s, 'steel')!.amount = 123.4
     const v = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec())

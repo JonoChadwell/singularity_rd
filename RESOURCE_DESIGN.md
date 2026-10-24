@@ -25,12 +25,16 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
   research or contract is **priced**, so the number shown is the number paid. Create inputs and a
   phase goal's cost are never changed by these traits **(Claude's default)**: the goal stays the
   size the phase was tuned for, and a Create always gives back more than it uses.
+- **Phase 1 goal cost follows income.** Creates are Phase 1's only income, so the goal's cost in
+  its resource is scaled by what Creates make of it (Untraceable halves the goal, Staple and
+  Prestigious cut it 25%, Exotic's +50% scales it up) and by half the weekly loss (a 50% loss
+  makes the goal 25% smaller). Phase 2 goals are not scaled by traits. No goal depends on the
+  resource's storage cap.
 - **"Needs a tier less / more"** moves the tier read for one purpose only. The resource keeps its
   real tier everywhere else. The purposes are:
   - **units making it:** a unit making something above its own tier is penalised, and below its
     tier gets a bonus.
   - **Create reach:** a target above your IQ's tier is penalised.
-  - **Create payout:** `CREATE_VALUE` of the tier.
   - **platform payment:** the smartest platforms must be paid in a resource of a high enough tier.
 - **Weekly effects** happen at the end of the week, in this order: losses, then overflow past the
   cap, then growth into the room that's left. Each has its own row in the resource's breakdown
@@ -54,7 +58,7 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
 | 🍋 Perishable | Units make 50% more of it | 10% of what's left spoils each week | loss |
 | 🌋 Volatile | Units make twice as much of it | 25% of what's left is lost each week | loss |
 | 💧 Liquid | Cap ×1.5 | 5% of what's left leaks each week | loss |
-| 🔬 Exotic | Creates of it pay as if a tier higher | Units make 50% less of it | create |
+| 🔬 Exotic | Creates make 50% more of it | Units make 50% less of it | create |
 | 📦 Mundane | Creates of it need a tier less | Creates of it pay 25% less | create |
 | 👑 Prestigious | Pays for platforms as if a tier higher | Creates make 25% less of it | create |
 | 🚨 Hazardous | Counts 1.5× its worth as a Create input | Storage expansions for it cost double the clock weeks | clock |

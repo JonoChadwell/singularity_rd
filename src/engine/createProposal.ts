@@ -182,8 +182,7 @@ function priceOption(
   timing: B.CreateTiming
 ): CreateOption {
   const { industry, iq, efficiency, reach } = v.scalars
-  const tier = Math.min(targetTier(state, v.spec.target, 'payout'), B.CREATE_VALUE.length - 1)
-  const base = (B.CREATE_VALUE[tier] ?? 0) * industry * iq
+  const base = B.CREATE_WORTH * industry * iq
   // The input is paid in full now, whatever the timing: it's worth what the mind would make
   // (before timing), so Efficiency and Reach shrink it too. Never more than you hold.
   const input = inputId ? findResource(state, inputId) : undefined

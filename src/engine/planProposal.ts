@@ -22,6 +22,7 @@ import {
 } from './proposals'
 import { LOSSES } from './losses'
 import { costMultiplier } from './research'
+import { goalIncomeFactor } from './resourceTraits'
 import { proposalText } from './stateText'
 import type { GameState, LossCondition, Research, Resource } from './types'
 
@@ -218,13 +219,19 @@ export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
   const level = reader(v).level('approach', B.GOAL_APPROACH.length)
   const [, iq1, mult1, iq2, mult2] = B.pick(B.GOAL_APPROACH, level)
   const minIQ = v.phase === 1 ? iq1 : iq2
-  const caps = B.GOAL_CAPS[v.phase] * (v.phase === 1 ? mult1 : mult2) * costMultiplier(v.plausibility, v.bar)
+  const fit = costMultiplier(v.plausibility, v.bar)
+  // Both goals are sized by worth, so they don't follow storage. Phase 1's only income is Create,
+  // so its goal follows what the traits do to Creates and loss.
+  const amount =
+    v.phase === 1
+      ? (B.GOAL_WORTH_1 * mult1 * fit * goalIncomeFactor(top)) / top.value
+      : (B.GOAL_WORTH_2 * mult2 * fit) / top.value
   const goal = newResearch(state, {
     name: v.spec.goal,
     description: v.spec.means || v.spec.goal,
     icon: '🎯',
     minIQ,
-    cost: [{ resourceId: top.id, amount: B.nice(caps * top.cap) }],
+    cost: [{ resourceId: top.id, amount: B.nice(amount) }],
     effect: { kind: 'goal', phase: v.phase }
   })
   return { state, added, goal, top }

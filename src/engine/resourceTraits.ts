@@ -32,7 +32,7 @@ export const RESOURCE_TRAIT_IDS = [
 export type ResourceTraitId = (typeof RESOURCE_TRAIT_IDS)[number]
 
 /** What a resource's tier is read for. A tier trait moves only one of these. */
-export type TierPurpose = 'make' | 'reach' | 'payout' | 'platform'
+export type TierPurpose = 'make' | 'reach' | 'platform'
 
 /** Each trait's effects, as numbers. Anything left out is neutral. */
 export interface ResourceEffects {
@@ -212,10 +212,10 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     id: 'exotic',
     name: 'Exotic',
     icon: '🔬',
-    upside: 'Creates of it pay as if it were a tier higher.',
+    upside: 'Creates make 50% more of it.',
     downside: 'Units make 50% less of it.',
     family: 'create',
-    effects: { tier: { payout: 1 }, make: 0.5 }
+    effects: { createOutput: 1.5, make: 0.5 }
   }),
   mundane: t({
     id: 'mundane',
@@ -348,6 +348,15 @@ export const refundOf = (r: HasTraits) => total(r, 'refund')
 /** Share of what's left that is lost at the end of each week. Several losses compound. */
 export const weeklyLossOf = (r: HasTraits) =>
   1 - effectsOf(r).reduce((keep, e) => keep * (1 - (e.loss ?? 0)), 1)
+
+/**
+ * How much easier or harder a resource is to build up in Phase 1, where Creates are the only
+ * income: what Creates make of it, and half of the weekly loss (a 50% loss makes the goal 25%
+ * smaller). The Phase 1 goal cost is scaled by this.
+ */
+export function goalIncomeFactor(r: HasTraits): number {
+  return createOutputFactor(r) * (1 - weeklyLossOf(r) / 2)
+}
 
 /** A resource's tier, as read for one purpose: its own, moved by its tier traits, within 0 to 4. */
 export function effectiveTier(r: HasTraits & { tier: number }, purpose: TierPurpose): number {

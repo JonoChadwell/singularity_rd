@@ -102,9 +102,9 @@ The mind makes something directly: a resource, or units of a designed type.
 
 - **Inputs are paid in full when you accept, whatever the timing.** Timing only changes when and
   how the payout arrives. An option's input is worth what the mind makes before timing,
-  `CREATE_VALUE[tier] × Industry × IQ × Efficiency × Reach`, but never more than you hold. So
+  `CREATE_WORTH × Industry × IQ × Efficiency × Reach`, but never more than you hold. So
   every timing takes the same input as "now", and a weak or over-reaching offer asks for less.
-- **Output:** `(inputs × 1.2 + CREATE_VALUE[tier] × Industry × IQ) × Efficiency × payout ×
+- **Output:** `(inputs × 1.2 + CREATE_WORTH × Industry × IQ) × Efficiency × payout ×
   Reach`. Over its lifetime, an input therefore comes back as at least 1.2 × its worth × payout,
   so a Create paid now never returns less than it uses up.
   - **Industry:** 1 to 10, one step per decade of the worth of the units you own.
@@ -136,9 +136,11 @@ which earlier idea it repeats.
 
 - **Values:** unit and resource values use irregular steps (units 10, 50, 200, 700, 1,500,
   4,000), so costs never land on exact 3× or 10× multiples.
-- **Goals:** a goal costs `GOAL_CAPS[phase]` times its resource's starting cap, times the
-  approach. A Phase 1 goal fits in its starting storage; the Phase 2 goal needs about 8 caps, so
-  its resource's storage has to grow.
+- **Goals:** a goal costs `GOAL_WORTH_1` or `GOAL_WORTH_2` times the approach, divided by its
+  resource's value, so it doesn't depend on storage. Create worth is the same for every target
+  (`CREATE_WORTH`), so two resources of equal value are made in equal amounts; only reaching
+  above your IQ's tier costs output. The Phase 2 goal is much bigger than one cap, so its
+  resource's storage has to grow.
 - **Research costs** that are more than a resource can hold say so ("store more first").
 - **Create offers** warn when part of a payout won't fit in storage.
 - **Platforms:** cost `1000 × (IQ/100)³`, so a platform is within a few expansions of the

@@ -80,6 +80,17 @@ export const PHASE1_RESEARCH_COST = 0.3
  * Above 1, you have to expand storage to hold enough: the goal is a breadth requirement, not a sum.
  */
 export const GOAL_CAPS: Record<1 | 2, number> = { 1: 0.35, 2: 8 }
+/**
+ * Phase 1's goal cost, in worth, before the approach multiplier: divided by the goal resource's
+ * value to give units, so it doesn't depend on storage. It is 0.35 of a tier 1 resource's
+ * STORAGE_WORTH, scaled to CREATE_WORTH, so the goal stays the same number of Creates as before.
+ */
+export const GOAL_WORTH_1 = 2400
+/**
+ * Phase 2's goal cost in worth, before the approach multiplier: 8 of a tier 3 resource's
+ * STORAGE_WORTH, scaled by CREATE_WORTH over the 6000 a tier 3 Create used to pay (400 / 6000).
+ */
+export const GOAL_WORTH_2 = 53000
 
 // ---------------------------------------------------------------- risk and cover
 
@@ -259,8 +270,11 @@ export const holderReach = (iq: number) => HOLDERS.filter(([, minIQ]) => minIQ <
 
 // ---------------------------------------------------------------- create
 
-/** Create's base output worth, by target tier, before the scalars. */
-export const CREATE_VALUE = [400, 700, 2500, 6000, 15000]
+/**
+ * Create's base output worth, before the scalars. The same for every target, so two resources of
+ * the same value are made in the same amount; a target above your IQ's tier pays through Reach.
+ */
+export const CREATE_WORTH = 400
 /** Inputs consumed come back as this many times their worth. */
 export const CREATE_INPUT_RETURN = 1.2
 /**

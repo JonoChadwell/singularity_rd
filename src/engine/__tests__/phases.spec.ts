@@ -106,7 +106,7 @@ describe('phase plans', () => {
     const scaled = await draft(2)
     expect(brilliant.goal.minIQ).toBe(B.GOAL_APPROACH[0]![1])
     expect(scaled.goal.minIQ).toBe(B.GOAL_APPROACH[2]![1])
-    expect(brilliant.goal.cost[0]!.amount).toBe(B.nice(B.GOAL_CAPS[1] * B.GOAL_APPROACH[0]![2] * brilliant.top.cap))
+    expect(brilliant.goal.cost[0]!.amount).toBe(B.nice((B.GOAL_WORTH_1 * B.GOAL_APPROACH[0]![2]) / brilliant.top.value))
     expect(scaled.goal.cost[0]!.amount).toBeGreaterThan(brilliant.goal.cost[0]!.amount * 2)
     // Phase 1 is a tutorial: its goal fits in its resource's starting storage.
     expect(scaled.goal.cost[0]!.amount).toBeLessThanOrEqual(scaled.top.cap)
