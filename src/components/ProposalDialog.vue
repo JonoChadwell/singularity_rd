@@ -210,30 +210,27 @@
       </div>
       <div v-else-if="verdict.kind === 'storage'" class="outcome small">
         <div class="chips">
-          <span class="chip">🏭 Industry ×{{ chip(verdict.scalars.industry) }}</span>
-          <span class="chip">🧠 IQ ×{{ chip(verdict.scalars.iq) }}</span>
-          <span class="chip">⚙️ Efficiency ×{{ chip(verdict.scalars.efficiency) }}</span>
+          <span class="chip" title="How many Jev thinks could exist in this phase">🌍 Can exist: ~{{ verdict.scalars.ceilingLabel }}</span>
+          <span class="chip" :title="`${verdict.scalars.reachLabel}. At your IQ: ${verdict.scalars.holderLabel.toLowerCase()}.`">
+            🏭 You could build: ~{{ fmt(verdict.scalars.reach) }}
+          </span>
+          <span class="chip" title="How much of that this way captures">⚙️ This way: {{ verdict.scalars.captureLabel }}</span>
         </div>
         <p class="muted cards-legend">Expansions: pick one</p>
         <div class="cards">
-          <OptionCard
-            v-for="(o, i) in verdict.options"
-            :key="i"
-            :chosen="verdict.choice === i"
-            :blocked="o.blocked"
-            @select="verdict.choice = i"
-          >
+          <OptionCard v-for="(o, i) in verdict.options" :key="i" :chosen="verdict.choice === i" @select="verdict.choice = i">
             <div>
-              <strong>{{ o.label }}</strong>: room for {{ fmt(o.added) }} more
+              <strong>{{ o.label }}</strong>: room for {{ fmt(o.added) }} more ({{ fmt(storageTotal + o.added) }} in all)
               <span v-if="o.risky" class="chip bad">risky</span>
               <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
             </div>
-            <div :class="o.catch ? 'warn' : 'muted'">{{ describeCatch(game.state, o.catch) }}.</div>
-            <div class="muted">{{ researchText(o) }}</div>
-            <div :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</div>
-            <div :class="o.blocked ? 'bad' : 'muted'">
-              Needs {{ HOLDERS[o.holder]?.[0].toLowerCase() }}{{ o.blocked ? `: needs IQ ${HOLDERS[o.holder]?.[1]}` : '' }}
+            <div v-if="o.advanced" class="warn">
+              Ahead of you: needs IQ {{ o.advanced }} ({{ lower(verdict.scalars.techLabel) }}), +{{ Math.round((STORAGE_ADVANCED_BONUS - 1) * 100) }}% for thinking ahead.
+              Costs {{ describeCost(game.state, o.cost) }}.
             </div>
+            <div v-else class="muted">{{ researchText(o) }}</div>
+            <div :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</div>
+            <div v-if="o.limitedBy" class="warn">Capped: no more than ~{{ verdict.scalars.ceilingLabel }} can exist yet.</div>
             <template #actions>
               <ApplyButtons :blocker="blockers[i] ?? null" @apply="applyNow(i)" />
             </template>
@@ -307,7 +304,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue'
-import { HOLDERS } from '@/engine/balance'
+import { STORAGE_ADVANCED_BONUS } from '@/engine/balance'
 import { computeTrait } from '@/engine/computeTraits'
 import { resourceTrait } from '@/engine/resourceTraits'
 import { describeOption, optionBlocker, overflowOf, precheckCreate } from '@/engine/createProposal'
@@ -343,7 +340,7 @@ import {
 } from '@/engine/presets'
 import { expansionRiskText, riskText } from '@/engine/risk'
 import { iqTag, precheckSourcing } from '@/engine/sourcingProposal'
-import { describeCatch, precheckStorage } from '@/engine/storageProposal'
+import { precheckStorage } from '@/engine/storageProposal'
 import type { CreateTarget } from '@/engine/types'
 import {
   DESCRIPTION_MAX,
@@ -674,6 +671,13 @@ const strategyText = computed(() => {
   const made = `${fmt(d.strategy.amount)} ${out?.icon ?? ''} ${out?.name ?? ''}`
   return d.strategy.inputs.length ? `${describeFlows(game.state, d.strategy.inputs)} → ${made}` : made
 })
+/** What the resource being expanded holds now. */
+const storageTotal = computed(() => {
+  const v = verdict.value
+  const r = v?.kind === 'storage' ? findResource(game.state, v.spec.resourceId) : undefined
+  return r ? capOf(game.state, r) : 0
+})
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
 const researchText = (d: { minIQ: number; cost: Parameters<typeof describeCost>[1] }) =>
   `Research: needs IQ ${d.minIQ}, uses up ${d.cost.length ? describeCost(game.state, d.cost) : 'nothing'}.`
 

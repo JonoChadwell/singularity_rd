@@ -68,10 +68,11 @@ weeks off the clock; cover research buys some back.
   comes at its own size, 25 to 100 IQ, random each week but never all three the same; it may add
   a perk or remove a drawback). After that, only a new platform goes further.
 - **Resources** keep from week to week, up to a **storage cap**; what's made past it is lost.
-  Storage research raises it: Jev rates how you'd do it, you pick modest, large with a catch, or
-  huge and risky, and your IQ limits who could plausibly hold the total (an individual at IQ 100,
-  up to the whole Earth at 500). Options above your IQ are still shown and can be saved for
-  later; they need that IQ to research. When demand outstrips supply, every user gets the same share.
+  Storage research raises it: in one call Jev judges how many could exist in this phase, how much
+  your holdings let you build, and how much of that your way captures. You pick Careful, Pushed or
+  All in, all paid once, with no weekly upkeep. An idea ahead of your IQ is sized for the IQ it
+  needs, with a bonus, and waits for it. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
+  When demand outstrips supply, every user gets the same share.
 - **Resources have a nature:** one or two traits from a fixed list of 20, each an upside with a
   downside (Energetic: costs in it are half, but half of what's left is lost each week). A plan's
   resources get Jev's pick; one you add by hand offers three to choose from.
@@ -134,7 +135,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/types.ts` | `GameState` (v16) and everything in it |
 | `src/engine/balance.ts` | Every tuning number, in one place |
 | `src/engine/phase.ts`, `planProposal.ts`, `planPresets.ts` | Phases, clocks, unlocks; plan proposals and their ready-made ideas |
-| `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Create deliveries, storage caps and catches, trait rules |
+| `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Create deliveries, storage caps, trait rules |
 | `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover |
 | `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits |
 | `src/engine/research.ts`, `upgrade.ts`, `banking.ts` | Research costs and completion; upgrades; saving options for later or applying one now |

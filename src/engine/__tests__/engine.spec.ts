@@ -518,7 +518,7 @@ describe('proposals', () => {
     const v = await judgeResource(s, new FakeJudge({ value: score(1), tier: score(0) }), { name: 'Power', description: '' })
     const added = acceptResource(s, v).state
     // Every resource keeps, up to its storage: its tier's worth, in units of it.
-    expect(findResource(added, 'power')).toMatchObject({ tier: 0, cap: B.nice(B.STORAGE_WORTH[0]! / B.RESOURCE_VALUE[1]![1]), expansions: [] })
+    expect(findResource(added, 'power')).toMatchObject({ tier: 0, cap: B.nice(B.STARTING_STORAGE_WORTH[0]! / B.RESOURCE_VALUE[1]![1]), expansions: [] })
 
     const dup = await judgeResource(s, new FakeJudge({ same_as: choice(MONEY_ID) }), { name: 'Cash', description: '' })
     expect(dup.duplicateOf).toBe('Money')
@@ -859,7 +859,9 @@ describe('storage', () => {
   }
   const spec = { resourceId: 'steel', name: 'Rent warehouse space', description: '' }
   /** Steel's starting cap: tier 0, worth 1 each. */
-  const W = B.STORAGE_WORTH[0]!
+  const W = B.STARTING_STORAGE_WORTH[0]!
+  /** Steel's expansion base: tier 0 STORAGE_WORTH. */
+  const E = B.STORAGE_WORTH[0]!
 
   it('loses what’s made past the cap', () => {
     const s = world()
@@ -870,59 +872,88 @@ describe('storage', () => {
     expect(alertsFor(s, report).find((a) => a.key === 'overflow-steel')?.prompt?.to).toEqual({ kind: 'storage', resourceId: 'steel' })
   })
 
-  it('offers three expansions that trade off: modest, large with a catch, huge and risky', async () => {
-    const s = world()
-    const v = await judgeStorage(s, new FakeJudge({ efficiency: score(2), catch: choice('decay'), 'holder_*': score(0) }), spec)
-    expect(v.rejected).toBeNull()
-    expect(v.scalars).toEqual({ industry: 1, iq: 1, efficiency: 1 })
-    // At IQ 100, no units, Reasonable: one, three and ten times the tier's worth.
-    expect(v.options.map((o) => o.added)).toEqual([W, 3 * W, 10 * W])
-    expect(v.options.map((o) => o.catch?.kind ?? null)).toEqual([null, 'decay', null])
-    expect(v.options.map((o) => o.risky)).toEqual([false, false, true])
-  })
+  /** Steel's reach at IQ 100, no units, an ordinary build state. */
+  const R = E * B.STORAGE_REACH_SIZE
+  const sizes = (reach: number, capture: number) => B.STORAGE_SIZES.map(([, share]) => B.nice(reach * capture * share))
 
-  it('blocks what nobody your IQ could plausibly hold, and refuses when nothing fits', async () => {
+  it('asks once, and offers three sizes of the same way: reach × capture × share', async () => {
     const s = world()
-    const v = await judgeStorage(s, new FakeJudge({ 'holder_*': score(0), holder_2: score(1) }), spec)
-    expect(v.options.map((o) => o.blocked)).toEqual([false, false, true])
-    v.choice = 2
-    expect(() => acceptStorage(s, v)).toThrow(/ordinary individual/)
-    // Even when nothing fits, the options are offered and can be saved for later.
-    const none = await judgeStorage(s, new FakeJudge({ 'holder_*': score(2) }), spec)
-    expect(none.rejected).toBeNull()
-    expect(none.options.every((o) => o.blocked && o.minIQ >= 300)).toBe(true)
+    const judge = new FakeJudge({ efficiency: score(2) })
+    const v = await judgeStorage(s, judge, spec)
+    expect(judge.calls).toHaveLength(1)
+    expect(v.rejected).toBeNull()
+    expect(v.scalars).toMatchObject({ reach: R, capture: 0.5, ceilingLabel: 'a quintillion', neededIQ: 100 })
+    expect(v.options.map((o) => o.added)).toEqual(sizes(R, 0.5))
+    expect(v.options.map((o) => o.label)).toEqual(['Careful', 'Pushed', 'All in'])
+    expect(v.options.map((o) => o.risky)).toEqual([false, false, true])
+    expect(v.options.every((o) => o.limitedBy === null && o.advanced === null && o.minIQ <= 100)).toBe(true)
+    // A better build state and a better way both make it bigger.
+    const big = await judgeStorage(s, new FakeJudge({ efficiency: score(4), reach: score(4) }), spec)
+    expect(big.options.map((o) => o.added)).toEqual(sizes(4 * R, 1))
     // Jev can say no to the idea itself.
     const no = await judgeStorage(s, new FakeJudge({ plausible: noul(0.1) }), spec)
     expect(no.rejected).toMatch(/hold more Steel/)
   })
 
-  it('is research that raises the cap, and its catches act every week', async () => {
+  it('cuts options to what can exist, and refuses at the ceiling', async () => {
+    const s = world()
+    // A hundred thousand can exist; Steel already holds W.
+    const v = await judgeStorage(s, new FakeJudge({ efficiency: score(4), reach: score(4), ceiling: score(3) }), spec)
+    const room = 1e5 - W
+    expect(v.options.map((o) => o.added)).toEqual([B.nice(4 * R * 0.25), room, room])
+    expect(v.options.map((o) => o.limitedBy)).toEqual([null, 'ceiling', 'ceiling'])
+    // Cut to the same size, All in costs no more than Pushed.
+    expect(v.options[2]!.label).toMatch(/at the ceiling/)
+    expect(v.options[2]!.cost).toEqual(v.options[1]!.cost)
+    const full = await judgeStorage(s, new FakeJudge({ ceiling: score(2) }), spec)
+    expect(full.rejected).toMatch(/Only about ten thousand Steel can exist/)
+  })
+
+  it('sizes Pushed or All in for the IQ an advanced way needs, with a bonus', async () => {
+    const s = world()
+    const v = await judgeStorage(s, new FakeJudge({ efficiency: score(2), techLevel: score(2) }), spec)
+    const ahead = v.options.filter((o) => o.advanced)
+    expect(ahead).toHaveLength(1)
+    const i = v.options.indexOf(ahead[0]!)
+    expect([1, 2]).toContain(i)
+    expect(ahead[0]).toMatchObject({ advanced: 300, minIQ: 300 })
+    expect(ahead[0]!.added).toBe(B.nice(9 * R * 0.5 * B.STORAGE_SIZES[i]![1] * B.STORAGE_ADVANCED_BONUS))
+    // The same draw on a reload.
+    const again = await judgeStorage(s, new FakeJudge({ efficiency: score(2), techLevel: score(2) }), spec)
+    expect(again.options.findIndex((o) => o.advanced)).toBe(i)
+  })
+
+  it('pays in storable resources, never past their cap, a clear favourite paying twice', async () => {
+    const s = world()
+    s.resources.push(newResource({ id: 'wood', name: 'Wood', value: 1, amount: 100 }))
+    s.resources.push(newResource({ id: 'gold', name: 'Gold', value: 1, amount: 5 }))
+    findResource(s, 'gold')!.cap = 0
+    findResource(s, MONEY_ID)!.cap = 10
+    findResource(s, MONEY_ID)!.amount = 5
+    const judge = new FakeJudge({ pay: choice(MONEY_ID, { [MONEY_ID]: 0.9, wood: 0.1 }) })
+    const v = await judgeStorage(s, judge, spec)
+    const asked = judge.calls[0]!.questions.pay as { criteria: Record<string, string> }
+    expect(Object.keys(asked.criteria)).not.toContain('gold')
+    const paidIn = v.options.map((o) => o.cost[0]!.resourceId)
+    expect(paidIn.filter((id) => id === MONEY_ID)).toHaveLength(2)
+    expect(paidIn).toContain('wood')
+    for (const o of v.options) if (o.cost[0]!.resourceId === MONEY_ID) expect(o.cost[0]!.amount).toBeLessThanOrEqual(10)
+  })
+
+  it('is research that raises the cap, with nothing to pay or lose each week', async () => {
     let s = world()
     findResource(s, MONEY_ID)!.amount = 1e6
-    const v = await judgeStorage(s, new FakeJudge({ catch: choice('upkeep'), upkeep: choice(MONEY_ID), 'holder_*': score(0) }), spec)
+    const v = await judgeStorage(s, new FakeJudge({}), spec)
     v.choice = 1
     s = acceptStorage(s, v).state
     s = doResearch(s, s.research[0]!.id)
     const steel = findResource(s, 'steel')!
-    expect(capOf(s, steel)).toBe(W + 3 * W)
-    expect(steel.expansions[0]!.catch).toMatchObject({ kind: 'upkeep', resourceId: MONEY_ID })
-    // Unpaid upkeep: the extra room is lost that week.
-    steel.amount = 3 * W
-    findResource(s, MONEY_ID)!.amount = 0
-    expect(previewWeek(s).wasted.steel).toBe(2 * W)
-    findResource(s, MONEY_ID)!.amount = 1e6
-    expect(previewWeek(s).wasted.steel).toBeUndefined()
-
-    // Decay spoils a share; slow fill limits how fast the extra room fills.
-    const d = world()
-    findResource(d, 'steel')!.expansions.push({ name: 'Damp shed', added: 1000, catch: { kind: 'decay', share: 0.05 } })
-    findResource(d, 'steel')!.amount = 1000
-    expect(findResource(runWeek(d), 'steel')!.amount).toBe(950)
-    const f = world()
-    findResource(f, 'steel')!.expansions.push({ name: 'Slow silo', added: 1000, catch: { kind: 'fill', share: 0.2 } })
-    findResource(f, 'steel')!.amount = W
-    f.deliveries.push({ name: 'Shipment', target: { kind: 'resource', id: 'steel' }, amount: 900, delay: 0, weeks: 1 })
-    expect(findResource(runWeek(f), 'steel')!.amount).toBe(W + 200)
+    expect(capOf(s, steel)).toBe(W + v.options[1]!.added)
+    steel.amount = W
+    const money = findResource(s, MONEY_ID)!.amount
+    const next = runWeek(s)
+    expect(findResource(next, 'steel')!.amount).toBe(W)
+    expect(findResource(next, MONEY_ID)!.amount).toBeGreaterThanOrEqual(money)
   })
 
   it('adds storage with units that Store it', () => {

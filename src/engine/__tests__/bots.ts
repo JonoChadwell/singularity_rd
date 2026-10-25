@@ -156,14 +156,14 @@ async function storeIfShort(s: GameState, resourceId: string, need: number, answ
   const r = findResource(s, resourceId)!
   const waiting = s.research.some((x) => x.effect.kind === 'storage' && x.effect.resourceId === resourceId)
   if (s.proposedThisWeek || waiting || capOf(s, r) >= need) return null
-  const v = await judgeStorage(s, new FakeJudge({ ...TYPICAL, efficiency: score(2), 'holder_*': score(0), ...answers }), {
+  const v = await judgeStorage(s, new FakeJudge({ ...TYPICAL, efficiency: score(2), ...answers }), {
     resourceId,
     name: fresh('Rent warehouse space'),
     description: ''
   })
   if (v.rejected) return null
-  // The biggest that fits, clean if it can be.
-  const ok = v.options.map((o, i) => ({ o, i })).filter(({ o }) => !o.blocked && !o.catch)
+  // The first that fits and isn't risky, never one sized for an IQ the AI doesn't have yet.
+  const ok = v.options.map((o, i) => ({ o, i })).filter(({ o }) => !o.advanced)
   const pick = ok.find(({ o }) => capOf(s, r) + o.added >= need && !o.risky) ?? ok.find(({ o }) => !o.risky) ?? ok[0]
   if (!pick) return null
   v.choice = pick.i

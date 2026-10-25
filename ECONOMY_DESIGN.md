@@ -35,34 +35,9 @@ its costs, what's made and used of it, and what it loses or grows each week: see
 - **Overflow:** at the end of each week, anything past the cap is lost and shown as overflow.
 - **Stores trait:** each unit with it adds `STORE_WEEKS` weeks of its labour's worth of storage
   for one resource.
-- **Storage research:** the player writes how they'd hold more. Jev rates the idea's efficiency,
-  and can reject it. The game then offers three expansions:
-
-  | Option | Size | Catch |
-  | --- | --- | --- |
-  | Modest and clean | ×1 | none |
-  | Large, with a catch | ×3 | upkeep, decay or slow fill (Jev picks) |
-  | Huge and risky | ×10 | twice the clock weeks |
-
-  The room an expansion adds is `STORAGE_WORTH[tier]` × size × Industry × (IQ/100)² × Efficiency.
-  It costs 20% of the base worth (`STORAGE_WORTH[tier]` × size, before the scalars), so the scalars
-  make it bigger, not dearer. Each option is paid in a different resource.
-- **Catches:**
-  - **Upkeep:** a resource is needed every week; if it isn't paid, the extra room is lost that
-    week.
-  - **Decay:** a share of what's stored spoils every week.
-  - **Slow fill:** only a share of the extra room can fill each week.
-- **Ownership ladder:** Jev is asked who could plausibly hold each new total, and an option
-  needing a bigger holder than your IQ allows is blocked.
-
-  | Best IQ | Largest holder |
-  | --- | --- |
-  | 100 | an individual |
-  | 200 | a small corporation |
-  | 300 | a large corporation |
-  | 400 | a nation |
-  | 500 | the whole Earth |
-  | 600+ | no limit |
+- **Storage research:** the player writes how they'd hold more. Jev says how many can exist, how
+  much the AI could build, and how much of that the player's way captures; the game offers three
+  expansions with one-off costs only. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
 
 ## Sourcing contracts
 

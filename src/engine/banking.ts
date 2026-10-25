@@ -12,7 +12,7 @@ import {
   type Accepted
 } from './proposals'
 import type { SourcingVerdict } from './sourcingProposal'
-import type { StorageVerdict } from './storageProposal'
+import { storageResearchText, type StorageVerdict } from './storageProposal'
 import type { GameState, Research, Sourcing } from './types'
 import { draftUnit, type UnitVerdict } from './unitProposal'
 import { changeKey, describeChanges, targetName, type UpgradeOffer } from './upgrade'
@@ -66,11 +66,11 @@ function draftOption(state: GameState, v: BankableVerdict, i: number): Draft {
       return {
         label: o.label,
         name: `${r.name}: ${v.spec.name}`,
-        description: `Room for ${fmt(o.added)} more ${r.name}.`,
+        description: storageResearchText(r, o),
         icon: '🏗️',
         minIQ: o.minIQ,
         cost: o.cost,
-        effect: { kind: 'storage', resourceId: r.id, expansion: { name: v.spec.name, added: o.added, catch: o.catch } },
+        effect: { kind: 'storage', resourceId: r.id, expansion: { name: v.spec.name, added: o.added } },
         risk: o.risk
       }
     }

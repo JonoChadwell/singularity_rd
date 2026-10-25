@@ -14,8 +14,6 @@ export const SOFTWARE_STEPS = [25, 50, 75, 100]
 export const MAX_IQ_STEP = 100
 /** Software that also changes a trait costs this many times as much. */
 export const TRAIT_SOFTWARE_COST = 1.5
-/** A risky platform cuts corners and gets this much more IQ from the same design. */
-export const RISK_IQ_BONUS = 20
 /**
  * Platforms this smart (or more) have to be paid for with a resource that units make, of at
  * least the tier shown: [minimum IQ of the platform, minimum tier of the resource].
@@ -228,34 +226,76 @@ export const RISK_SOURCING = 10
 /** Sourcing takes Jev offers. */
 export const SOURCING_OPTIONS = 3
 
-/** Worth a resource of each tier can be stored to at the start, before expansions. */
+/** Worth a resource of each tier can be stored to at the start, before expansions. Tier 3 up starts with none. */
+export const STARTING_STORAGE_WORTH = [20000, 8000, 2000, 0]
+/** The base worth of a storage expansion for each tier, and what it costs. */
 export const STORAGE_WORTH = [5000, 12000, 40000, 100000, 250000]
-/** Storage expansion sizes, as multiples of STORAGE_WORTH before the scalars: [label, size, risky]. */
-export const STORAGE_SIZES: [string, number, boolean][] = [
-  ['Modest and clean', 1, false],
-  ['Large, with a catch', 3, false],
-  ['Huge and risky', 10, true]
+/** Reach, before Jev's band: this many STORAGE_WORTHs, times Industry and IQ². */
+export const STORAGE_REACH_SIZE = 10
+/**
+ * Storage options: [label, share of the yield (reach × capture), cost factor, clock]. The clock is
+ * none, half of Jev's alarm, or Jev's full alarm as a risky expansion.
+ */
+export const STORAGE_SIZES: [string, number, number, 'none' | 'half' | 'full'][] = [
+  ['Careful', 0.25, 0.25, 'none'],
+  ['Pushed', 0.6, 1, 'half'],
+  ['All in', 1, 1.25, 'full']
 ]
-/** An expansion costs this share of its base worth (STORAGE_WORTH × size, before the scalars). */
+/** An expansion costs this share of its base worth (STORAGE_WORTH × reach size × share, before the scalars). */
 export const STORAGE_COST_SHARE = 0.2
-/** Catches a large expansion can carry: [id, label]. */
-export const STORAGE_CATCHES = [
-  ['upkeep', 'Upkeep: it needs some of another resource every week, or the extra space is lost that week'],
-  ['decay', 'Decay: a share of what is stored spoils every week'],
-  ['fill', 'Slow fill: only part of the extra space can be filled each week']
-] as const
-export type StorageCatchId = (typeof STORAGE_CATCHES)[number][0]
-/** Upkeep catch: this share of the added worth, a week. */
-export const STORAGE_UPKEEP = 0.02
-/** Decay catch: this share of the amount stored, a week. */
-export const STORAGE_DECAY = 0.05
-/** Slow fill catch: this share of the added space can fill a week. */
-export const STORAGE_FILL = 0.2
+/** How many of a resource could exist at most: [label, units]. One rung per power of ten. */
+export const STORAGE_CEILINGS: [string, number][] = [
+  'a hundred',
+  'a thousand',
+  'ten thousand',
+  'a hundred thousand',
+  'a million',
+  'ten million',
+  'a hundred million',
+  'a billion',
+  'ten billion',
+  'a hundred billion',
+  'a trillion',
+  'ten trillion',
+  'a hundred trillion',
+  'a quadrillion',
+  'ten quadrillion',
+  'a hundred quadrillion',
+  'a quintillion'
+].map((label, i) => [label, 10 ** (i + 2)])
+/** What the AI's holdings, units and platforms let it build, as a multiple of the baseline: [label, factor]. */
+export const STORAGE_REACH: [string, number][] = [
+  ['Barely anything: it owns almost nothing to build with', 0.25],
+  ['Little: a thin base for its size', 0.5],
+  ['Ordinary: about what you would expect for its size', 1],
+  ['Well equipped: more than its size suggests', 2],
+  ['Very well equipped: holdings well suited to storing this', 4],
+  ['Exceptionally equipped: almost everything it owns helps', 8]
+]
+/** How much of the reach a way of storing captures, by Jev's efficiency: the B.EFFICIENCY labels, never past 1. */
+export const STORAGE_CAPTURE: [string, number][] = [
+  ['Wasteful', 0.15],
+  ['Mediocre', 0.3],
+  ['Reasonable', 0.5],
+  ['Clever', 0.75],
+  ['Brilliant', 1]
+]
+/** What IQ a way of storing needs: [label, IQ]. */
+export const STORAGE_TECH_LEVELS: [string, number][] = [
+  ['Everyday: what anyone could arrange, like rented space, shelves or tanks', 100],
+  ['Professional: what a small firm of engineers could build', 200],
+  ['Industrial: what a large corporation could build', 300],
+  ['National: a project on the scale of a government programme', 400],
+  ['Planetary: engineering that reshapes Earth', 500],
+  ['Beyond today’s science', 600]
+]
+/** An option that needs more IQ than the AI has holds this much more, for thinking ahead. */
+export const STORAGE_ADVANCED_BONUS = 1.25
 /** Stores trait: a unit holds this many weeks of its labour's worth. */
 export const STORE_WEEKS = 4
 /**
- * Who could plausibly hold so much, [label, best IQ that allows it]. The ownership ladder: at IQ
- * 100 the most you can ever hold is what an ordinary person could own.
+ * Who could plausibly hold so much, [label, best IQ that reaches it]. A guide to scale for Jev's
+ * reach question; nothing is gated on it.
  */
 export const HOLDERS: [string, number][] = [
   ['An ordinary individual', 100],

@@ -1,5 +1,4 @@
 import type { JevAnswer } from '@/ai/jev'
-import type { StorageCatchId } from './balance'
 import type { ComputeTraitId } from './computeTraits'
 import type { ResourceTraitId } from './resourceTraits'
 import type { QuirkId, TraitId } from './traits'
@@ -21,7 +20,7 @@ export interface Resource {
   value: number
   /** On hand. */
   amount: number
-  /** The most it can hold before expansions: STORAGE_WORTH of its tier, in units. */
+  /** The most it can hold before expansions: STARTING_STORAGE_WORTH of its tier, in units. */
   cap: number
   /** Storage expansions researched for it. */
   expansions: Expansion[]
@@ -34,19 +33,7 @@ export interface Expansion {
   name: string
   /** Units of the resource it adds to the cap. */
   added: number
-  /** A catch the player took for a bigger expansion. */
-  catch: StorageCatch | null
 }
-
-export type StorageCatch =
-  /** Needs `amount` of a resource a week, or the extra space is lost that week. */
-  | { kind: 'upkeep'; resourceId: string; amount: number }
-  /** `share` of the amount stored spoils every week. */
-  | { kind: 'decay'; share: number }
-  /** Only `share` of the added space can fill each week. */
-  | { kind: 'fill'; share: number }
-
-export type { StorageCatchId }
 
 export interface Flow {
   resourceId: string

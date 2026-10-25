@@ -1,7 +1,8 @@
-import type { JevQuestion, Judge } from '@/ai/jev'
+import type { JevAnswer, JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
 import { bestIQ, capOf, findResource, fmt, industryScalar } from './model'
 import { lockReason } from './phase'
+import { seedOf } from './planPresets'
 import {
   addResearch,
   baseVerdict,
@@ -10,7 +11,6 @@ import {
   floorIQ,
   gate,
   newResearch,
-  options,
   payers,
   payQuestion,
   proposalSlotBlocker,
@@ -28,7 +28,11 @@ import { costMultiplier, priceCost } from './research'
 import { capFactor, clockFactor, expansionFactor } from './resourceTraits'
 import { alarmQuestions, expansionRisk, riskFrom } from './risk'
 import { proposalText } from './stateText'
-import type { Cost, Expansion, GameState, Resource, Risk, StorageCatch } from './types'
+import type { Cost, Expansion, GameState, Resource, Risk } from './types'
+
+// Storage asks Jev three things in one call (see RESOURCE_DESIGN.md, Storage limits):
+// how many of the resource can exist (the ceiling), how much the AI could store with what it has
+// built (its reach), and how much of that reach the player's way captures.
 
 /** A way to hold more of a resource: the player says how. */
 export interface StorageSpec {
@@ -41,16 +45,33 @@ export interface StorageOption {
   label: string
   /** Units of the resource it adds. */
   added: number
-  catch: StorageCatch | null
   risky: boolean
   risk: Risk | null
   minIQ: number
   cost: Cost
   iqEfficiency: number
-  /** Who could plausibly hold the new total: an index into HOLDERS. */
-  holder: number
-  /** Too much for your IQ: the ownership ladder blocks it. */
-  blocked: boolean
+  /** Cut down to what can exist in this phase. */
+  limitedBy: 'ceiling' | null
+  /** The IQ it needs, when that's more than the AI has: it's sized for that IQ, with a bonus. */
+  advanced: number | null
+}
+
+/** Jev's three answers, read: for the chips and the options. */
+export interface StorageReadings {
+  /** How many could exist at most, and in words. */
+  ceiling: number
+  ceilingLabel: string
+  /** Units the AI could store with what it has built, at its current IQ, and Jev's band for it. */
+  reach: number
+  reachLabel: string
+  /** Who could hold that much, as a guide to scale. */
+  holderLabel: string
+  /** The share of the reach this way captures, and Jev's label for it. */
+  capture: number
+  captureLabel: string
+  /** The IQ this way needs, and what that means. */
+  neededIQ: number
+  techLabel: string
 }
 
 export interface StorageVerdict extends VerdictBase {
@@ -58,8 +79,7 @@ export interface StorageVerdict extends VerdictBase {
   spec: StorageSpec
   options: StorageOption[]
   choice: number
-  /** The scalars, for the chips. */
-  scalars: { industry: number; iq: number; efficiency: number }
+  scalars: StorageReadings
 }
 
 export function precheckStorage(state: GameState, spec: StorageSpec): string | null {
@@ -72,47 +92,66 @@ export function precheckStorage(state: GameState, spec: StorageSpec): string | n
   return null
 }
 
-/** The IQ scalar for storage: (best IQ / 100)². */
-export const storageIQScalar = (state: GameState) => (bestIQ(state) / 100) ** 2
+/** Storage can only be paid for in a resource that can be stored. */
+const storable = (state: GameState) => (x: Resource) => capOf(state, x) > 0
 
-/** Units of a resource an expansion of this size would add, before the catch. */
-function addedBy(state: GameState, r: Resource, size: number, efficiency: number): number {
-  const worth = (B.STORAGE_WORTH[r.tier] ?? 0) * size * industryScalar(state) * storageIQScalar(state) * efficiency
-  // Resource traits: a smaller or bigger cap all round, and expansions that hold more.
-  return B.nice((worth / Math.max(1e-9, r.value)) * capFactor(r) * expansionFactor(r))
+/**
+ * Units a mind this smart could store with an ordinary build state, before Jev's reach band:
+ * STORAGE_REACH_SIZE expansions of the tier's worth, times Industry and IQ², and the resource's
+ * cap traits.
+ */
+function baseline(state: GameState, r: Resource, iq: number): number {
+  const worth = (B.STORAGE_WORTH[r.tier] ?? 0) * B.STORAGE_REACH_SIZE * industryScalar(state) * (iq / 100) ** 2
+  return (worth / Math.max(1e-9, r.value)) * capFactor(r) * expansionFactor(r)
 }
+
+const ceilingText = (state: GameState, r: Resource) =>
+  `At most, how many ${r.name} could exist in the world the AI is in, made by anyone, for any use? ` +
+  (state.phase.n <= 2
+    ? 'The AI is still bound to Earth: never pick more than Earth could hold, unless the world text says it has reached beyond.'
+    : 'The AI may have reached beyond Earth, to other worlds or star systems: count only what the world text supports.')
 
 export async function judgeStorage(state: GameState, judge: Judge, raw: StorageSpec): Promise<StorageVerdict> {
   const spec = { ...raw, ...cleanText(raw.name, raw.description) }
   const refusal = precheckStorage(state, spec)
   if (refusal) throw new Error(refusal)
   const r = findResource(state, spec.resourceId)!
-  const others = state.resources.filter((x) => x.id !== r.id)
+  const iq = bestIQ(state)
+  const guide = B.HOLDERS.map(([label, minIQ]) => `${label.toLowerCase()} (IQ ${minIQ})`).join(', ')
   const questions: Record<string, JevQuestion> = {
+    // 1. How many can exist.
+    ceiling: {
+      type: 'score',
+      instructions: ceilingText(state, r),
+      criteria: B.STORAGE_CEILINGS.map(([label]) => `About ${label}`)
+    },
+    // 2. What the build state allows.
+    reach: {
+      type: 'score',
+      instructions:
+        `Judge only the AI's current holdings, units, platforms and industry, not the proposal below. ` +
+        `How well placed is it to build storage for ${r.name}, for an AI of its size? ` +
+        `As a guide to scale, the most a mind can run grows with its IQ: ${guide}. At IQ ${iq}, the AI is at ${B.HOLDERS[B.holderReach(iq)]![0].toLowerCase()}.`,
+      criteria: B.STORAGE_REACH.map(([label]) => label)
+    },
+    // 3. The player's way.
     plausible: {
       type: 'noul',
       instructions: `Could the AI plausibly hold more ${r.name} this way?`
     },
     efficiency: {
       type: 'score',
-      instructions: `How effective is this as a way to hold more ${r.name}?`,
-      criteria: scale(B.EFFICIENCY)
+      instructions: `How well does this way use what the AI could build to hold more ${r.name}?`,
+      criteria: scale(B.STORAGE_CAPTURE)
     },
-    catch: {
-      type: 'choice',
-      instructions: `If holding much more ${r.name} this way came with a catch, which would be most natural?`,
-      criteria: Object.fromEntries(B.STORAGE_CATCHES.map(([id, label]) => [id, label]))
+    techLevel: {
+      type: 'score',
+      instructions:
+        `How advanced is this way of holding more ${r.name}: what IQ would a mind need to pull it off? ` +
+        `The AI's best IQ is ${iq}: judge the proposal against what that means.`,
+      criteria: B.STORAGE_TECH_LEVELS.map(([label, need]) => `IQ ${need}. ${label}`)
     },
-    ...(others.length
-      ? {
-          upkeep: {
-            type: 'choice',
-            instructions: `If storing ${r.name} this way needed something every week to keep it going, which resource?`,
-            criteria: options(others)
-          } satisfies JevQuestion
-        }
-      : {}),
-    ...payQuestion(state, `building storage for ${r.name}`),
+    ...payQuestion(state, `storage for ${r.name}`, storable(state), 'Building'),
     ...alarmQuestions(state),
     ...repeatQuestion(state, 'storage')
   }
@@ -123,73 +162,130 @@ export async function judgeStorage(state: GameState, judge: Judge, raw: StorageS
   ]
   const answers = await judge.ask(proposalText(state, text), questions, 'storage')
   const base = { ...baseVerdict('storage', questions, answers, 'plausible', []), repeatOf: repeatOf(state, answers) }
-  const efficiency = B.pick(B.EFFICIENCY, efficiencyLevel(base))[1]
-  const v: StorageVerdict = {
-    ...base,
-    kind: 'storage',
-    spec,
-    options: [],
-    choice: 0,
-    scalars: { industry: industryScalar(state), iq: storageIQScalar(state), efficiency }
-  }
+  const v: StorageVerdict = { ...base, kind: 'storage', spec, options: [], choice: 0, scalars: storageReadings(state, base, spec) }
   gate(v, `Jev doesn’t think the AI could hold more ${r.name} this way`, null)
   if (v.rejected) return v
-
-  // The ownership ladder: who could plausibly hold each new total.
-  const totals = B.STORAGE_SIZES.map(([, size]) => capOf(state, r) + addedBy(state, r, size, efficiency))
-  const holderQuestions: Record<string, JevQuestion> = Object.fromEntries(
-    totals.map((total, i) => [
-      `holder_${i}`,
-      {
-        type: 'score',
-        instructions: `Who could plausibly hold ${fmt(total)} ${r.name} (worth ${fmt(total * r.value)} in all) at once?`,
-        criteria: B.HOLDERS.map(([label]) => label)
-      } satisfies JevQuestion
-    ])
-  )
-  const holders = await judge.ask(proposalText(state, text), holderQuestions, 'storage-holders')
-  Object.assign(v.answers, holders)
-  // Options too big for your IQ stay on offer: save them for later, once your IQ reaches the holder.
+  if (capOf(state, r) >= v.scalars.ceiling) {
+    v.rejected = `Only about ${v.scalars.ceilingLabel} ${r.name} can exist in this phase, and you already have room for that.`
+    return v
+  }
   v.options = storageOptions(state, v)
   return v
 }
 
-/**
- * Three expansions that trade off: a modest clean one, a large one with a catch, and a huge risky
- * one. Each is paid in a different resource where there's a choice. Options too big for your
- * IQ on the ownership ladder are blocked.
- */
-export function storageOptions(state: GameState, v: Pick<StorageVerdict, 'answers' | 'picks' | 'spec' | 'plausibility' | 'bar' | 'scalars'>): StorageOption[] {
-  const r = findResource(state, v.spec.resourceId)!
+/** Jev's three answers, read into numbers. */
+export function storageReadings(
+  state: GameState,
+  v: Pick<VerdictBase, 'answers' | 'picks' | 'repeatOf'>,
+  spec: StorageSpec
+): StorageReadings {
+  const r = findResource(state, spec.resourceId)!
   const read = reader(v)
-  const pay = payers(v.answers)
+  const iq = bestIQ(state)
+  const [ceilingLabel, ceiling] = B.STORAGE_CEILINGS[read.level('ceiling', B.STORAGE_CEILINGS.length)]!
+  const [reachLabel, band] = B.STORAGE_REACH[read.level('reach', B.STORAGE_REACH.length)]!
+  const [captureLabel, capture] = B.pick(B.STORAGE_CAPTURE, efficiencyLevel(v))
+  const [techLabel, neededIQ] = B.STORAGE_TECH_LEVELS[read.level('techLevel', B.STORAGE_TECH_LEVELS.length)]!
+  return {
+    ceiling,
+    ceilingLabel,
+    reach: B.nice(baseline(state, r, iq) * band),
+    reachLabel,
+    holderLabel: B.HOLDERS[B.holderReach(iq)]![0],
+    capture,
+    captureLabel,
+    neededIQ,
+    techLabel
+  }
+}
+
+/** A seeded draw, the same for the preview and every reload. */
+const draw = (state: GameState, r: Resource, what: string) => seedOf(`${state.runId}/${state.week}/${r.id}/storage-${what}`)
+
+/**
+ * Who pays for each of the three options. A clear favourite of Jev's pays for two and its second
+ * for one; otherwise the top three pay for one each. Shuffled, the same on every reload.
+ */
+function payerFor(state: GameState, r: Resource, answers: Record<string, JevAnswer>): (string | null)[] {
+  const allowed = storable(state)
+  const pay = payers(answers).filter((p) => {
+    const x = findResource(state, p.resourceId)
+    return x && allowed(x)
+  })
+  if (!pay.length) return [null, null, null]
+  const [top, second] = pay
+  const clear = !second || second.p < top!.p * B.RESOURCE_SECOND_TRAIT
+  const list = (clear ? [top!, top!, second ?? top!] : [0, 1, 2].map((i) => pay[i % pay.length]!)).map((p) => p.resourceId)
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = draw(state, r, `pay-${i}`) % (i + 1)
+    ;[list[i], list[j]] = [list[j]!, list[i]!]
+  }
+  return list
+}
+
+/** No cost may be more than its payer can store, so it can always be saved up for. */
+const withinStorage = (state: GameState, cost: Cost): Cost =>
+  cost.map((c) => {
+    const payer = findResource(state, c.resourceId)
+    return payer ? { ...c, amount: Math.min(c.amount, Math.floor(capOf(state, payer))) } : c
+  })
+
+const halve = (risk: Risk | null): Risk | null => {
+  const weeks = risk ? Math.round(risk.weeks / 2) : 0
+  return risk && weeks > 0 ? { ...risk, weeks } : null
+}
+
+/**
+ * Three expansions of the same way, pushed further each time: careful and cheap, pushed, and all
+ * in. Each is cut to what can exist. When the way needs more IQ than the AI has, Pushed or All in
+ * (at random) is sized for that IQ, with a bonus, and needs it.
+ */
+export function storageOptions(
+  state: GameState,
+  v: Pick<StorageVerdict, 'answers' | 'picks' | 'spec' | 'plausibility' | 'bar' | 'scalars'>
+): StorageOption[] {
+  const r = findResource(state, v.spec.resourceId)!
+  const s = v.scalars
+  const iq = bestIQ(state)
+  const room = Math.max(0, Math.floor(s.ceiling - capOf(state, r)))
+  const band = B.STORAGE_REACH.find(([label]) => label === s.reachLabel)?.[1] ?? 1
   const alarm = riskFrom(v.answers)
+  const pay = payerFor(state, r, v.answers)
   const tierIQ = B.techIQ(r.tier)
-  const iqEfficiency = B.iqEfficiency(tierIQ, bestIQ(state))
-  const reach = B.holderReach(bestIQ(state))
-  const catchId = read.choice('catch', B.STORAGE_CATCHES.map(([id]) => id))
-  return B.STORAGE_SIZES.map(([label, size, risky], i) => {
-    const added = addedBy(state, r, size, v.scalars.efficiency)
-    const worth = added * r.value
-    const holder = read.has(`holder_${i}`) ? read.level(`holder_${i}`, B.HOLDERS.length) : 0
-    // The large one carries the catch; the risky one's catch is the clock.
-    const caught: StorageCatch | null = i === 1 ? catchFor(state, v, catchId, worth) : null
-    const payer = pay.length ? [pay[i % pay.length]!] : []
-    // Priced on the base size: Industry, IQ and Efficiency make an expansion bigger, not dearer.
-    const value = B.STORAGE_COST_SHARE * (B.STORAGE_WORTH[r.tier] ?? 0) * size * iqEfficiency * costMultiplier(v.plausibility, v.bar)
+  const ahead = s.neededIQ > iq ? 1 + (draw(state, r, 'advanced') % 2) : -1
+  const options = B.STORAGE_SIZES.map(([label, share, costFactor, clock], i): StorageOption => {
+    const advanced = i === ahead
+    const atIQ = advanced ? s.neededIQ : iq
+    const amount = B.nice(baseline(state, r, atIQ) * band * s.capture * share * (advanced ? B.STORAGE_ADVANCED_BONUS : 1))
+    const added = Math.min(amount, room)
+    const iqEfficiency = B.iqEfficiency(tierIQ, atIQ)
+    // Priced on the size before the cut: overreaching costs more for what it gives.
+    const value =
+      B.STORAGE_COST_SHARE * (B.STORAGE_WORTH[r.tier] ?? 0) * B.STORAGE_REACH_SIZE * share * costFactor * iqEfficiency * costMultiplier(v.plausibility, v.bar)
+    const payer = pay[i]
+    const risk = clock === 'none' ? null : tracedRisk(r, expansionRisk(state, clock === 'half' ? halve(alarm) : alarm, added * r.value, clock === 'full'))
     return {
       label,
       added,
-      catch: caught,
-      risky,
-      risk: tracedRisk(r, expansionRisk(state, i === 0 ? null : alarm, worth, risky)),
-      minIQ: Math.max(floorIQ(tierIQ), holder > reach ? (B.HOLDERS[holder]?.[1] ?? 0) : 0),
-      cost: priceCost(state, value, payer.map((p) => ({ ...p, p: 1 }))),
+      risky: clock === 'full',
+      risk,
+      minIQ: Math.max(floorIQ(tierIQ), advanced ? s.neededIQ : 0),
+      cost: withinStorage(state, priceCost(state, value, payer ? [{ resourceId: payer, p: 1 }] : [], storable(state))),
       iqEfficiency,
-      holder,
-      blocked: holder > reach
+      limitedBy: amount > room ? 'ceiling' : null,
+      advanced: advanced ? s.neededIQ : null
     }
   })
+  // Cut to the same size as the option below, a bigger one costs only as much as that one.
+  for (let i = 1; i < options.length; i++) {
+    const o = options[i]!
+    const below = options[i - 1]!
+    if (o.limitedBy && o.added <= below.added) {
+      o.label = `${o.label}, at the ceiling`
+      o.cost = below.cost
+    }
+  }
+  return options
 }
 
 /** Hazardous, Untraceable and Contraband resources scale the clock weeks of their expansions. */
@@ -199,45 +295,19 @@ function tracedRisk(r: Resource, risk: Risk | null): Risk | null {
   return weeks > 0 ? { ...risk, weeks } : null
 }
 
-function catchFor(
-  state: GameState,
-  v: Pick<StorageVerdict, 'answers' | 'picks'>,
-  id: B.StorageCatchId,
-  worth: number
-): StorageCatch {
-  if (id === 'decay') return { kind: 'decay', share: B.STORAGE_DECAY }
-  if (id === 'fill') return { kind: 'fill', share: B.STORAGE_FILL }
-  const upkeepId = v.answers.upkeep ? reader(v).choice('upkeep', state.resources.map((x) => x.id)) : null
-  const payer = upkeepId ? findResource(state, upkeepId) : undefined
-  if (!payer) return { kind: 'decay', share: B.STORAGE_DECAY }
-  return { kind: 'upkeep', resourceId: payer.id, amount: B.nice((worth * B.STORAGE_UPKEEP) / payer.value) }
-}
-
-/** A storage catch in words. */
-export function describeCatch(state: GameState, c: StorageCatch | null): string {
-  if (!c) return 'No catch'
-  switch (c.kind) {
-    case 'upkeep': {
-      const r = findResource(state, c.resourceId)
-      return `Needs ${fmt(c.amount)} ${r?.icon ?? ''} ${r?.name ?? '?'} a week, or the extra space is lost that week`
-    }
-    case 'decay':
-      return `${Math.round(c.share * 100)}% of what’s stored spoils every week`
-    case 'fill':
-      return `Only ${Math.round(c.share * 100)}% of the extra space can fill each week`
-  }
-}
+/** What researching an option does, in words. */
+export const storageResearchText = (r: Resource, o: StorageOption) =>
+  `Room for ${fmt(o.added)} more ${r.name}${o.limitedBy ? ' (as much as can exist this phase)' : ''}.`
 
 export function acceptStorage(current: GameState, v: StorageVerdict): Accepted {
   refuseUnaccepted(v)
   const option = v.options[v.choice]
   if (!option) throw new Error('Choose one of the options.')
-  if (option.blocked) throw new Error(`That’s more than ${B.HOLDERS[B.holderReach(bestIQ(current))]![0].toLowerCase()} could hold.`)
   const state = structuredClone(current)
   claimProposal(state)
   const r = findResource(state, v.spec.resourceId)
   if (!r) throw new Error('That resource is gone.')
-  const expansion: Expansion = { name: v.spec.name, added: option.added, catch: option.catch }
+  const expansion: Expansion = { name: v.spec.name, added: option.added }
   state.inventions.push({ week: state.week, icon: r.icon, name: v.spec.name, kind: 'storage' })
   recordIdea(state, 'storage', `${r.name}: ${v.spec.name}`, v.spec.description)
   state.decidedThisWeek = true
@@ -245,7 +315,7 @@ export function acceptStorage(current: GameState, v: StorageVerdict): Accepted {
     state,
     newResearch(state, {
       name: `${r.name}: ${v.spec.name}`,
-      description: `Room for ${fmt(option.added)} more ${r.name}.`,
+      description: storageResearchText(r, option),
       icon: '🏗️',
       minIQ: option.minIQ,
       cost: option.cost,

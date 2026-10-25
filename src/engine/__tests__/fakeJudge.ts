@@ -36,7 +36,12 @@ export class FakeJudge implements Judge {
         answers[key] = { type: 'choice', choice: 'cryogenic' }
       } else if (q.type === 'choice') {
         answers[key] = { type: 'choice', choice: Object.keys(q.criteria)[0]! }
-      } else if (key === 'alarm' || key.startsWith('a_c')) {
+      } else if (key === 'ceiling') {
+        // Storage: anything can exist, an ordinary build state, and a way any IQ could manage.
+        answers[key] = { type: 'score', score: q.criteria.length - 1 }
+      } else if (key === 'reach') {
+        answers[key] = { type: 'score', score: 2 }
+      } else if (key === 'techLevel' || key === 'alarm' || key.startsWith('a_c')) {
         // Quiet unless a test says otherwise: the middle of the scale is already risky.
         answers[key] = { type: 'score', score: 0 }
       } else {

@@ -88,3 +88,78 @@ Several weekly losses compound (Perishable and Liquid together lose 14.5%, not 1
   the world text it reads lists each resource's traits.
 - **Tests** answer that question with Cryogenic by default, the trait that touches the scripted
   bots least, so the balance specs measure the economy, not a random trait.
+
+# Storage limits
+
+Status: **built** (2026-10-24). Code: [src/engine/storageProposal.ts](src/engine/storageProposal.ts);
+numbers: the `STORAGE_*` tables in [src/engine/balance.ts](src/engine/balance.ts). Not playtested.
+
+Caps are there for realism and storytelling. They stop paths that pass realistic limits (100
+billion hired humans in Phase 2), and they push the player toward a blend of resources instead of
+one or two.
+
+## Three questions, one Jev call
+
+**Expand Storage** asks Jev three questions in a single `storage` call. None of them depends on
+another's answer.
+
+1. **How many can exist?** (`ceiling`) Jev picks a rung on `STORAGE_CEILINGS`, one per power of
+   ten from a hundred to a quintillion. It is asked fresh on every proposal. Phases 1 and 2 are
+   bound to Earth unless the world text says otherwise; from Phase 3 the AI may count other
+   worlds. Room = ceiling − current cap. With no room left, the proposal is refused.
+2. **How much could the AI build now?** (`reach`) This is judged from its holdings, units,
+   platforms and industry, not from the proposal. The baseline is the old formula:
+   `STORAGE_WORTH[tier]` × `STORAGE_REACH_SIZE` (10) × Industry × (IQ/100)² ÷ value × the
+   resource's cap and expansion traits. Jev's band on `STORAGE_REACH` scales it by ×0.25 to ×8.
+   The old ownership ladder (`HOLDERS`: an individual at IQ 100 up to the whole Earth at 500) is
+   now only a guide in this prompt. Nothing is gated on it.
+3. **How good is the player's way?** Jev answers several questions about it:
+   - `plausible`: a no rejects the proposal.
+   - `efficiency`: Wasteful to Brilliant on `STORAGE_CAPTURE`, which gives 0.15 to 1. That is the
+     share of the reach this way captures, so it never goes past the reach.
+   - `techLevel`: the IQ the way needs, from 100 to 600 (`STORAGE_TECH_LEVELS`), judged against
+     what the AI's IQ means.
+   - `pay`, `alarm` (Phase 2) and `repeat`, as for other proposals.
+
+**Yield** = reach × capture.
+
+## Three options
+
+The three options are the same way, pushed further each time. Every one takes the week's action
+and costs only once. **There are no ongoing costs:** no upkeep, decay or slow fill.
+
+| Option | Adds | Cost factor | Clock |
+| --- | --- | --- | --- |
+| Careful | 0.25 × yield | ×0.25 | none |
+| Pushed | 0.6 × yield | ×1 | half of Jev's alarm, plus size weeks |
+| All in | 1 × yield | ×1.25 | risky: Jev's alarm, at least "makes the news", doubled size weeks |
+
+- **Cost** = `STORAGE_COST_SHARE` (0.2) × `STORAGE_WORTH[tier]` × 10 × share × cost factor × IQ
+  efficiency × plausibility. Industry, IQ² and capture make an option bigger, not dearer.
+- **Ceiling.** An option is cut to the room left and flagged. Cutting happens after pricing, so
+  overreaching costs more for what it gives **(Claude's default)**. When a bigger option is cut to
+  the size of the one below, it is labelled "at the ceiling" and costs what that one costs.
+- **An advanced way.** When `techLevel` is above the AI's best IQ, Pushed or All in (drawn from a
+  run, week and resource seed) is sized for that IQ: the baseline at the needed IQ, × 1.25
+  (`STORAGE_ADVANCED_BONUS`). It needs that IQ to research, and its IQ efficiency is read at that
+  IQ **(Claude's default)**. The other two options are unchanged.
+- **Payers.** Payers are taken from Jev's ranking and shuffled across the options by seed. A clear
+  favourite pays for two options and the second favourite for one. "Clear" means the second
+  scores under `RESOURCE_SECOND_TRAIT` (60%) of the first **(Claude's default)**. Otherwise the
+  top three pay for one option each. A resource with no storage is never asked about or charged.
+  No cost is more than its payer's cap.
+
+## What the player sees
+
+- **Chips:**
+  - **Can exist:** the ceiling rung.
+  - **You could build:** the reach in units, with Jev's band and the IQ guide in the tooltip.
+  - **This way:** the capture label.
+- **Cards** show:
+  - the room added and the new total;
+  - the research cost and needed IQ, or for the advanced option, "Ahead of you: needs IQ N (…),
+    +25% for thinking ahead";
+  - the clock;
+  - "Capped: no more than ~N can exist yet" when the option was cut.
+- **Refusals** say why: Jev doesn't think the way could work, or only about N can exist and the
+  player already has room for that.

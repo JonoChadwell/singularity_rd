@@ -61,7 +61,7 @@
           </p>
           <p class="muted">
             Holds {{ fmt(capOf(game.state, r)) }}: {{ fmt(r.cap) }} to start<template v-for="e in r.expansions" :key="e.name"
-              >, +{{ fmt(e.added) }} from {{ e.name }}{{ e.catch ? ` (${describeCatch(game.state, e.catch).toLowerCase()})` : '' }}</template
+              >, +{{ fmt(e.added) }} from {{ e.name }}</template
             >.
           </p>
           <template v-if="flows(r.id).length">
@@ -106,7 +106,6 @@ import { netFlow } from '@/engine/economy'
 import { bandText, byTier, capOf, deliveryLeft, deliveryTiming, fmt, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
 import { resourceTrait, speculativeFactor, traitLine } from '@/engine/resourceTraits'
-import { describeCatch } from '@/engine/storageProposal'
 import type { Resource } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'

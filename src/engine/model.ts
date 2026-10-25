@@ -194,10 +194,10 @@ export function describeDelivery(state: GameState, d: Delivery): string {
   return `+${fmt(d.amount)} ${targetLabel(state, d.target)} ${deliveryTiming(d)}`
 }
 
-/** What a resource can hold: its cap, its expansions (unless one's upkeep went unpaid), and units that Store it. */
-export function capOf(state: GameState, r: Resource, unpaid: ReadonlySet<Resource['expansions'][number]> = new Set()): number {
+/** What a resource can hold: its cap, its expansions, and units that Store it. */
+export function capOf(state: GameState, r: Resource): number {
   let cap = r.cap
-  for (const e of r.expansions) if (!unpaid.has(e)) cap += e.added
+  for (const e of r.expansions) cap += e.added
   for (const u of state.units) {
     if (u.stores === r.id && has(u, 'stores')) cap += (u.count * labour(u) * B.STORE_WEEKS) / Math.max(1e-9, r.value)
   }
@@ -206,7 +206,7 @@ export function capOf(state: GameState, r: Resource, unpaid: ReadonlySet<Resourc
 
 /** The cap a new resource of this tier and value starts with. */
 export const startingCap = (tier: number, value: number) =>
-  B.nice((B.STORAGE_WORTH[Math.min(tier, B.STORAGE_WORTH.length - 1)] ?? 0) / Math.max(1e-9, value))
+  B.nice((B.STARTING_STORAGE_WORTH[Math.min(tier, B.STARTING_STORAGE_WORTH.length - 1)] ?? 0) / Math.max(1e-9, value))
 
 /** Room left in a resource's storage. */
 export const room = (state: GameState, r: Resource) => Math.max(0, capOf(state, r) - r.amount)

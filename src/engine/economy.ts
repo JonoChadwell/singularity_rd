@@ -4,7 +4,7 @@ import { allocation, capOf, contractsFor, findResource, makeId, OVERFLOW, TRAIT_
 import { strategyRate } from './research'
 import { growthOf, makeFactor, refillOf, useFactor, weeklyLossOf } from './resourceTraits'
 import { has } from './traits'
-import type { Expansion, GameState, Sourcing, Strategy, UnitType, UnitWeek, WeekReport } from './types'
+import type { GameState, Sourcing, Strategy, UnitType, UnitWeek, WeekReport } from './types'
 
 /** Crew is rationed like a resource, under a pseudo-resource per crewed unit type. */
 const crewId = (unitId: string) => `crew:${unitId}`
@@ -245,7 +245,6 @@ export function simulateWeek(state: GameState): WeekReport {
     if (row) row.amount += amount
     else list.push({ label, amount })
   }
-  const start = new Map(state.resources.map((r) => [r.id, r.amount]))
   const delta = new Map<string, number>()
   const change = (id: string, amount: number) => delta.set(id, (delta.get(id) ?? 0) + amount)
   for (const r of runners) {
@@ -296,28 +295,7 @@ export function simulateWeek(state: GameState): WeekReport {
 
   // ---- End of the week.
 
-  // Storage upkeep: an expansion whose upkeep can't be paid holds nothing extra this week.
-  const unpaid = new Set<Expansion>()
   for (const res of state.resources) {
-    for (const e of res.expansions) {
-      if (e.catch?.kind !== 'upkeep') continue
-      const payer = findResource(state, e.catch.resourceId)
-      if (!payer || payer.amount < e.catch.amount - 1e-9) {
-        unpaid.add(e)
-        continue
-      }
-      payer.amount -= e.catch.amount
-      note(payer.id, `${e.name} upkeep`, -e.catch.amount)
-    }
-  }
-  for (const res of state.resources) {
-    // Decay spoils a share of what's stored.
-    for (const e of res.expansions) {
-      if (e.catch?.kind !== 'decay' || res.amount <= 0) continue
-      const lost = res.amount * e.catch.share
-      res.amount -= lost
-      note(res.id, `${e.name} spoils`, -lost)
-    }
     // Its own traits: Energetic, Perishable, Volatile and Liquid lose a share of what's left.
     const loss = weeklyLossOf(res)
     if (loss > 0 && res.amount > 0) {
@@ -325,15 +303,8 @@ export function simulateWeek(state: GameState): WeekReport {
       res.amount -= lost
       note(res.id, TRAIT_LOSS, -lost)
     }
-    // Slow fill: the space it adds fills only so fast.
-    const cap = capOf(state, res, unpaid)
-    const slow = res.expansions.filter((e) => e.catch?.kind === 'fill' && !unpaid.has(e))
-    let limit = cap
-    if (slow.length) {
-      const slowSpace = slow.reduce((n, e) => n + e.added, 0)
-      const perWeek = slow.reduce((n, e) => n + e.added * (e.catch as { share: number }).share, 0)
-      limit = Math.min(cap, Math.max(cap - slowSpace, start.get(res.id) ?? 0) + perWeek)
-    }
+    const cap = capOf(state, res)
+    const limit = cap
     // Overflow is lost.
     if (res.amount > limit + 1e-9) {
       report.wasted[res.id] = res.amount - limit

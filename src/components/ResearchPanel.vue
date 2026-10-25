@@ -33,9 +33,7 @@
             Room for {{ fmt(r.effect.sourcing.total) }}, each made from {{ describeFlows(game.state, r.effect.sourcing.parts) }}.
           </div>
           <div v-if="r.effect.kind === 'storage'" class="small">
-            Room for {{ fmt(r.effect.expansion.added) }} more{{
-              r.effect.expansion.catch ? `. ${describeCatch(game.state, r.effect.expansion.catch)}` : ''
-            }}.
+            Room for {{ fmt(r.effect.expansion.added) }} more.
           </div>
           <div v-if="r.effect.kind === 'cover'" class="small">
             Adds {{ coverWeeks(game.state, r.effect.weeks) }} weeks to the clock, once researched.
@@ -85,7 +83,6 @@
 import { computed } from 'vue'
 import { researchBlocker } from '@/engine/actions'
 import { bestIQ, bestMind, describeCost, describeDelivery, describeFlows, fmt, researchIQ } from '@/engine/model'
-import { describeCatch } from '@/engine/storageProposal'
 import { coverWeeks, lockReason } from '@/engine/phase'
 import { projectionText as describeProjection } from '@/engine/projection'
 import { alarmLabel } from '@/engine/risk'
