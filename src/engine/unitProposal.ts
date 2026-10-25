@@ -13,6 +13,8 @@ import {
   logProposal,
   newResearch,
   options,
+  payers,
+  payOptions,
   payQuestion,
   precheckName,
   proposalSlotBlocker,
@@ -56,6 +58,8 @@ export interface UnitOption {
   upkeepId: string
   /** Its traits: part of the take, so a near-the-line trait is on in one take and off in another. */
   traits: TraitId[]
+  /** The stock its design research uses up: one of Jev's favourites, a different one for each take when it can. */
+  pay?: string
 }
 
 export interface UnitVerdict extends VerdictBase {
@@ -337,11 +341,13 @@ export function unitOptions(
     }
   }
   const variants = traitVariants(traitOdds)
+  const payChoices = payOptions({ answers }).filter((p) => p.p > 0)
   return chosen.map(({ tier, band, upkeepId }, i) => ({
     tier,
     band,
     upkeepId,
-    traits: variants[i % variants.length]!.map((t) => t.trait)
+    traits: variants[i % variants.length]!.map((t) => t.trait),
+    pay: payChoices.length ? payChoices[i % payChoices.length]!.resourceId : undefined
   }))
 }
 
@@ -364,7 +370,7 @@ export interface UnitDraft {
 export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   const read = reader(v)
   const spec = v.spec
-  const { tier, band, upkeepId, traits: ids } = v.options[v.choice] ?? v.options[0]!
+  const { tier, band, upkeepId, traits: ids, pay } = v.options[v.choice] ?? v.options[0]!
   const param = (id: TraitId) => v.traitOdds.find((t) => t.trait === id)?.param ?? null
   const value = B.pick(B.UNIT_VALUE, band)[1]
   const work = value / B.PAYBACK_WEEKS
@@ -398,7 +404,7 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
 
   // Research is priced by tier, not by what one costs: a cheap unit can be very advanced.
   const [, minIQ, worth] = B.pick(B.TIERS, tier)
-  return { unit, minIQ: floorIQ(minIQ), cost: costFor(state, v, worth) }
+  return { unit, minIQ: floorIQ(minIQ), cost: costFor(state, pay ? { ...v, picks: { ...v.picks, pay } } : v, worth) }
 }
 
 export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
