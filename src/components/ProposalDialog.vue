@@ -35,13 +35,6 @@
             <option v-for="u in game.state.units" :key="u.id" :value="u.id">{{ u.icon }} {{ u.name }}</option>
           </select>
         </label>
-        <label v-for="i in MAX_INPUTS" :key="i" class="field">
-          <span>Uses {{ i }}</span>
-          <select v-model="strategy.inputIds[i - 1]">
-            <option value="">nothing</option>
-            <option v-for="r in byTier(game.state.resources)" :key="r.id" :value="r.id">{{ r.icon }} {{ r.name }}</option>
-          </select>
-        </label>
         <label class="field">
           <span>Makes</span>
           <select v-model="strategy.outputId">
@@ -50,6 +43,10 @@
         </label>
         <p class="muted small note">
           Don’t see what it makes? <button type="button" class="link" @click="ui.openInvent({ kind: 'resource' })">+ Resource</button>
+        </p>
+        <p class="muted small note">
+          Jev offers three ways, each using up different resources. Simple things (tier 0 and 1) can use nothing at all,
+          tier 2 needs at least one resource, and tier 3 and up need two different ones.
         </p>
       </template>
 
@@ -238,7 +235,19 @@
         </div>
       </div>
       <div v-else-if="verdict.kind === 'strategy' && strategyDraft" class="outcome small">
-        <div>{{ strategyText }} each, every week. <StrategyTags :strategy="strategyDraft.strategy" /></div>
+        <p class="muted cards-legend">Ways to do it: pick one</p>
+        <div class="cards">
+          <OptionCard v-for="o in strategyOptions" :key="o.i" :chosen="strategyChoice === o.i" @select="strategyChoice = o.i">
+            <div>
+              <strong>{{ o.title }}</strong>
+            </div>
+            <div>{{ o.text }} each, every week.</div>
+            <StrategyTags :strategy="o.draft.strategy" />
+            <template #actions>
+              <ApplyButtons :blocker="blockers[o.i] ?? null" @apply="applyNow(o.i)" />
+            </template>
+          </OptionCard>
+        </div>
         <div v-if="strategyDraft.strategy.quirk" class="warn">
           {{ QUIRKS[strategyDraft.strategy.quirk].icon }} {{ QUIRKS[strategyDraft.strategy.quirk].name }}:
           {{ QUIRKS[strategyDraft.strategy.quirk].rule }}
@@ -342,15 +351,8 @@ import { expansionRiskText, riskText } from '@/engine/risk'
 import { iqTag, precheckSourcing } from '@/engine/sourcingProposal'
 import { precheckStorage } from '@/engine/storageProposal'
 import type { CreateTarget } from '@/engine/types'
-import {
-  DESCRIPTION_MAX,
-  draftResource,
-  draftStrategy,
-  MAX_INPUTS,
-  NAME_MAX,
-  precheckName,
-  precheckStrategy
-} from '@/engine/proposals'
+import { DESCRIPTION_MAX, draftResource, NAME_MAX, precheckName } from '@/engine/proposals'
+import { draftStrategy, precheckStrategy } from '@/engine/strategyProposal'
 import { QUIRKS } from '@/engine/traits'
 import { draftUnit, precheckUnit } from '@/engine/unitProposal'
 import { useGameStore, type ProposalInput, type Verdict } from '@/stores/game'
@@ -381,7 +383,7 @@ const COPY: Record<
   },
   strategy: {
     title: 'Propose a strategy',
-    help: 'A strategy is something an industry unit does every week, turning up to two inputs into one output. Pick one from the list or write your own, then edit it. You choose the shape; the game sets the amounts. Jev judges whether the unit could do it: simple strategies are ready at once, and advanced ones become research.',
+    help: 'A strategy is something an industry unit does every week, turning up to two inputs into one output. Pick one from the list or write your own, and say who runs it and what it makes. Jev judges whether the unit could do it and offers three ways, each using up different resources: simple things (tier 0 and 1) can use nothing, tier 2 needs at least one resource, tier 3 and up need two different ones. Apply one now, or save all three to Research for one action. Simple strategies are ready at once, and advanced ones become research.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. Freelance coding, Generate power',
     description: 'How does it work? (optional, but helps Jev)',
@@ -455,7 +457,6 @@ watch(verdict, (v) =>
 
 const strategy = reactive({
   unitId: props.request.unitId ?? game.state.units[0]?.id ?? '',
-  inputIds: Array<string>(MAX_INPUTS).fill(''),
   outputId: props.request.outputId ?? game.state.resources[0]?.id ?? ''
 })
 
@@ -514,11 +515,9 @@ function applyPreset(presetId: string) {
     description.value = p.description
     const runner = runnerFor(game.state, p)
     if (runner) strategy.unitId = runner.id
-    const inputs = resolveResources(game.state, p.inputs)
     const output = resolveResources(game.state, [p.output])
-    strategy.inputIds = [...inputs.ids, ...Array<string>(MAX_INPUTS).fill('')].slice(0, MAX_INPUTS)
     if (output.ids[0]) strategy.outputId = output.ids[0]
-    missingResources.value = [...inputs.missing, ...output.missing]
+    missingResources.value = output.missing
   } else if (kind === 'create') {
     const p = CREATE_PRESETS.find((x) => x.name === presetId)
     if (!p) return
@@ -572,7 +571,7 @@ onMounted(async () => {
 const input = computed<ProposalInput>(() => {
   const base = { name: name.value, description: description.value }
   if (kind === 'strategy') {
-    return { kind, spec: { ...base, unitId: strategy.unitId, inputIds: strategy.inputIds.filter(Boolean), outputId: strategy.outputId } }
+    return { kind, spec: { ...base, unitId: strategy.unitId, outputId: strategy.outputId } }
   }
   if (kind === 'unit') return { kind, spec: { ...base, first } }
   if (kind === 'mind') return { kind, spec: base }
@@ -664,12 +663,28 @@ const mindChoice = computed({
 // Cover previews next week, which structuredClones the state: it needs the raw state, not the proxy.
 const coverDraft = computed(() => (verdict.value?.kind === 'cover' ? draftCover(toRaw(game.state), verdict.value) : null))
 const coverBlock = computed(() => (verdict.value?.kind === 'cover' ? coverBlocker(toRaw(game.state), verdict.value) : null))
-const strategyText = computed(() => {
-  const d = strategyDraft.value
-  if (!d) return ''
-  const out = findResource(game.state, d.strategy.outputId)
-  const made = `${fmt(d.strategy.amount)} ${out?.icon ?? ''} ${out?.name ?? ''}`
-  return d.strategy.inputs.length ? `${describeFlows(game.state, d.strategy.inputs)} → ${made}` : made
+// Jev's ways to do it, each drafted as if picked, to show what it uses and makes.
+const strategyOptions = computed(() => {
+  const v = verdict.value
+  if (v?.kind !== 'strategy') return []
+  return v.options.map((o, i) => {
+    const draft = draftStrategy(game.state, { ...v, choice: i })
+    const out = findResource(game.state, draft.strategy.outputId)
+    const made = `${fmt(draft.strategy.amount)} ${out?.icon ?? ''} ${out?.name ?? ''}`
+    const names = o.inputIds.map((id) => findResource(game.state, id)?.name ?? '?')
+    return {
+      i,
+      title: names.length ? `Uses ${names.join(' and ')}` : 'No inputs',
+      text: draft.strategy.inputs.length ? `${describeFlows(game.state, draft.strategy.inputs)} → ${made}` : made,
+      draft
+    }
+  })
+})
+const strategyChoice = computed({
+  get: () => (verdict.value?.kind === 'strategy' ? verdict.value.choice : 0),
+  set: (choice: number) => {
+    if (verdict.value?.kind === 'strategy') verdict.value.choice = choice
+  }
 })
 /** What the resource being expanded holds now. */
 const storageTotal = computed(() => {
@@ -684,10 +699,9 @@ const researchText = (d: { minIQ: number; cost: Parameters<typeof describeCost>[
 const acceptLabel = computed(() => {
   const v = verdict.value
   // These show their options as cards, each with its own button.
-  if (v && ['create', 'sourcing', 'storage', 'mind', 'unit'].includes(v.kind)) return null
+  if (v && ['create', 'sourcing', 'storage', 'mind', 'unit', 'strategy'].includes(v.kind)) return null
   if (v?.kind === 'resource' && resourceOptions.value.length) return null
   if (v?.kind === 'unit' && first) return 'Add to industry'
-  if (v?.kind === 'strategy' && strategyDraft.value?.minIQ) return 'Add as research'
   if (v?.kind === 'cover') return 'Use it now'
   if (v?.kind === 'create') return 'Do it'
   if (v?.kind === 'sourcing') return 'Sign it'

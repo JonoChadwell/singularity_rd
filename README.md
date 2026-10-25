@@ -38,13 +38,17 @@ weeks off the clock; cover research buys some back.
   storage expansion, intelligence system or cover) or a **Create**. Resources are free to
   propose. Doing research already on the list is instant and unlimited, but needs a **minimum
   IQ** your smartest mind must reach and a **cost in resources**.
-- **Jev's options are cards.** Whenever Jev offers three takes (unit, platform, storage, sourcing,
-  upgrade), they sit side by side. **Save For Later** banks all three to the Research tab for one
+- **Jev's options are cards.** Whenever Jev offers three takes (strategy, unit, platform, storage,
+  sourcing, upgrade), they sit side by side. **Save For Later** banks all three to the Research tab for one
   action (they are alternatives: researching one drops the others). **Apply now** on a card
   takes just that one and researches it at once; it is greyed out if your IQ or stocks fall short.
 - **Tiers.** Resources and units share one tier scale (0-4), tied to IQ. A unit making an output
   of a higher tier than its own is heavily penalised; a lower one gets a bonus. Jev sets a unit's
   tier, value and what it runs on, and offers three takes.
+- **Strategies** are what a unit does every week. You say who runs it and what it makes; you don't
+  pick its inputs or who pays. Jev offers three ways, each using up different resources: a tier 0
+  or 1 output always gets a way with no inputs, tier 2 needs at least one, and tier 3 and up need
+  two different ones.
 - **Create** is the mind making something directly: say what and how, and Jev offers three
   ways, each using a different resource (or nothing) and paying out now, spread out, later, or
   every week for good. It grows with your industry and IQ², and reaching above your IQ's tier
@@ -139,7 +143,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover |
 | `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits |
 | `src/engine/research.ts`, `upgrade.ts`, `banking.ts` | Research costs and completion; upgrades; saving options for later or applying one now |
-| `src/engine/proposals.ts`, `unitProposal.ts`, `sourcingProposal.ts`, `storageProposal.ts`, `createProposal.ts`, `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
+| `src/engine/proposals.ts`, `strategyProposal.ts`, `unitProposal.ts`, `sourcingProposal.ts`, `storageProposal.ts`, `createProposal.ts`, `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |
 | `src/components/` | UI |

@@ -13,6 +13,7 @@ import {
 } from './proposals'
 import type { SourcingVerdict } from './sourcingProposal'
 import { storageResearchText, type StorageVerdict } from './storageProposal'
+import { draftStrategy, strategyIdea, type StrategyVerdict } from './strategyProposal'
 import type { GameState, Research, Sourcing } from './types'
 import { draftUnit, type UnitVerdict } from './unitProposal'
 import { changeKey, describeChanges, targetName, type UpgradeOffer } from './upgrade'
@@ -21,11 +22,15 @@ import type { Verdict } from './dispatch'
 // Banking: every option Jev offers can be saved to the research list for later (all of them, for
 // one action), or applied now (just that one, researched at once if the mind and stocks allow).
 
-export type BankableVerdict = UnitVerdict | MindVerdict | StorageVerdict | SourcingVerdict
+export type BankableVerdict = UnitVerdict | MindVerdict | StorageVerdict | SourcingVerdict | StrategyVerdict
 
 /** Verdicts whose options become research. A plan's first unit comes designed, so it isn't one. */
 export const isBankable = (v: Verdict): v is BankableVerdict =>
-  v.kind === 'mind' || v.kind === 'storage' || v.kind === 'sourcing' || (v.kind === 'unit' && !v.spec.first)
+  v.kind === 'mind' ||
+  v.kind === 'storage' ||
+  v.kind === 'sourcing' ||
+  v.kind === 'strategy' ||
+  (v.kind === 'unit' && !v.spec.first)
 
 type Draft = Omit<Research, 'id' | 'proposedWeek' | 'group'> & { label: string }
 
@@ -56,6 +61,22 @@ function draftOption(state: GameState, v: BankableVerdict, i: number): Draft {
         minIQ,
         cost,
         effect: { kind: 'mind', mind },
+        risk: v.risk
+      }
+    }
+    case 'strategy': {
+      const { strategy, minIQ, cost } = draftStrategy(state, { ...v, choice: i })
+      const unit = findUnit(state, strategy.unitId)
+      if (!unit) throw new Error('That unit is gone.')
+      const inputs = v.options[i]!.inputIds.map((id) => findResource(state, id)?.name ?? '?')
+      return {
+        label: inputs.length ? `uses ${inputs.join(' and ')}` : 'no inputs',
+        name: strategy.name,
+        description: `Work out how ${unit.name} can ${strategy.name.toLowerCase()}.`,
+        icon: '🧭',
+        minIQ,
+        cost,
+        effect: { kind: 'strategy', strategy },
         risk: v.risk
       }
     }
@@ -118,6 +139,10 @@ export function bankVerdict(current: GameState, v: BankableVerdict, only?: numbe
   const first = draftOption(state, v, picks[0]!)
   state.inventions.push({ week: state.week, icon: first.icon, name: v.spec.name, kind: v.kind })
   if (v.kind === 'storage' || v.kind === 'sourcing') recordIdea(state, v.kind, first.name, v.spec.description)
+  if (v.kind === 'strategy') {
+    const idea = strategyIdea(state, v)
+    recordIdea(state, 'strategy', idea.name, idea.description)
+  }
   state.decidedThisWeek = true
   let last: Accepted | undefined
   for (const i of picks) {

@@ -105,7 +105,7 @@ describe('App', () => {
       game.nextWeek()
       const sell = await game.propose({
         kind: 'strategy',
-        spec: { name: 'Sell compute time', description: '', unitId: unit.id, inputIds: [], outputId: MONEY_ID }
+        spec: { name: 'Sell compute time', description: '', unitId: unit.id, outputId: MONEY_ID }
       })
       expect(game.accept(sell!)).toMatchObject({ kind: 'added' })
       expect(game.preview.runs[game.state.strategies[0]!.id]?.units).toBe(2)

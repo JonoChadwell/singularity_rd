@@ -11,7 +11,8 @@ import { cardsFor, lockReason, newPhase, weeksLeft, type Feature } from '../phas
 import { PHASE1_PLANS, PHASE2_PLANS, planIdeas } from '../planPresets'
 import { acceptPlan, coverTiers, draftPlan, judgePlan, precheckPlan, type PlanSpec } from '../planProposal'
 import { projectGoal, projectionText } from '../projection'
-import { acceptResource, acceptStrategy, judgeResource, judgeStrategy } from '../proposals'
+import { acceptResource, judgeResource } from '../proposals'
+import { acceptStrategy, judgeStrategy } from '../strategyProposal'
 import { LOSSES } from '../losses'
 import { alarmQuestions, expansionWeeks } from '../risk'
 import { acceptSourcing, judgeSourcing } from '../sourcingProposal'
@@ -363,14 +364,12 @@ describe('risk', () => {
       name: 'Hack banks',
       description: '',
       unitId: 'robot',
-      inputIds: [],
       outputId: MONEY_ID
     })
     const calm = acceptStrategy(s, await judgeStrategy(s, new FakeJudge({ advancement: score(0) }), {
       name: 'Do chores',
       description: '',
       unitId: 'robot',
-      inputIds: [],
       outputId: MONEY_ID
     })).state
     const state = acceptStrategy(s, v).state
@@ -462,11 +461,11 @@ describe('cover', () => {
     expect(v.risk).toBeNull()
     const d = draftCover(s, v)
     const decent = B.COVER[1]![2]
-    expect(d).toMatchObject({ weeks: decent, now: decent, minIQ: 110 })
+    expect(d).toMatchObject({ weeks: decent, now: decent, minIQ: 125 })
     expect(d.cost).toEqual([{ resourceId: MONEY_ID, amount: B.COVER_COST_WEEKS * decent * 10_000 }])
     // It needs the IQ now.
-    expect(coverBlocker(s, v)).toMatch(/IQ 110/)
-    expect(() => acceptCover(s, v)).toThrow(/IQ 110/)
+    expect(coverBlocker(s, v)).toMatch(/IQ 125/)
+    expect(() => acceptCover(s, v)).toThrow(/IQ 125/)
     s.minds[0]!.software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
     s = acceptCover(s, v).state
     expect(s.research).toEqual([])
@@ -539,19 +538,16 @@ describe('paying for research', () => {
     expect(offer.options[0]!.cost.length).toBeGreaterThan(0)
   })
 
-  it('lets the player choose which of Jev’s favourites pays', async () => {
+  it('pays for a strategy with Jev’s favourite, whatever the player picks', async () => {
     const s = phase2(1e6)
     addRobots(s, 1)
     s.resources.push(newResource({ id: 'steel', name: 'Steel', amount: 1e6, cap: ROOMY }))
-    const spec = { name: 'Trading', description: '', unitId: 'robot', inputIds: [], outputId: MONEY_ID }
-    // Steel is well behind, so by default Money pays alone.
+    const spec = { name: 'Trading', description: '', unitId: 'robot', outputId: MONEY_ID }
+    // Steel is well behind, so Money pays alone.
     const v = await judgeStrategy(s, new FakeJudge({ advancement: score(3), pay: choice(MONEY_ID, { [MONEY_ID]: 0.7, steel: 0.2 }) }), spec)
     const payers = () => acceptStrategy(s, v).state.research[0]!.cost.map((c) => c.resourceId)
     expect(payers()).toEqual([MONEY_ID])
     v.picks.pay = 'steel'
-    expect(payers()).toEqual(['steel'])
-    // Only one of Jev's choices.
-    v.picks.pay = 'nanobots'
     expect(payers()).toEqual([MONEY_ID])
   })
 })

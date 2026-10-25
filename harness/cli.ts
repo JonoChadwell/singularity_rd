@@ -68,7 +68,8 @@ import { resourceTrait, traitLine } from '@/engine/resourceTraits'
 import { iqTag } from '@/engine/sourcingProposal'
 import { describeCatch } from '@/engine/storageProposal'
 import { proposalText } from '@/engine/stateText'
-import { catchesOf, complicationName, draftResource, draftStrategy, payOptions } from '@/engine/proposals'
+import { catchesOf, complicationName, draftResource, payOptions } from '@/engine/proposals'
+import { draftStrategy } from '@/engine/strategyProposal'
 import { TRAITS, type TraitId } from '@/engine/traits'
 import type { GameState, Strategy, UpgradeTarget } from '@/engine/types'
 import { draftUnit } from '@/engine/unitProposal'
@@ -412,8 +413,14 @@ function printVerdict(s: GameState, v: Verdict) {
     say(`  Its nature [option <n>]:`)
     v.options.forEach((ids, i) => say(`    ${i}${i === v.choice ? ' *' : ''}: ${ids.map(traitLine).join(' · ')}`))
   } else if (v.kind === 'strategy') {
+    say(`  ways to do it [option <n>]:`)
+    v.options.forEach((o, i) => {
+      const od = draftStrategy(s, { ...v, choice: i })
+      const made = `${fmt(od.strategy.amount)} ${findResource(s, od.strategy.outputId)?.name} per unit`
+      say(`    ${i}${i === v.choice ? ' *' : ''}: ${od.strategy.inputs.length ? `${describeFlows(s, od.strategy.inputs)} → ` : 'no inputs → '}${made}${strategyTags(s, od.strategy)}`)
+    })
     const d = draftStrategy(s, v)
-    say(`  → ${describeFlows(s, d.strategy.inputs)} → ${fmt(d.strategy.amount)} ${findResource(s, d.strategy.outputId)?.name} per unit${d.strategy.quirk ? ` · quirk ${d.strategy.quirk}` : ''}${strategyTags(s, d.strategy)}`)
+    if (d.strategy.quirk) say(`  quirk ${d.strategy.quirk}`)
     say(d.minIQ ? research(d) : '  → ready at once')
   } else if (v.kind === 'unit') {
     const d = draftUnit(s, v)
@@ -442,7 +449,7 @@ function printVerdict(s: GameState, v: Verdict) {
   }
   const extra = catchesOf(v)
   if (extra.length) say(`  catches taken: ${extra.map((c) => complicationName(c).name).join(', ')}`)
-  const pays = v.kind === 'mind' ? [] : payOptions(v).filter((p) => p.p > 0)
+  const pays = v.kind === 'mind' || v.kind === 'strategy' ? [] : payOptions(v).filter((p) => p.p > 0)
   if (pays.length > 1) {
     const now = v.picks.pay ?? pays[0]!.resourceId
     say(`  paid in [pick pay <resourceId>]: ${pays.map((p) => `${p.resourceId}${p.resourceId === now ? ' (chosen)' : ''} ${pct(p.p)}`).join(', ')}`)
@@ -504,7 +511,8 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   propose create '{"target":{"kind":"resource","id":".."},"name":"..","description":".."}'
                                (the week's action: make something now; target kind "unit" makes units with cap. Pick an offer with option <n>)
   propose storage '{"resourceId":"..","name":"..","description":".."}'   (three expansions; pick with option <n>)
-  propose strategy '{"name":"..","description":"..","unitId":"..","inputIds":[],"outputId":".."}'
+  propose strategy '{"name":"..","description":"..","unitId":"..","outputId":".."}'
+                               (Jev offers three ways, each using up different resources: none allowed for tier 0-1 outputs, 1+ for tier 2, two different for tier 3+; pick with option <n>)
   propose unit '{"name":"..","description":"..","first":false}'   (Jev picks its tier, value and what it runs on)
   propose sourcing '{"unitId":"..","name":"..","description":".."}'   (a contract: how many you may own, and their parts; pick with option <n>)
   propose mind '{"name":"..","description":".."}'

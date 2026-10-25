@@ -106,9 +106,9 @@ const emit = defineEmits<{
 const game = useGameStore()
 
 const pct = (p: number) => `${Math.round(p * 100)}%`
-/** Jev's favourite stocks to pay with; the player may choose among them. A platform's takes each name their own. */
+/** Jev's favourite stocks to pay with; the player may choose among them. A platform's takes each name their own, and the game pays for a strategy. */
 const payChoices = computed(() =>
-  props.verdict.kind === 'plan' || props.verdict.kind === 'mind' ? [] : payOptions(props.verdict).filter((p) => p.p > 0)
+  ['plan', 'mind', 'strategy'].includes(props.verdict.kind) ? [] : payOptions(props.verdict).filter((p) => p.p > 0)
 )
 const resourceLabel = (id: string) => {
   const r = findResource(game.state, id)

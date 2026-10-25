@@ -42,7 +42,9 @@ import {
   STRATEGY_PRESETS,
   UNIT_PRESETS
 } from '../presets'
-import { acceptResource, acceptStrategy, judgeResource, judgeStrategy, precheckStrategy } from '../proposals'
+import { acceptResource, floorIQ, judgeResource } from '../proposals'
+import { acceptStrategy, judgeStrategy, precheckStrategy } from '../strategyProposal'
+import { applyVerdict, bankVerdict } from '../banking'
 import { priceCost } from '../research'
 import type { Delivery, GameState, Research, Sourcing, Strategy } from '../types'
 import { acceptSourcing, iqTag, judgeSourcing } from '../sourcingProposal'
@@ -296,13 +298,13 @@ describe('create', () => {
     expect(floor.scalars.efficiency).toBe(B.EFFICIENCY[0]![1])
     // Only ideas of the same kind are asked about.
     const strategy = new FakeJudge({ advancement: score(0) })
-    await judgeStrategy(powerWorld(), strategy, { name: 'Coding', description: '', unitId: 'gpu', inputIds: [], outputId: MONEY_ID })
+    await judgeStrategy(powerWorld(), strategy, { name: 'Coding', description: '', unitId: 'gpu', outputId: MONEY_ID })
     expect(Object.keys(strategy.calls[0]!.questions)).not.toContain('repeat')
   })
 
   it('makes a repeated strategy one step less effective', async () => {
     let s = powerWorld()
-    const spec = { name: 'Freelance coding', description: 'Take coding jobs.', unitId: 'farm', inputIds: [], outputId: MONEY_ID }
+    const spec = { name: 'Freelance coding', description: 'Take coding jobs.', unitId: 'farm', outputId: MONEY_ID }
     s = acceptStrategy(s, await judgeStrategy(s, new FakeJudge({ advancement: score(0), efficiency: score(2) }), spec)).state
     s = runWeek(s)
     const v = await judgeStrategy(s, new FakeJudge({ advancement: score(0), efficiency: score(2), repeat: choice('i0') }), { ...spec, name: 'Gig coding' })
@@ -389,12 +391,12 @@ describe('create', () => {
       server(s).hardware.iq = iq
       return (await judgeCreate(s, new FakeJudge(), createSpec({ target: { kind: 'resource', id: 'gold' } }))).scalars
     }
-    // Tier 2 needs IQ 140: 25 short is gentler than 35 short, within the same band.
-    const near = await reach(115)
-    const far = await reach(105)
+    // Tier 2 needs IQ 150: 25 short is gentler than 35 short, within the same band.
+    const near = await reach(125)
+    const far = await reach(100)
     expect(near.reach).toBeLessThan(1)
     expect(far.reach).toBeLessThan(near.reach)
-    expect((await reach(140)).reach).toBe(1)
+    expect((await reach(150)).reach).toBe(1)
     expect((await reach(200)).iq).toBe(4)
     // Industry grows with the worth of the units you own, up to ×10.
     s.units.push(newUnit({ id: 'big', name: 'Big', value: 4000, count: 1e6 }))
@@ -421,7 +423,7 @@ describe('the weekly action', () => {
     let s = acceptCreate(s0, v).state
     expect(s.proposedThisWeek).toBe(true)
     // Every research proposal is refused until next week; resources aren't.
-    expect(precheckStrategy(s, { name: 'Quant trading', description: '', unitId: 'gpu', inputIds: [], outputId: MONEY_ID })).toMatch(/already taken this week’s action/)
+    expect(precheckStrategy(s, { name: 'Quant trading', description: '', unitId: 'gpu', outputId: MONEY_ID })).toMatch(/already taken this week’s action/)
     expect(precheckCreate(s, createSpec({ name: 'Quant trading' }))).toMatch(/already taken/)
     expect(precheckMind(s, mindSpec())).toMatch(/already taken/)
     await expect(judgeUpgrade(s, new FakeJudge(), { kind: 'mind', id: SERVER_ID })).rejects.toThrow(/already taken/)
@@ -449,7 +451,6 @@ describe('proposals', () => {
       name: 'Freelance coding',
       description: '',
       unitId: 'farm',
-      inputIds: [],
       outputId: MONEY_ID
     })
     const { state, outcome } = acceptStrategy(s0, v)
@@ -458,9 +459,64 @@ describe('proposals', () => {
     expect(state.strategies.find((x) => x.name === 'Freelance coding')).toMatchObject({ amount: 670 })
   })
 
+  describe('strategy options', () => {
+    const spec = { name: 'Make money', description: '', unitId: 'farm', outputId: MONEY_ID }
+    /** Money at the given tier, among Power, Steel and `extra` more resources. */
+    const world = (tier: number, extra = 0) => {
+      const s = powerWorld()
+      findResource(s, MONEY_ID)!.tier = tier
+      for (let i = 0; i < extra; i++) s.resources.push(newResource({ id: `r${i}`, name: `R${i}`, value: 1, cap: ROOMY }))
+      return s
+    }
+    const ask = (s: GameState) =>
+      judgeStrategy(s, new FakeJudge({ advancement: score(0), inputs: choice('steel', { steel: 0.5, power: 0.3, r0: 0.1 }) }), spec)
+    const inputsOf = (v: { options: { inputIds: string[] }[] }) => v.options.map((o) => o.inputIds)
+
+    it('always offers a way with no inputs for tier 0 and 1 outputs', async () => {
+      for (const tier of [0, 1]) {
+        const v = await ask(world(tier))
+        expect(inputsOf(v)).toEqual([[], ['steel'], ['steel', 'power']])
+      }
+    })
+
+    it('needs at least one input for a tier 2 output', async () => {
+      const v = await ask(world(2))
+      expect(inputsOf(v)).toEqual([['steel'], ['power'], ['steel', 'power']])
+    })
+
+    it('needs two different inputs for a tier 3 output', async () => {
+      const v = await ask(world(3, 1))
+      expect(inputsOf(v)).toEqual([['steel', 'power'], ['steel', 'r0'], ['power', 'r0']])
+      const s = world(3)
+      s.resources = s.resources.filter((r) => r.id !== 'steel')
+      expect(precheckStrategy(s, spec)).toMatch(/2 different inputs/)
+    })
+
+    it('makes the chosen option’s inputs the strategy’s', async () => {
+      const s = world(0)
+      const v = await ask(s)
+      const made = (pick: number) =>
+        acceptStrategy(s, { ...v, choice: pick }).state.strategies.find((x) => x.name === 'Make money')!.inputs.map((i) => i.resourceId)
+      expect(made(0)).toEqual([])
+      expect(made(2)).toEqual(['steel', 'power'])
+    })
+
+    it('banks every option as an alternative, or applies just one', async () => {
+      const s = world(0)
+      const v = await ask(s)
+      const banked = bankVerdict(s, v).state
+      expect(banked.research).toHaveLength(3)
+      expect(new Set(banked.research.map((r) => r.group)).size).toBe(1)
+      expect(banked.research.map((r) => r.name)).toContain('Make money (no inputs)')
+      const applied = applyVerdict(s, v, 1).state
+      expect(applied.research).toHaveLength(0)
+      expect(applied.strategies.find((x) => x.name === 'Make money')!.inputs.map((i) => i.resourceId)).toEqual(['steel'])
+    })
+  })
+
   it('needs an industry unit to run a strategy: minds don’t run strategies', () => {
     const s = moneyWorld()
-    const spec = { name: 'Freelance coding', description: '', unitId: SERVER_ID, inputIds: [], outputId: MONEY_ID }
+    const spec = { name: 'Freelance coding', description: '', unitId: SERVER_ID, outputId: MONEY_ID }
     expect(precheckStrategy(s, spec)).toMatch(/industry unit first/)
   })
 
@@ -471,7 +527,6 @@ describe('proposals', () => {
       name: 'Quant trading',
       description: '',
       unitId: 'gpu',
-      inputIds: [],
       outputId: MONEY_ID
     })
     // Jev chooses among what you have or make: Steel, Money the servers earn, and Power the farm makes.
@@ -481,7 +536,7 @@ describe('proposals', () => {
     const { state, outcome } = acceptStrategy(s0, v)
     expect(outcome.kind).toBe('research')
     const r = state.research.find((x) => x.name === 'Quant trading')!
-    expect(r.minIQ).toBe(170)
+    expect(r.minIQ).toBe(175)
     // Six weeks of ten GPU Servers' work (667 each), in Steel worth 1 each.
     expect(r.cost).toEqual([{ resourceId: 'steel', amount: 40000 }])
     expect(state.strategies.some((x) => x.name === 'Quant trading')).toBe(false)
@@ -492,7 +547,7 @@ describe('proposals', () => {
     const v = await judgeStrategy(
       s0,
       new FakeJudge({ advancement: score(3), pay: choice('steel', { steel: 0.5, money: 0.4 }) }),
-      { name: 'Quant trading', description: '', unitId: 'gpu', inputIds: [], outputId: MONEY_ID }
+      { name: 'Quant trading', description: '', unitId: 'gpu', outputId: MONEY_ID }
     )
     expect(acceptStrategy(s0, v).state.research[0]!.cost).toEqual([
       { resourceId: 'steel', amount: 20000 },
@@ -507,7 +562,6 @@ describe('proposals', () => {
         name: 'Self power',
         description: '',
         unitId: 'gpu',
-        inputIds: [],
         outputId: 'power'
       })
     ).rejects.toThrow(/never needs what it makes/)
@@ -535,7 +589,7 @@ describe('proposals', () => {
     const v = await judgeStrategy(
       s,
       new FakeJudge({ advancement: score(0), efficiency: torn, catch: choice('slow-to-start') }),
-      { name: 'Write marketing copy', description: '', unitId: 'farm', inputIds: [], outputId: MONEY_ID }
+      { name: 'Write marketing copy', description: '', unitId: 'farm', outputId: MONEY_ID }
     )
     expect(v.torn).toHaveLength(1)
     const t = v.torn[0]!
@@ -600,7 +654,7 @@ describe('proposals', () => {
     const tier = v.options[1]!.tier
     const r = acceptUnit(s, v).state.research[0]!
     expect(r.effect.kind === 'unit' && r.effect.unit).toMatchObject({ tier })
-    expect(r.minIQ).toBe(B.TIERS[tier]![1])
+    expect(r.minIQ).toBe(floorIQ(B.TIERS[tier]![1]))
   })
 
   it('offers the first unit takes at tier 0 only, differing in worth', async () => {
@@ -829,7 +883,7 @@ describe('sourcing', () => {
   it('is cheaper for a mind well above the unit’s tier, and says so', async () => {
     const s = world()
     const plain = (await judgeSourcing(s, new FakeJudge(), spec)).options[0]!
-    server(s).hardware.iq = 440
+    server(s).hardware.iq = 500
     const smart = (await judgeSourcing(s, new FakeJudge(), spec)).options[0]!
     expect(plain.iqEfficiency).toBe(1)
     expect(smart.iqEfficiency).toBe(0.5)
@@ -882,7 +936,7 @@ describe('storage', () => {
     const v = await judgeStorage(s, judge, spec)
     expect(judge.calls).toHaveLength(1)
     expect(v.rejected).toBeNull()
-    expect(v.scalars).toMatchObject({ reach: R, capture: 0.5, ceilingLabel: 'a quintillion', neededIQ: 100 })
+    expect(v.scalars).toMatchObject({ reach: R, capture: 0.5, ceilingLabel: 'ten quintillion', neededIQ: 100 })
     expect(v.options.map((o) => o.added)).toEqual(sizes(R, 0.5))
     expect(v.options.map((o) => o.label)).toEqual(['Careful', 'Pushed', 'All in'])
     expect(v.options.map((o) => o.risky)).toEqual([false, false, true])
@@ -898,15 +952,15 @@ describe('storage', () => {
   it('cuts options to what can exist, and refuses at the ceiling', async () => {
     const s = world()
     // A hundred thousand can exist; Steel already holds W.
-    const v = await judgeStorage(s, new FakeJudge({ efficiency: score(4), reach: score(4), ceiling: score(3) }), spec)
+    const v = await judgeStorage(s, new FakeJudge({ efficiency: score(4), reach: score(4), ceiling: score(1) }), spec)
     const room = 1e5 - W
     expect(v.options.map((o) => o.added)).toEqual([B.nice(4 * R * 0.25), room, room])
     expect(v.options.map((o) => o.limitedBy)).toEqual([null, 'ceiling', 'ceiling'])
     // Cut to the same size, All in costs no more than Pushed.
     expect(v.options[2]!.label).toMatch(/at the ceiling/)
     expect(v.options[2]!.cost).toEqual(v.options[1]!.cost)
-    const full = await judgeStorage(s, new FakeJudge({ ceiling: score(2) }), spec)
-    expect(full.rejected).toMatch(/Only about ten thousand Steel can exist/)
+    const full = await judgeStorage(s, new FakeJudge({ ceiling: score(0) }), spec)
+    expect(full.rejected).toMatch(/Only about a thousand Steel can exist/)
   })
 
   it('sizes Pushed or All in for the IQ an advanced way needs, with a bonus', async () => {
@@ -1358,7 +1412,7 @@ describe('upgrades', () => {
     const offer = await judgeUpgrade(s, new FakeJudge({ best: pickCandidate('Better earn') }), { kind: 'unit', id: 'gpu' })
     const first = offer.options.find((o) => o.key === 'output_earn')!
     expect(first.tier).toBe(2)
-    expect(first.minIQ).toBe(B.TIERS[2]![1])
+    expect(first.minIQ).toBe(floorIQ(B.TIERS[2]![1]))
     expect(worth(first.cost)).toBeCloseTo(B.TIERS[2]![2])
     // Jev doesn't price an industry upgrade.
     expect(offer.options.every((o) => o.tier !== undefined)).toBe(true)

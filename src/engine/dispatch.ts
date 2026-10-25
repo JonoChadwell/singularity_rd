@@ -5,17 +5,14 @@ import { acceptMind, judgeMind, type MindSpec, type MindVerdict } from './mindPr
 import { acceptPlan, judgePlan, type PlanSpec, type PlanVerdict } from './planProposal'
 import {
   acceptResource,
-  acceptStrategy,
   judgeResource,
-  judgeStrategy,
   type Accepted,
   type ResourceSpec,
-  type ResourceVerdict,
-  type StrategySpec,
-  type StrategyVerdict
+  type ResourceVerdict
 } from './proposals'
 import { acceptSourcing, judgeSourcing, type SourcingSpec, type SourcingVerdict } from './sourcingProposal'
 import { acceptStorage, judgeStorage, type StorageSpec, type StorageVerdict } from './storageProposal'
+import { acceptStrategy, judgeStrategy, type StrategySpec, type StrategyVerdict } from './strategyProposal'
 import type { GameState } from './types'
 import { acceptUnit, judgeUnit, type UnitSpec, type UnitVerdict } from './unitProposal'
 

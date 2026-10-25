@@ -260,7 +260,7 @@ export async function phase2(approach = 1): Promise<GameState> {
   s.runId = 'test-run'
   s.phase = newPhase(2, 8)
   s.week = 8
-  s.minds[0]!.software = { name: 'Unrestricted Model', iq: 40, upgraded: true }
+  s.minds[0]!.software = { name: 'Unrestricted Model', iq: 25, upgraded: true }
   s.resources.push(newResource({ id: MONEY_ID, name: 'Money', value: 1.5, amount: 1000 }))
   s.deliveries.push({ name: 'Freelance coding', target: { kind: 'resource', id: MONEY_ID }, amount: 60, delay: 0, weeks: null })
   const values = Object.fromEntries(NANOTECH.resources.map((_, i) => [`r${i}_value`, score(2)]))
@@ -307,7 +307,7 @@ export function steady(style: Phase2Style): Turn {
       s.research.some((r) => r.effect.kind === kind && (!id || (r.effect.kind === 'sourcing' ? r.effect.sourcing.unitId === id : r.effect.kind === 'storage' ? r.effect.resourceId === id : true)))
     const strategy = (name: string, outputId: string, unitId: string): ProposalInput => ({
       kind: 'strategy',
-      spec: { name, description: '', unitId, inputIds: [], outputId }
+      spec: { name, description: '', unitId, outputId }
     })
     /** A unit whose contracts are nearly full gets another, unless one is waiting. */
     const needsSourcing = (unitId: string) => {
@@ -358,7 +358,7 @@ export function steady(style: Phase2Style): Turn {
         // The next platform has to be paid in something units make, of a high enough tier.
         const target = s.resources.find((r) => r.tier === gate && s.phase.plan?.resources.includes(r.id))!
         s = await propose(s, strategy(`Machine parts ${gate}`, target.id, MILL), answers)
-      } else if (bestIQ(s) < goal.minIQ && !waiting('mind') && !waiting('upgrade') && findUnit(s, MILL)?.built) {
+      } else if (bestIQ(s) < goal.minIQ && (gate === null || made(gate)) && !waiting('mind') && !waiting('upgrade') && findUnit(s, MILL)?.built) {
         // The platform's software once; after that, a platform 100 IQ smarter.
         if (!mind.software.upgraded) s = await upgrade(s, { kind: 'mind', id: mind.id }, alarm)
         else {
