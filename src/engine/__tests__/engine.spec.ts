@@ -1173,8 +1173,9 @@ describe('intelligence systems', () => {
     const v = await judgeMind(s, new FakeJudge(), mindSpec())
     v.choice = v.options.reduce((best, o, i) => (o.step < v.options[best]!.step ? i : best), 0)
     s = acceptMind(s, v).state
-    // The software upgrade lands first, so the platform would be a step back.
-    server(s).software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
+    // The software upgrade lands first, so the platform would be a step back. Steps are random by
+    // week and at most 100, so the upgrade is bigger than any of them.
+    server(s).software = { name: 'Unrestricted Model', iq: 150, upgraded: true }
     expect(researchBlocker(s, s.research[0]!.id)).toMatch(/less smart than your current platform/)
   })
 })
