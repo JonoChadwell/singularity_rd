@@ -42,7 +42,7 @@ export const alarmLabel = (risk: Risk) => (B.ALARM[risk.level]?.[0] ?? '').split
 export const RISK_BONUS = {
   strategy: `costs half and makes ${B.RISK_OUTPUT}× as much`,
   unit: 'costs half to design, and needs half the parts',
-  mind: `costs half and is ${B.RISK_IQ_BONUS} IQ smarter`,
+  mind: 'costs half',
   upgrade: 'costs half'
 } as const
 

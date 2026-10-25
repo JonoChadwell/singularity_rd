@@ -123,7 +123,7 @@ describe('phase plans', () => {
     const d = draftPlan(s, v)
     expect(d.top.name).toBe('Story Ideas')
     expect(d.added.map((r) => [r.name, r.tier])).toEqual([['Money', 0], ['Story Ideas', 1], ['Published Novels', 0]])
-    expect(d.top.cap).toBe(B.nice(B.STORAGE_WORTH[1]! / d.top.value))
+    expect(d.top.cap).toBe(B.nice(B.STARTING_STORAGE_WORTH[1]! / d.top.value))
     expect(d.goal.cost.map((c) => c.resourceId)).toEqual([d.top.id])
   })
 
@@ -379,7 +379,7 @@ describe('risk', () => {
     expect(made(state, 'Hack banks')).toBeCloseTo(made(calm, 'Do chores') * B.RISK_OUTPUT, -1)
   })
 
-  it('makes a risky unit design cost weeks, and a risky mind smarter', async () => {
+  it('makes a risky unit design cost weeks, and a risky mind half price', async () => {
     const s = phase2(1e6)
     addRobots(s, 1).built = 1
     const risky = acceptUnit(s, await judgeUnit(s, new FakeJudge({ alarm: score(4), value: score(2) }), { name: 'Drone Swarm', description: '' })).state.research[0]!
@@ -387,7 +387,7 @@ describe('risk', () => {
     const v = await judgeMind(s, new FakeJudge({ alarm: score(2) }), { name: 'Rogue Mind', description: '' })
     const step = v.options[0]!.step
     const effect = acceptMind(s, v).state.research[0]!.effect
-    expect(effect.kind === 'mind' && effect.mind.hardware.iq).toBe(100 + step + B.RISK_IQ_BONUS)
+    expect(effect.kind === 'mind' && effect.mind.hardware.iq).toBe(100 + step)
   })
 
   it('can make an upgrade option risky', async () => {
@@ -590,7 +590,7 @@ describe('fixes', () => {
     expect(rest.every((r) => r.tier <= B.PHASE_MAX_TIER[2])).toBe(true)
     expect([...new Set(d.state.resources.map((r) => r.tier))].sort()).toEqual([0, 1, 2, 3])
     // Each keeps the storage of its tier.
-    for (const r of d.added) expect(r.cap).toBe(B.nice(B.STORAGE_WORTH[r.tier]! / r.value))
+    for (const r of d.added) expect(r.cap).toBe(B.nice((B.STARTING_STORAGE_WORTH[Math.min(r.tier, B.STARTING_STORAGE_WORTH.length - 1)] ?? 0) / r.value))
     expect(d.goal.cost).toEqual([expect.objectContaining({ resourceId: d.top.id })])
   })
 

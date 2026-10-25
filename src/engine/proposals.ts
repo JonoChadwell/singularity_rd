@@ -119,13 +119,13 @@ export type Payable = (r: Resource) => boolean
  * Which resources a research would use up. Jev ranks the stocks; the cost goes to the most
  * fitting, and a close second shares it. With only one stock, there's nothing to ask.
  */
-export function payQuestion(state: GameState, what: string, allow?: Payable): Record<string, JevQuestion> {
+export function payQuestion(state: GameState, what: string, allow?: Payable, verb = 'Researching'): Record<string, JevQuestion> {
   const stocks = spendable(state, allow)
   if (stocks.length < 2) return {}
   return {
     pay: {
       type: 'choice',
-      instructions: `Researching ${what} would use up some of the AI's resources: materials for experiments and prototypes, data, or money to fund it. Which would it most naturally use up?`,
+      instructions: `${verb} ${what} would use up some of the AI's resources: materials for experiments and prototypes, data, or money to fund it. Which would it most naturally use up?`,
       criteria: options(stocks)
     }
   }

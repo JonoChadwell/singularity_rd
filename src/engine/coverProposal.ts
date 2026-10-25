@@ -63,7 +63,7 @@ export async function judgeCover(state: GameState, judge: Judge, raw: CoverSpec)
       instructions: 'How well would it keep humans from acting against the AI, and how hard is it to pull off?',
       criteria: scale(B.COVER)
     },
-    ...payQuestion(state, `cover: ${spec.name.toLowerCase()}`)
+    ...payQuestion(state, `cover:${spec.name.toLowerCase()}`)
   }
   const answers = await judge.ask(
     proposalText(state, [

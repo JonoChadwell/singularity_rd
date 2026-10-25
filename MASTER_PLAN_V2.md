@@ -384,7 +384,7 @@ tiers them that way unprompted (checked against the real Jev). The first unit ca
 | `SOFTWARE_STEPS` | ⅓, ½, ⅔ of the gap, floored to 5%, at least 5% | Replaces +20% / +50% |
 | `MIND_UPGRADE_SHARE` | 0.2 of the design-cost difference | Hardware ×2.5 |
 | `ALARM` | 0, 0, 2, 4, 8 weeks | |
-| `RISK` | Cost ×0.5; income ×2, strategy ×1.5, parts ×0.5, mind IQ ×1.2 | |
+| `RISK` | Cost ×0.5; income ×2, strategy ×1.5, parts ×0.5 | |
 | `NOTICE_FROM` | 10,000 units: −1 week, then a week more for each tenfold (−2, −3, …); twice that if risky | |
 | `COVER` | 2 / 4 / 6 / 10 weeks at IQ 100 / 110 / 150 / 250; ×0.7 per earlier cover; cost 0.25 weeks of output per week added, paid at once | |
 

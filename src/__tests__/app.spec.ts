@@ -128,7 +128,7 @@ describe('App', () => {
 
   it('lists Create payouts still to come in the resource’s hover card', async () => {
     const html = await render((game) => {
-      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 4000 }))
+      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 19000 }))
       const pay = (name: string, amount: number, delay: number, weeks: number | null) =>
         game.state.deliveries.push({ name, target: { kind: 'resource', id: MONEY_ID }, amount, delay, weeks })
       pay('Royalties', 900, 3, 1)
@@ -157,7 +157,7 @@ describe('App', () => {
       game.state.units.push(newUnit({ id: 'bot', name: 'Bot', count: 3, value: 10 }), newUnit({ id: 'new', name: 'Fresh Design', value: 10 }))
       game.state.sourcing.push({ id: 'deal', unitId: 'bot', name: 'Bulk order', description: '', parts: [{ resourceId: MONEY_ID, amount: 10 }], total: 25, used: 3, risky: true })
     })
-    for (const text of ['1,500', '/ 5,000', '+ Store', 'Bulk order', '3/25', 'risky', 'Find sourcing', 'No sourcing yet']) {
+    for (const text of ['1,500', '/ 20.0k', '+ Store', 'Bulk order', '3/25', 'risky', 'Find sourcing', 'No sourcing yet']) {
       expect(html).toContain(text)
     }
   })

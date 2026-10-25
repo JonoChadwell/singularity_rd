@@ -92,7 +92,7 @@ the richest stock each week and simply stops when it runs out.
 
 IQ rises in flat steps over your best IQ, not multipliers, for both a new platform and a software
 upgrade, at most **+100** each. This replaces the old "about half the target IQ" leap rule and the
-1.5× software ceiling. A risky platform (Phase 2) gets +20 IQ from the same design and costs half.
+1.5× software ceiling. A risky platform (Phase 2) costs half.
 
 Intended Phase 2 path with every option at full size:
 

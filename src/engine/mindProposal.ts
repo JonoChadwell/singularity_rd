@@ -222,8 +222,7 @@ export function draftMind(state: GameState, v: MindVerdict): { mind: Mind; minIQ
     name: v.spec.name,
     description: v.spec.description || v.spec.name,
     icon: B.icon(read.choice('icon', Object.keys(B.ICONS))),
-    // A risky design cuts corners, and gets more out of the same hardware.
-    hardware: { name: v.spec.name, iq: iq + (v.risk ? B.RISK_IQ_BONUS : 0) },
+    hardware: { name: v.spec.name, iq },
     software: { name: DEFAULT_SOFTWARE, iq: 0, upgraded: false },
     traits: pick ? [pick.perk, pick.drawback] : [],
     plausibility: v.plausibility
