@@ -5,6 +5,7 @@ import { contractsFor, currentIQ, findMind, findResource, findStrategy, findUnit
 import {
   addResearch,
   claimProposal,
+  currentIQBar,
   floorIQ,
   newResearch,
   payers,
@@ -340,7 +341,7 @@ export async function judgeUpgrade(state: GameState, judge: Judge, target: Upgra
           name: sw!.upgraded ? `${c.name} (+${step} IQ, replacing +${sw!.iq})` : `${c.name} (+${step} IQ)`,
           changes,
           p,
-          minIQ: floorIQ(before),
+          minIQ: currentIQBar(before),
           cost: priceCost(state, risk ? worth * B.RISK_COST : worth, pay),
           risk,
           step

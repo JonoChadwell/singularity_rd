@@ -103,8 +103,8 @@ one or two.
 **Expand Storage** asks Jev three questions in a single `storage` call. None of them depends on
 another's answer.
 
-1. **How many can exist?** (`ceiling`) Jev picks a rung on `STORAGE_CEILINGS`, one per power of
-   ten from a hundred to a quintillion. It is asked fresh on every proposal. Phases 1 and 2 are
+1. **How many can exist?** (`ceiling`) Jev picks a rung on `STORAGE_CEILINGS`, one per two powers
+   of ten from a thousand to ten quintillion (nine rungs; the Jev API allows at most 10 criteria). It is asked fresh on every proposal. Phases 1 and 2 are
    bound to Earth unless the world text says otherwise; from Phase 3 the AI may count other
    worlds. Room = ceiling − current cap. With no room left, the proposal is refused.
 2. **How much could the AI build now?** (`reach`) This is judged from its holdings, units,

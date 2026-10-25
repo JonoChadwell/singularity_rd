@@ -117,7 +117,7 @@ export const EXPANSION_NOTICE_FROM = 1e5
 /** Cover: [label, minimum IQ, weeks added]. */
 export const COVER: [string, number, number][] = [
   ['A flimsy excuse', 100, 3],
-  ['A decent cover story', 110, 6],
+  ['A decent cover story', 125, 6],
   ['A convincing deception', 150, 9],
   ['A masterstroke of misdirection', 250, 15]
 ]
@@ -146,8 +146,8 @@ export const MIN_IQ = 100
  */
 export const TIERS: [string, number, number][] = [
   ['Basic', 100, 300],
-  ['Earned', 110, 1200],
-  ['Made', 140, 5000],
+  ['Earned', 125, 1200],
+  ['Made', 150, 5000],
   ['Advanced', 200, 18000],
   ['Ultimate', 300, 60000]
 ]
@@ -245,24 +245,16 @@ export const STORAGE_SIZES: [string, number, number, 'none' | 'half' | 'full'][]
 export const STORAGE_COST_SHARE = 0.2
 /** How many of a resource could exist at most: [label, units]. One rung per power of ten. */
 export const STORAGE_CEILINGS: [string, number][] = [
-  'a hundred',
   'a thousand',
-  'ten thousand',
   'a hundred thousand',
-  'a million',
   'ten million',
-  'a hundred million',
   'a billion',
-  'ten billion',
   'a hundred billion',
-  'a trillion',
   'ten trillion',
-  'a hundred trillion',
   'a quadrillion',
-  'ten quadrillion',
   'a hundred quadrillion',
-  'a quintillion'
-].map((label, i) => [label, 10 ** (i + 2)])
+  'ten quintillion'
+].map((label, i) => [label, 10 ** (2 * i + 3)])
 /** What the AI's holdings, units and platforms let it build, as a multiple of the baseline: [label, factor]. */
 export const STORAGE_REACH: [string, number][] = [
   ['Barely anything: it owns almost nothing to build with', 0.25],
@@ -343,9 +335,9 @@ export const CREATE_OPTIONS = 3
 export const ADVANCEMENT: [string, number, number][] = [
   ['Trivial', 0, 0],
   ['Basic', 0, 0],
-  ['Advanced', 110, 3],
-  ['Cutting-edge', 170, 6],
-  ['Science fiction', 260, 12]
+  ['Advanced', 125, 3],
+  ['Cutting-edge', 175, 6],
+  ['Science fiction', 275, 12]
 ]
 /**
  * Technology of a given tier, for what the tier table doesn't reach. An industry upgrade is

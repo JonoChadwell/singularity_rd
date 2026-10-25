@@ -144,7 +144,7 @@ describe('balance', () => {
       expect(B.reachFactor(t)).toBeLessThan(last)
       last = B.reachFactor(t)
     }
-    expect(B.iqTier(170)).toBeCloseTo(2.5)
+    expect(B.iqTier(175)).toBeCloseTo(2.5)
     expect(B.iqTier(500)).toBeCloseTo(5)
   })
 })

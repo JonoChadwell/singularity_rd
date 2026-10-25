@@ -47,7 +47,7 @@
       </header>
       <div class="small row cost">
         <span class="muted">Uses up</span>
-        <span>{{ r.cost.length ? describeCost(game.state, r.cost) : 'nothing: you have nothing to spend yet' }}</span>
+        <span>{{ r.cost.length ? describeCost(game.state, r.cost) : 'nothing' }}</span>
       </div>
       <div v-if="r.risk" class="small bad">
         ⚠️ Risky: {{ alarmLabel(r.risk).toLowerCase() }}. −{{ r.risk.weeks }} weeks when you research it.

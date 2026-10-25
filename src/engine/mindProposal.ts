@@ -9,7 +9,7 @@ import {
   baseVerdict,
   claimProposal,
   cleanText,
-  floorIQ,
+  currentIQBar,
   gate,
   iconQuestion,
   newResearch,
@@ -229,7 +229,7 @@ export function draftMind(state: GameState, v: MindVerdict): { mind: Mind; minIQ
   })
   return {
     mind,
-    minIQ: floorIQ(bestIQ(state)),
+    minIQ: currentIQBar(bestIQ(state)),
     cost: priceCost(
       state,
       B.platformPrice(bestMind(state)?.hardware.iq ?? B.START_IQ, iq) * costMultiplier(v.plausibility, v.bar) * (v.risk ? B.RISK_COST : 1),
