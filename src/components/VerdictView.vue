@@ -21,22 +21,6 @@
       <p v-if="verdict.repeatOf" class="warn small">
         🔁 Jev thinks you’ve done this before ({{ verdict.repeatOf }}), so it’s one step less effective.
       </p>
-      <fieldset v-if="payChoices.length > 1" class="torn pay">
-        <legend class="small">Pay for it with</legend>
-        <label v-for="(p, i) in payChoices" :key="p.resourceId" class="choice">
-          <input
-            type="radio"
-            name="pay"
-            :value="p.resourceId"
-            :checked="(verdict.picks.pay ?? payChoices[0]!.resourceId) === p.resourceId"
-            @change="emit('pick', 'pay', p.resourceId)"
-          />
-          <span>
-            {{ resourceLabel(p.resourceId) }}
-            <span class="muted small">{{ i === 0 ? '(Jev’s pick)' : `(Jev: ${pct(p.p)})` }}</span>
-          </span>
-        </label>
-      </fieldset>
       <fieldset v-for="t in verdict.torn" :key="t.key" class="torn">
         <legend class="small">Jev is torn on {{ t.topic }}.</legend>
         <label v-for="(o, i) in t.options" :key="o.value" class="choice">
@@ -91,8 +75,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { findResource } from '@/engine/model'
-import { complicationName, payOptions } from '@/engine/proposals'
+import { complicationName } from '@/engine/proposals'
 import { RISK_BONUS, riskText } from '@/engine/risk'
 import { useGameStore, type Verdict } from '@/stores/game'
 
@@ -106,14 +89,6 @@ const emit = defineEmits<{
 const game = useGameStore()
 
 const pct = (p: number) => `${Math.round(p * 100)}%`
-/** Jev's favourite stocks to pay with; the player may choose among them. A platform's takes each name their own, and the game pays for a strategy, and a unit's takes each carry their own. */
-const payChoices = computed(() =>
-  ['plan', 'mind', 'strategy', 'unit'].includes(props.verdict.kind) ? [] : payOptions(props.verdict).filter((p) => p.p > 0)
-)
-const resourceLabel = (id: string) => {
-  const r = findResource(game.state, id)
-  return r ? `${r.icon} ${r.name}` : id
-}
 const riskLine = computed(() => {
   const v = props.verdict
   return v.risk && v.kind in RISK_BONUS ? riskText(v.risk, v.kind as keyof typeof RISK_BONUS) : ''

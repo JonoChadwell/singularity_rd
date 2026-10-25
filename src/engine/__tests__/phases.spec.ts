@@ -547,8 +547,6 @@ describe('paying for research', () => {
     const v = await judgeStrategy(s, new FakeJudge({ advancement: score(3), pay: choice(MONEY_ID, { [MONEY_ID]: 0.7, steel: 0.2 }) }), spec)
     const payers = () => acceptStrategy(s, v).state.research[0]!.cost.map((c) => c.resourceId)
     expect(payers()).toEqual([MONEY_ID])
-    v.picks.pay = 'steel'
-    expect(payers()).toEqual([MONEY_ID])
   })
 })
 

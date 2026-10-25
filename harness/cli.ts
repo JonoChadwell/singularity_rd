@@ -68,7 +68,7 @@ import { resourceTrait, traitLine } from '@/engine/resourceTraits'
 import { iqTag } from '@/engine/sourcingProposal'
 import { describeCatch } from '@/engine/storageProposal'
 import { proposalText } from '@/engine/stateText'
-import { catchesOf, complicationName, draftResource, payOptions } from '@/engine/proposals'
+import { catchesOf, complicationName, draftResource } from '@/engine/proposals'
 import { draftStrategy } from '@/engine/strategyProposal'
 import { TRAITS, type TraitId } from '@/engine/traits'
 import type { GameState, Strategy, UpgradeTarget } from '@/engine/types'
@@ -449,11 +449,6 @@ function printVerdict(s: GameState, v: Verdict) {
   }
   const extra = catchesOf(v)
   if (extra.length) say(`  catches taken: ${extra.map((c) => complicationName(c).name).join(', ')}`)
-  const pays = v.kind === 'mind' || v.kind === 'strategy' ? [] : payOptions(v).filter((p) => p.p > 0)
-  if (pays.length > 1) {
-    const now = v.picks.pay ?? pays[0]!.resourceId
-    say(`  paid in [pick pay <resourceId>]: ${pays.map((p) => `${p.resourceId}${p.resourceId === now ? ' (chosen)' : ''} ${pct(p.p)}`).join(', ')}`)
-  }
 }
 
 function printOffer(s: GameState, offer: UpgradeOffer) {

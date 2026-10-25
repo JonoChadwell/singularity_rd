@@ -13,8 +13,7 @@ import {
   logProposal,
   newResearch,
   options,
-  payers,
-  payOptions,
+  payerPerTake,
   payQuestion,
   precheckName,
   proposalSlotBlocker,
@@ -341,13 +340,13 @@ export function unitOptions(
     }
   }
   const variants = traitVariants(traitOdds)
-  const payChoices = payOptions({ answers }).filter((p) => p.p > 0)
+  const pay = payerPerTake(answers, chosen.length)
   return chosen.map(({ tier, band, upkeepId }, i) => ({
     tier,
     band,
     upkeepId,
     traits: variants[i % variants.length]!.map((t) => t.trait),
-    pay: payChoices.length ? payChoices[i % payChoices.length]!.resourceId : undefined
+    pay: pay[i]
   }))
 }
 
@@ -404,7 +403,7 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
 
   // Research is priced by tier, not by what one costs: a cheap unit can be very advanced.
   const [, minIQ, worth] = B.pick(B.TIERS, tier)
-  return { unit, minIQ: floorIQ(minIQ), cost: costFor(state, pay ? { ...v, picks: { ...v.picks, pay } } : v, worth) }
+  return { unit, minIQ: floorIQ(minIQ), cost: costFor(state, v, worth, undefined, pay) }
 }
 
 export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {

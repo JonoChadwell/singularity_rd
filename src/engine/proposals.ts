@@ -134,25 +134,28 @@ export function payers(answers: Record<string, JevAnswer>): { resourceId: string
   return answers.pay ? ranked(answers.pay).map(([resourceId, p]) => ({ resourceId, p })) : []
 }
 
-/** How many of Jev's favourite payers the player may choose between. */
+/** How many of Jev's favourite payers a proposal's takes share out between them. */
 export const PAY_CHOICES = 3
 
-/** The stocks the player may choose to pay with: Jev's favourites. */
-export const payOptions = (v: Pick<VerdictBase, 'answers'>) => payers(v.answers).slice(0, PAY_CHOICES)
+/** Each of a proposal's takes' payer: Jev's favourites in turn, so the takes differ in what they use up. Undefined when there was nothing to ask. */
+export const payerPerTake = (answers: Record<string, JevAnswer>, count: number): (string | undefined)[] => {
+  const favourites = payers(answers).filter((p) => p.p > 0).slice(0, PAY_CHOICES)
+  return Array.from({ length: count }, (_, i) => favourites[i % Math.max(1, favourites.length)]?.resourceId)
+}
 
 /**
  * A research's cost: `value` worth of the resources Jev picked, more for less plausible ideas.
- * The player may pick one of Jev's favourites to pay with instead.
+ * A take may name its own `payer` instead.
  */
 export function costFor(
   state: GameState,
-  v: Pick<VerdictBase, 'answers' | 'plausibility' | 'bar'> & { risk?: Risk | null; picks?: Record<string, string> },
+  v: Pick<VerdictBase, 'answers' | 'plausibility' | 'bar'> & { risk?: Risk | null },
   value: number,
-  allow?: Payable
+  allow?: Payable,
+  payer?: string
 ): Cost {
   const risky = v.risk ? B.RISK_COST : 1
-  const pick = v.picks?.pay
-  const chosen = pick && payOptions(v).some((p) => p.resourceId === pick) ? [{ resourceId: pick, p: 1 }] : payers(v.answers)
+  const chosen = payer ? [{ resourceId: payer, p: 1 }] : payers(v.answers)
   return priceCost(state, value * costMultiplier(v.plausibility, v.bar) * risky, chosen, allow)
 }
 
