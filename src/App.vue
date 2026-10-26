@@ -10,9 +10,9 @@
         <ViewTabs />
         <div class="view">
           <CircuitBoard v-if="ui.tab === 'board'" />
-          <ResearchPanel v-else-if="ui.tab === 'research'" />
-          <ExplainerCards v-else-if="ui.tab === 'manual'" />
-          <WeekReport v-else />
+          <ResearchView v-else-if="ui.tab === 'research'" />
+          <ManualView v-else-if="ui.tab === 'manual'" />
+          <LogView v-else />
         </div>
       </section>
       <DatasheetDrawer class="right" />
@@ -29,18 +29,18 @@ import { onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 import CircuitBoard from '@/components/board/CircuitBoard.vue'
-import ExplainerCards from '@/components/ExplainerCards.vue'
-import GameOver from '@/components/GameOver.vue'
 import PlanDialog from '@/components/PlanDialog.vue'
 import ProposalDialog from '@/components/ProposalDialog.vue'
-import ResearchPanel from '@/components/ResearchPanel.vue'
 import DatasheetDrawer from '@/components/sheets/DatasheetDrawer.vue'
 import SidePanel from '@/components/shell/SidePanel.vue'
 import StatusLine from '@/components/shell/StatusLine.vue'
 import TopBar from '@/components/shell/TopBar.vue'
 import ViewTabs from '@/components/shell/ViewTabs.vue'
 import UpgradeDialog from '@/components/UpgradeDialog.vue'
-import WeekReport from '@/components/WeekReport.vue'
+import GameOver from '@/components/views/GameOver.vue'
+import LogView from '@/components/views/LogView.vue'
+import ManualView from '@/components/views/ManualView.vue'
+import ResearchView from '@/components/views/ResearchView.vue'
 
 const game = useGameStore()
 const ui = useUiStore()
