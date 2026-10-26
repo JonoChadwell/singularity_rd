@@ -1,28 +1,24 @@
 <template>
   <div class="verdict">
-    <div class="odds">
-      <div class="row">
-        <strong>Jev</strong>
-        <span class="num" :class="verdict.plausibility >= verdict.bar ? 'good' : 'bad'">
-          {{ pct(verdict.plausibility) }} plausible
-        </span>
-        <span class="muted small">· bar {{ pct(verdict.bar) }}</span>
-      </div>
-      <div class="meter bar-meter">
-        <div :style="{ width: pct(verdict.plausibility), background: verdict.plausibility >= verdict.bar ? 'var(--accent)' : 'var(--bad)' }" />
-        <span class="mark" :style="{ left: pct(verdict.bar) }" />
+    <div class="readout">
+      <AnalogGauge :value="verdict.plausibility" :bar="verdict.bar" label="plausible" />
+      <div class="lines">
+        <span class="lbl">Jev’s verdict</span>
+        <p v-if="verdict.rejected" class="stamp bad">Rejected</p>
+        <p v-else-if="verdict.duplicateOf" class="stamp ai">Duplicate</p>
+        <p v-else class="stamp good">Accepted</p>
+        <p v-if="verdict.rejected" class="bad">{{ verdict.rejected }} Reword it, or try another angle.</p>
+        <p v-else-if="verdict.duplicateOf" class="ai">Jev thinks that’s the same as {{ verdict.duplicateOf }}.</p>
+        <template v-else>
+          <p v-if="riskLine" class="risk">⚠ {{ riskLine }}</p>
+          <p v-if="verdict.repeatOf" class="warn">↻ Jev thinks you’ve done this before ({{ verdict.repeatOf }}), so it’s one step less effective.</p>
+        </template>
       </div>
     </div>
 
-    <p v-if="verdict.rejected" class="bad">✋ Rejected: {{ verdict.rejected }} Reword it, or try another angle.</p>
-    <p v-else-if="verdict.duplicateOf" class="ai">🔁 Jev thinks that’s the same as {{ verdict.duplicateOf }}.</p>
-    <template v-else>
-      <p v-if="riskLine" class="risk small">⚠️ {{ riskLine }}</p>
-      <p v-if="verdict.repeatOf" class="warn small">
-        🔁 Jev thinks you’ve done this before ({{ verdict.repeatOf }}), so it’s one step less effective.
-      </p>
+    <template v-if="!verdict.rejected && !verdict.duplicateOf">
       <fieldset v-for="t in verdict.torn" :key="t.key" class="torn">
-        <legend class="small">Jev is torn on {{ t.topic }}.</legend>
+        <legend>Jev is torn on {{ t.topic }}</legend>
         <label v-for="(o, i) in t.options" :key="o.value" class="choice">
           <input
             type="radio"
@@ -78,6 +74,7 @@ import { computed } from 'vue'
 import { complicationName } from '@/engine/proposals'
 import { RISK_BONUS, riskText } from '@/engine/risk'
 import { useGameStore, type Verdict } from '@/stores/game'
+import AnalogGauge from '../kit/AnalogGauge.vue'
 
 const props = defineProps<{ verdict: Verdict; acceptLabel?: string | null; saveLabel?: string }>()
 const emit = defineEmits<{
@@ -88,7 +85,6 @@ const emit = defineEmits<{
 }>()
 const game = useGameStore()
 
-const pct = (p: number) => `${Math.round(p * 100)}%`
 const riskLine = computed(() => {
   const v = props.verdict
   return v.risk && v.kind in RISK_BONUS ? riskText(v.risk, v.kind as keyof typeof RISK_BONUS) : ''
@@ -100,39 +96,75 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$
 .verdict {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .verdict p {
   margin: 0;
 }
 
-.bar-meter {
-  position: relative;
-  margin-top: 4px;
-  overflow: visible;
+.readout {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--lcd-bg);
+  border: 1px solid #000;
+  box-shadow: inset 0 0 20px rgb(0 0 0 / 0.6);
 }
 
-.mark {
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  width: 2px;
-  background: var(--text);
+.readout :deep(.analog) {
+  padding: 6px 4px 2px;
+  background: linear-gradient(180deg, var(--chrome-3), var(--chrome-2));
+  border: 1px solid #000;
+  box-shadow: inset 1px 1px 0 var(--bevel-hi);
+}
+
+.lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--lcd-fg);
+}
+
+.lines .lbl {
+  color: var(--lcd-dim);
+}
+
+.stamp {
+  align-self: flex-start;
+  padding: 0 10px;
+  border: 2px solid currentColor;
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transform: rotate(-2deg);
 }
 
 .risk {
-  border: 1px solid var(--bad);
-  border-radius: 6px;
-  padding: 6px 10px;
-  color: var(--bad);
+  color: var(--led-r);
 }
 
 .torn {
-  border: 1px solid rgb(167 139 250 / 0.4);
-  border-radius: 6px;
-  padding: 6px 10px 8px;
   margin: 0;
+  padding: 6px 12px 8px;
+  border: 1px solid var(--led-b);
+  background: rgb(115 208 255 / 0.05);
+}
+
+.torn legend {
+  padding: 0 6px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 12px;
+  color: var(--led-b);
 }
 
 .choice {
@@ -143,14 +175,18 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$
   padding: 2px 0;
 }
 
-.choice input {
-  width: auto;
-}
-
 .actions {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--chrome-3);
+}
+
+@media (max-width: 560px) {
+  .readout {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>
