@@ -31,16 +31,22 @@ happens when the clock runs out. In Phase 2, actions that bring that failure clo
 research, and above all expanding: sourcing contracts and storage, by how much they add) cost
 weeks off the clock; cover research buys some back.
 
+- **The bench.** The screen is styled after Shenzhen I/O. Your economy is a circuit board: each
+  resource is a bus with a gauge of its stock against its storage, the platform and each unit
+  type are chips, and each strategy is a trace from the buses it uses to the one it makes,
+  labelled with next week's flow and coloured by how well it runs (copper, amber when limited,
+  red when starved). Hover a bus for a probe of next week's flows; click anything for its
+  datasheet. The rules are in the **Manual** tab.
 - **A turn is a week.** Plan as long as you like, then press **Next week**. Settings persist, so
-  a quiet week is one click. Alerts above the button list anything that would waste the week.
+  a quiet week is one click. The **Faults** panel lists anything that would waste the week.
   The simulation is deterministic: the preview shows exactly what next week will do.
 - **One action a week:** a research proposal (a strategy, upgrade, unit, sourcing contract,
   storage expansion, intelligence system or cover) or a **Create**. Resources are free to
   propose. Doing research already on the list is instant and unlimited, but needs a **minimum
   IQ** your smartest mind must reach and a **cost in resources**.
-- **Jev's options are cards.** Whenever Jev offers three takes (strategy, unit, platform, storage,
+- **Jev's options are part datasheets.** Whenever Jev offers three takes (strategy, unit, platform, storage,
   sourcing, upgrade), they sit side by side. **Save For Later** banks all three to the Research tab for one
-  action (they are alternatives: researching one drops the others). **Apply now** on a card
+  action (they are alternatives: researching one drops the others). **Apply now** on one
   takes just that one and researches it at once; it is greyed out if your IQ or stocks fall short.
 - **Tiers.** Resources and units share one tier scale (0-4), tied to IQ. A unit making an output
   of a higher tier than its own is heavily penalised; a lower one gets a bonus. Jev sets a unit's
@@ -146,7 +152,8 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/proposals.ts`, `strategyProposal.ts`, `unitProposal.ts`, `sourcingProposal.ts`, `storageProposal.ts`, `createProposal.ts`, `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |
-| `src/components/` | UI |
+| `src/stores/ui.ts` | UI state: open dialog, tab, datasheets, board zoom and hover |
+| `src/components/` | UI: `shell/` (top bar, side panel), `board/` (the circuit board; `layout.ts` places buses, chips and traces), `sheets/` (datasheets), `views/` (Research, Manual, Log, game over), `dialogs/` (proposals, plan, upgrades), `kit/` (LEDs, gauges, readouts) |
 | `server/` | Vite plugins: Jev proxy and run logs |
 | `harness/` | Command-line harness |
 | `old/` | The original transformers.js prototype, archived and not built |

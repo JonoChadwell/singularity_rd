@@ -59,17 +59,6 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   --font-paper: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
   --r: 2px;
-
-  /* Older names, still used inside dialogs' scoped styles. */
-  --mono: var(--font-mono);
-  --sans: var(--font-paper);
-  --radius: var(--r);
-  --border: var(--chrome-3);
-  --panel: var(--chrome-2);
-  --panel-raised: var(--chrome-1);
-  --bg: var(--chrome-0);
-  --accent: var(--copper-hi);
-  --accent-dim: var(--chrome-3);
   color-scheme: dark;
 }
 
