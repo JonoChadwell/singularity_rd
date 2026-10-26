@@ -35,7 +35,6 @@ export type SheetRef =
   | { kind: 'resource' | 'unit' | 'mind' | 'strategy' | 'research'; id: string }
   | { kind: 'trait' | 'rtrait' | 'ctrait'; id: string }
   | { kind: 'jev' }
-  | { kind: 'note'; id: string }
 
 const sameSheet = (a: SheetRef, b: SheetRef) => a.kind === b.kind && ('id' in a ? a.id : '') === ('id' in b ? b.id : '')
 

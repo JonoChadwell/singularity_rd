@@ -420,6 +420,71 @@ code {
   white-space: nowrap;
 }
 
+/* ---------------------------------------------------------------- chip packages on the board */
+
+.pkg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 8px;
+  color: var(--silk);
+  background:
+    radial-gradient(circle at 12px 12px, var(--chip-edge) 0 4px, transparent 5px),
+    linear-gradient(180deg, var(--chip-2), var(--chip));
+  border: 1px solid #000;
+  border-top: 3px solid var(--pin);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 4px 0 #0a0a09,
+    0 8px 18px rgb(0 0 0 / 0.55);
+  font-size: 12px;
+}
+
+.pkg.focus {
+  animation: flash 1.6s ease;
+}
+
+.pkg .part {
+  font-family: var(--font-label);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  color: var(--silk-dim);
+  text-transform: uppercase;
+}
+
+.pkg .pkg-name {
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--silk);
+  line-height: 1.1;
+}
+
+.pkg .pkg-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--chip-edge);
+}
+
+.pkg button.link {
+  color: var(--copper-hi);
+  border-color: var(--chip-edge);
+}
+
+.pkg .lock {
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--silk-dim);
+}
+
 /* ---------------------------------------------------------------- dialogs: a console in chrome */
 
 dialog.console {

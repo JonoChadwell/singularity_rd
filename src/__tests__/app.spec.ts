@@ -163,6 +163,21 @@ describe('App', () => {
     }
   })
 
+  it('draws the board: a bus per resource, a trace per strategy, and datasheets on demand', async () => {
+    const html = await render((game, ui) => {
+      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 100 }), newResource({ id: 'power', name: 'Power' }))
+      game.state.units.push(newUnit({ id: 'bot', name: 'Bot', count: 2, rest: 'sell' }))
+      game.state.strategies.push({ id: 'sell', name: 'Sell', description: '', unitId: 'bot', kind: 'make', inputs: [], outputId: MONEY_ID, amount: 3 })
+      game.state.deliveries.push({ name: 'Royalties', target: { kind: 'resource', id: MONEY_ID }, amount: 900, delay: 3, weeks: 1 })
+      ui.openSheet({ kind: 'resource', id: MONEY_ID })
+    })
+    expect(html.match(/data-bus=/g)).toHaveLength(2)
+    expect(html).toContain('data-lane="sell"')
+    expect(html).toContain('+6/WK')
+    expect(html).toContain('aria-label="Datasheet"')
+    expect(html.match(/Still to come/g)?.length).toBe(2)
+  })
+
   it('asks Jev once for the same proposal', async () => {
     await render(async (game) => {
       const judge = ready(game)
