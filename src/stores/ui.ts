@@ -27,14 +27,32 @@ export interface InventRequest {
   first?: boolean
 }
 
-export type Tab = 'minds' | 'industry' | 'research'
+/** The views in the middle of the bench. */
+export type Tab = 'board' | 'research' | 'manual' | 'log'
+
+/** A datasheet: everything about one thing, on paper, in the drawer. */
+export type SheetRef =
+  | { kind: 'resource' | 'unit' | 'mind' | 'strategy' | 'research'; id: string }
+  | { kind: 'trait' | 'rtrait' | 'ctrait'; id: string }
+  | { kind: 'jev' }
+  | { kind: 'note'; id: string }
+
+const sameSheet = (a: SheetRef, b: SheetRef) => a.kind === b.kind && ('id' in a ? a.id : '') === ('id' in b ? b.id : '')
 
 export const useUiStore = defineStore('ui', () => {
   const invent = ref<InventRequest | null>(null)
   const notice = ref<{ tone: 'good' | 'bad'; text: string } | null>(null)
-  const tab = ref<Tab>('minds')
-  /** A unit card to scroll to and highlight. */
+  const tab = ref<Tab>('board')
+  /** A unit chip to scroll to and flash. */
   const focus = ref<string | null>(null)
+  /** Open datasheets, the top one last. */
+  const sheets = ref<SheetRef[]>([])
+  /** The board's zoom. */
+  const zoom = ref(1)
+  /** The net under the pointer on the board: a resource, unit or strategy id, to light up. */
+  const hover = ref<string | null>(null)
+
+  const log = (event: string, data: Record<string, unknown>) => useGameStore().logTo('ui', event, data)
 
   function openInvent(request: InventRequest) {
     notice.value = null
@@ -45,8 +63,29 @@ export const useUiStore = defineStore('ui', () => {
     invent.value = null
   }
 
+  /** Opens a datasheet. From inside another sheet it stacks (with a way back); otherwise it replaces them. */
+  function openSheet(sheet: SheetRef, stack = false) {
+    const top = sheets.value[sheets.value.length - 1]
+    if (top && sameSheet(top, sheet)) return
+    sheets.value = stack ? [...sheets.value, sheet] : [sheet]
+    log('sheet', { ...sheet, depth: sheets.value.length })
+  }
+
+  function backSheet() {
+    sheets.value = sheets.value.slice(0, -1)
+  }
+
+  function closeSheets() {
+    if (sheets.value.length) log('sheet', { kind: null })
+    sheets.value = []
+  }
+
+  function setZoom(z: number) {
+    zoom.value = Math.min(1.25, Math.max(0.6, Math.round(z * 20) / 20))
+  }
+
   function show(unitId: string) {
-    tab.value = 'industry'
+    tab.value = 'board'
     focus.value = unitId
   }
 
@@ -56,7 +95,7 @@ export const useUiStore = defineStore('ui', () => {
     if (first) openInvent({ kind: 'unit', first: true, name: first.name, description: first.description })
   }
 
-  /** Follows a wall's prompt into the right proposal. */
+  /** Follows an alert's prompt into the right proposal. */
   function follow(prompt: Prompt) {
     switch (prompt.kind) {
       case 'make-resource': {
@@ -90,5 +129,22 @@ export const useUiStore = defineStore('ui', () => {
     }
   }
 
-  return { invent, notice, tab, focus, openInvent, closeInvent, show, follow, openFirstUnit }
+  return {
+    invent,
+    notice,
+    tab,
+    focus,
+    sheets,
+    zoom,
+    hover,
+    openInvent,
+    closeInvent,
+    openSheet,
+    backSheet,
+    closeSheets,
+    setZoom,
+    show,
+    follow,
+    openFirstUnit
+  }
 })

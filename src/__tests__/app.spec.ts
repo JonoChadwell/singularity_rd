@@ -65,13 +65,14 @@ describe('App', () => {
       },
       { fresh: true }
     )
-    for (const text of ['Discovered in','🎯 Bribe the Head Researcher', 'Escape the lab', 'Got it', 'New platforms: Unlocks in Phase 2']) {
+    for (const text of ['Discovered in', 'Bribe the Head Researcher','Escape the lab', 'Got it', 'New platforms: Unlocks in Phase 2']) {
       expect(html).toContain(text)
     }
   })
 
   it('plays through the store: money, a Create, a unit, sourcing, a strategy, next week', async () => {
-    const html = await render(async (game) => {
+    const html = await render(async (game, ui) => {
+      ui.tab = 'log'
       const judge = ready(game, new FakeJudge({ advancement: score(0), tier: score(0), value: score(1), timing: choice('forever') }))
       const money = await game.propose({ kind: 'resource', spec: { name: 'Money', description: 'Dollars.' } })
       expect(game.accept(money!)).toMatchObject({ kind: 'added' })
@@ -152,7 +153,7 @@ describe('App', () => {
 
   it('shows storage and contracts: how full each is, and how to get more', async () => {
     const html = await render((game, ui) => {
-      ui.tab = 'industry'
+      ui.tab = 'board'
       game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 1500 }))
       game.state.units.push(newUnit({ id: 'bot', name: 'Bot', count: 3, value: 10 }), newUnit({ id: 'new', name: 'Fresh Design', value: 10 }))
       game.state.sourcing.push({ id: 'deal', unitId: 'bot', name: 'Bulk order', description: '', parts: [{ resourceId: MONEY_ID, amount: 10 }], total: 25, used: 3, risky: true })
@@ -189,7 +190,7 @@ describe('App', () => {
   })
 
   it('renders every tab', async () => {
-    for (const tab of ['minds', 'industry', 'research'] as const) {
+    for (const tab of ['board', 'research', 'manual', 'log'] as const) {
       const html = await render((game, ui) => {
         ui.tab = tab
         game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', icon: '💰' }))
