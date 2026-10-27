@@ -2,15 +2,14 @@
   <div
     class="plate"
     :class="{ hot }"
-    tabindex="0"
     :data-bus="r.id"
+    :title="`${r.name}: open its datasheet`"
     @mouseenter="ui.hover = r.id"
     @mouseleave="ui.hover = null"
-    @focusin="ui.hover = r.id"
-    @focusout="ui.hover = null"
+    @click="ui.openSheet({ kind: 'resource', id: r.id })"
   >
     <div class="line1">
-      <button type="button" class="name" :title="`${r.name}: open its datasheet`" @click="ui.openSheet({ kind: 'resource', id: r.id })">
+      <button type="button" class="name" :title="`${r.name}: open its datasheet`">
         <span class="icon">{{ r.icon }}</span>
         <span class="tier num">T{{ r.tier }}</span>
         <span class="label">{{ r.name }}</span>
@@ -82,6 +81,7 @@ const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
   border-right: 0;
   box-shadow: inset 1px 1px 0 var(--bevel-hi);
   outline: none;
+  cursor: pointer;
 }
 
 /* The pad where the plate meets its bus. */
@@ -98,8 +98,7 @@ const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
   border-right: 0;
 }
 
-.plate.hot,
-.plate:focus-visible {
+.plate.hot {
   background: linear-gradient(180deg, var(--chrome-3), var(--chrome-2));
 }
 
@@ -182,8 +181,7 @@ const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
   display: none;
 }
 
-.plate:hover .probe,
-.plate:focus-within .probe {
+.plate:hover .probe {
   display: block;
 }
 </style>
