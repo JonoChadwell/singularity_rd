@@ -12,7 +12,8 @@ export const COPY: Record<
     presets: 'Pick one, or name your own:',
     name: 'e.g. Power, Silicon, Lemons',
     description: 'What is it? (optional)',
-    cost: 'Free: doesn’t use the week. Added at once, if Jev agrees it’s a thing.'
+    note: 'Free · Doesn’t use the week',
+    cost: 'Added at once, if Jev agrees it’s a thing.'
   },
   strategy: {
     title: 'Propose a strategy',
