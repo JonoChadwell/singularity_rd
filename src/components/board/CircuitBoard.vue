@@ -27,9 +27,7 @@
           :style="{ top: `${b.y - ROW / 2 + 3}px`, height: `${ROW - 6}px` }"
         />
         <div class="gutter-foot" :style="{ top: `${TOP + L.buses.length * ROW + 8}px` }">
-          <button type="button" class="small" @click="ui.openInvent({ kind: 'resource' })">+ Resource</button>
-          <span class="lbl">Free · doesn’t use the week</span>
-        </div>
+          <button type="button" class="small" @click="ui.openInvent({ kind: 'resource' })">+ Resource</button>        </div>
       </div>
 
       <div class="scroller">
