@@ -1,6 +1,6 @@
 import { researchBlocker } from './actions'
 import * as B from './balance'
-import { affordable, bestIQ, bestMind, contractsFor, currentIQ, findResource, fmt, fmtCount, isLoss, openSlots, researchIQ } from './model'
+import { affordable, bestIQ, bestMind, contractsFor, currentIQ, findResource, fmt, fmtCount, openSlots, researchIQ } from './model'
 import { lossOf } from './losses'
 import { lockReason, weeksLeft } from './phase'
 import { goalOf } from './projection'
@@ -186,19 +186,6 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
       text: `${r.icon} ${r.name} is short: everyone who needs it runs at ${Math.round(share * 100)}%.`,
       prompt: made ? undefined : { label: HOW, to: { kind: 'make-resource', resourceId: id } }
     })
-  }
-
-  // Stockpiles nothing uses.
-  for (const r of state.resources) {
-    if (r.amount <= 0) continue
-    const flows = preview.flows[r.id] ?? []
-    const used = flows.some((f) => f.amount < 0 && !isLoss(f.label))
-    const needed =
-      state.sourcing.some((c) => openSlots(c) > 0 && c.parts.some((p) => p.resourceId === r.id)) ||
-      state.research.some((x) => x.cost.some((c) => c.resourceId === r.id))
-    if (!used && !needed && flows.some((f) => f.amount > 0)) {
-      add({ key: `pile-${r.id}`, tone: 'info', text: `${fmt(r.amount)} ${r.name} piling up: nothing uses it.` })
-    }
   }
 
   const order = { bad: 0, warn: 1, info: 2 }
