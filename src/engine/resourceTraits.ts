@@ -351,11 +351,11 @@ export const weeklyLossOf = (r: HasTraits) =>
 
 /**
  * How much easier or harder a resource is to build up in Phase 1, where Procurements are the only
- * income: what Procurements make of it, and half of the weekly loss (a 50% loss makes the goal 25%
+ * income: what Procurements make of it, and the weekly loss (a 50% loss makes the goal 50%
  * smaller). The Phase 1 goal cost is scaled by this.
  */
 export function goalIncomeFactor(r: HasTraits): number {
-  return createOutputFactor(r) * (1 - weeklyLossOf(r) / 2)
+  return createOutputFactor(r) * (1 - weeklyLossOf(r))
 }
 
 /** A resource's tier, as read for one purpose: its own, moved by its tier traits, within 0 to 4. */

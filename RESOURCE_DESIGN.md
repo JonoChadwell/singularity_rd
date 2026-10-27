@@ -27,8 +27,8 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
   size the phase was tuned for, and a Procurement always gives back more than it uses.
 - **Phase 1 goal cost follows income.** Procurements are Phase 1's only income, so the goal's cost in
   its resource is scaled by what Procurements make of it (Untraceable halves the goal, Staple and
-  Prestigious cut it 25%, Exotic's +50% scales it up) and by half the weekly loss (a 50% loss
-  makes the goal 25% smaller). Phase 2 goals are not scaled by traits. No goal depends on the
+  Prestigious cut it 25%, Exotic's +50% scales it up) and by the weekly loss (a 50% loss
+  makes the goal 50% smaller). Phase 2 goals are not scaled by traits. No goal depends on the
   resource's storage cap.
 - **"Needs a tier less / more"** moves the tier read for one purpose only. The resource keeps its
   real tier everywhere else. The purposes are:
