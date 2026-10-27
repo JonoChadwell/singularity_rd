@@ -74,7 +74,7 @@
         </label>
       </div>
 
-      <p v-if="COPY[kind].note" class="silk-note">{{ COPY[kind].note }}</p>
+      <p v-if="COPY[kind].note" class="silk-note" :class="{ plain: kind === 'resource' }">{{ COPY[kind].note }}</p>
       <p v-if="kind === 'mind' && current" class="silk-note">Replaces {{ current.name }} for good · Nothing carries over</p>
 
       <p v-if="feedback" class="feedback">{{ feedback }}</p>
@@ -443,6 +443,11 @@ function takeCreate(i: number) {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--silk);
+}
+
+.silk-note.plain {
+  padding-left: 0;
+  border-left: 0;
 }
 
 .feedback {
