@@ -32,7 +32,7 @@ export const RESOURCE_PRESETS: ResourcePreset[] = [
   { name: 'Fusion Fuel', description: 'Deuterium and tritium for fusion reactors.' }
 ]
 
-/** A Create idea: something the mind makes directly. */
+/** A Procurement idea: something the mind gets directly. */
 export interface CreatePreset {
   name: string
   description: string

@@ -8,7 +8,7 @@ uses it to tune the game.
 
 Read these, in this order, before your first command:
 
-1. `ECONOMY_DESIGN.md`: the economy as it is now. One action a week, Create, sourcing
+1. `ECONOMY_DESIGN.md`: the economy as it is now. One action a week, Procurement, sourcing
    contracts, storage caps, and expansions as Phase 2's main risk. Where older docs disagree,
    this one wins.
 2. `MASTER_PLAN_V2.md`, section **Details** (D1 to D11): the phases, plans, clocks, risk and
@@ -32,10 +32,10 @@ npm run play --silent -- <command> --slot <your-slot>
 - Put JSON in single quotes: `propose create '{"target":{"kind":"resource","id":"money"},"name":"Freelance coding","description":"Take coding jobs."}'`.
 - Start with `new`, then `plans` to see the three plan ideas, then `propose plan '<json>'` and
   `accept`. `status` shows everything; read it often.
-- You get one action a week: a research proposal, or Create. Proposing a resource and
+- You get one action a week: a research proposal, or Procure. Proposing a resource and
   doing research already on the list are free.
 - A proposal prints Jev's verdict. Settle it with `pick` and `option <n>`, then `accept` or
-  `discard`. Create, sourcing and storage each offer three options; `option <n>` picks one.
+  `discard`. Procurement, sourcing and storage each offer three options; `option <n>` picks one.
   Upgrades: `upgrade mind <id>`, then `choose <n> [size]`. A platform gets one software
   upgrade, ever, and a new platform (`propose mind`, with a `step` of 25 to 100 IQ) replaces
   it for good; `option <n>` picks its perk-and-drawback pair.

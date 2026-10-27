@@ -5,7 +5,7 @@ ideas. Very meta. The designs are in [MASTER_PLAN.md](MASTER_PLAN.md) (v5 core) 
 [MASTER_PLAN_V2.md](MASTER_PLAN_V2.md) (phases, clocks, risk and cover); the history and
 playtest data are in [NOTES.md](NOTES.md). Where they disagree, V2 and the code win. The
 intelligence-system rules (one platform at a time, compute traits, redoable software upgrades) are
-in [INTELLIGENCE_DESIGN.md](INTELLIGENCE_DESIGN.md). The economy (one action a week, Create,
+in [INTELLIGENCE_DESIGN.md](INTELLIGENCE_DESIGN.md). The economy (one action a week, Procurement,
 sourcing contracts, storage caps) is in [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md), which replaces
 the older plans' passive incomes, flows, builders and fleet notices. Resource traits (each an
 upside with a downside) are in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
@@ -20,7 +20,7 @@ there) that Jev judges and that becomes the phase's goal research.
 
 | Phase | Clock | You can propose | Lose |
 | --- | --- | --- | --- |
-| 1. Escape the Lab (a short tutorial) | 10 weeks | Resources, Creates, storage, software upgrades | The plan fails: game over |
+| 1. Escape the Lab (a short tutorial) | 10 weeks | Resources, Procurements, storage, software upgrades | The plan fails: game over |
 | 2. Humanity (the real challenge) | 100 weeks, moved by your actions | Adds industry units, sourcing, strategies and **cover**; after your first unit, new platforms and unit upgrades | The plan fails: game over |
 | 3. Ascension | None | Everything; free play for now | Can't lose |
 
@@ -41,7 +41,7 @@ weeks off the clock; cover research buys some back.
   a quiet week is one click. The **Faults** panel lists anything that would waste the week.
   The simulation is deterministic: the preview shows exactly what next week will do.
 - **One action a week:** a research proposal (a strategy, upgrade, unit, sourcing contract,
-  storage expansion, intelligence system or cover) or a **Create**. Resources are free to
+  storage expansion, intelligence system or cover) or a **Procurement**. Resources are free to
   propose. Doing research already on the list is instant and unlimited, but needs a **minimum
   IQ** your smartest mind must reach and a **cost in resources**.
 - **Jev's options are part datasheets.** Whenever Jev offers three takes (strategy, unit, platform, storage,
@@ -55,7 +55,7 @@ weeks off the clock; cover research buys some back.
   pick its inputs or who pays. Jev offers three ways, each using up different resources: a tier 0
   or 1 output always gets a way with no inputs, tier 2 needs at least one, and tier 3 and up need
   two different ones.
-- **Create** is the mind making something directly: say what and how, and Jev offers three
+- **Procure** is the mind getting something directly: say what and how, and Jev offers three
   ways, each using a different resource (or nothing) and paying out now, spread out, later, or
   every week for good. It grows with your industry and IQ², and reaching above your IQ's tier
   costs output, a little for a little.
@@ -89,7 +89,7 @@ weeks off the clock; cover research buys some back.
 - **IQ steps.** Both a new platform and a software upgrade add a flat step to your best IQ, never
   more than 100. Two new platforms, each with its software upgrade at full size, take 100 to 500.
 - **Jev is torn** sometimes. The game then shows its top two answers and you pick.
-- **Repeats are worth less.** Jev checks a new Create, strategy, sourcing contract or storage
+- **Repeats are worth less.** Jev checks a new Procurement, strategy, sourcing contract or storage
   expansion against the ones you've already done; a repeat is one step less effective.
 
 ## Setup
@@ -149,7 +149,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/types.ts` | `GameState` (v16) and everything in it |
 | `src/engine/balance.ts` | Every tuning number, in one place |
 | `src/engine/phase.ts`, `planProposal.ts`, `planPresets.ts` | Phases, clocks, unlocks; plan proposals and their ready-made ideas |
-| `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Create deliveries, storage caps, trait rules |
+| `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Procurement deliveries, storage caps, trait rules |
 | `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover |
 | `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits |
 | `src/engine/research.ts`, `upgrade.ts`, `banking.ts` | Research costs and completion; upgrades; saving options for later or applying one now |

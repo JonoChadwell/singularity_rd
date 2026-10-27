@@ -30,7 +30,7 @@
       </div>
       <p v-if="short" class="short">You need {{ short }}.</p>
     </template>
-    <span v-else class="lbl">{{ contract.parts.length ? 'full' : 'made by Create' }}</span>
+    <span v-else class="lbl">{{ contract.parts.length ? 'full' : 'made by Procurement' }}</span>
   </div>
 </template>
 

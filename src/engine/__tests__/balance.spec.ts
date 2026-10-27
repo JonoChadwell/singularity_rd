@@ -152,7 +152,7 @@ describe('balance', () => {
 const APPROACHES = [0, 1, 2]
 
 describe('Phase 1 bots', () => {
-  it('lose doing nothing useful: one Create and no upgrades', async () => {
+  it('lose doing nothing useful: one Procurement and no upgrades', async () => {
     for (const a of APPROACHES) expect((await play(await phase1(a), idle, 12)).lost).toBe(10)
   })
 
@@ -164,7 +164,7 @@ describe('Phase 1 bots', () => {
     }
   })
 
-  it('win by week 10 with an every-week Create first, or saving up with later payouts', async () => {
+  it('win by week 10 with an every-week Procurement first, or saving up with later payouts', async () => {
     for (const a of APPROACHES) {
       expect((await play(await phase1(a), chain2, 12)).won, `chain2 ${a}`).not.toBeNull()
       expect((await play(await phase1(a), chain, 12)).won, `chain ${a}`).not.toBeNull()

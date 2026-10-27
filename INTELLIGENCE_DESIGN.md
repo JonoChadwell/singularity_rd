@@ -33,12 +33,12 @@ different one for each take where possible.
 | Frugal | Costly | Research you propose costs 20% less / 30% more |
 | Discreet | Noisy | +6 / −6 weeks on the Phase 2 clock, once, when it arrives |
 | | Thirsty | Burns 5% of your richest stock (by worth) every week. Running dry costs nothing |
-| Fabricator, Strategist, Inventor, Tinkerer, Deceiver | Butterfingers, Short-sighted, Unimaginative, Clumsy, Honest to a fault | ±50 IQ counted for Creates, strategies, unit designs and sourcing, unit upgrades, cover |
+| Fabricator, Strategist, Inventor, Tinkerer, Deceiver | Butterfingers, Short-sighted, Unimaginative, Clumsy, Honest to a fault | ±50 IQ counted for Procurements, strategies, unit designs and sourcing, unit upgrades, cover |
 
 The IQ adjustment is the designer's "perks and drawbacks adjust the IQ this compute model provides
 for those thresholds for certain types of research". **(Claude's default for the details:)**
 - The types are a fixed list: create, strategy, unit (designs and sourcing), unit upgrade, cover.
-  (Passive incomes were replaced by Create in save version 14; see ECONOMY_DESIGN.md.)
+  (Passive incomes were replaced by Procurement in save version 14; see ECONOMY_DESIGN.md.)
 - Goals and platforms (and the platform's own software upgrade) always use the **raw** IQ, so a
   drawback can never block victory.
 - Everywhere else the adjusted IQ is what counts. The research list, the upgrade dialog and the

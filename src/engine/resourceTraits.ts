@@ -58,9 +58,9 @@ export interface ResourceEffects {
   loss?: number
   /** Share of what's spent on costs that comes back next week. */
   refund?: number
-  /** Creates of it pay this many times as much. */
+  /** Procurements of it pay this many times as much. */
   createOutput?: number
-  /** As a Create input, it counts this many times its worth. */
+  /** As a Procurement input, it counts this many times its worth. */
   createInput?: number
   /** Tiers added when its tier is read for one purpose. */
   tier?: Partial<Record<TierPurpose, number>>
@@ -105,7 +105,7 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     name: 'Staple',
     icon: '🧱',
     upside: 'Research costs in it are 25% less.',
-    downside: 'Creates make 25% less of it.',
+    downside: 'Procurements make 25% less of it.',
     family: 'spend',
     effects: { researchCost: 0.75, createOutput: 0.75 }
   }),
@@ -212,7 +212,7 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     id: 'exotic',
     name: 'Exotic',
     icon: '🔬',
-    upside: 'Creates make 50% more of it.',
+    upside: 'Procurements make 50% more of it.',
     downside: 'Units make 50% less of it.',
     family: 'create',
     effects: { createOutput: 1.5, make: 0.5 }
@@ -221,8 +221,8 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     id: 'mundane',
     name: 'Mundane',
     icon: '📦',
-    upside: 'Creates of it need a tier less.',
-    downside: 'Creates of it pay 25% less.',
+    upside: 'Procurements of it need a tier less.',
+    downside: 'Procurements of it pay 25% less.',
     family: 'create',
     effects: { tier: { reach: -1 }, createOutput: 0.75 }
   }),
@@ -231,7 +231,7 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     name: 'Prestigious',
     icon: '👑',
     upside: 'Pays for platforms as if it were a tier higher.',
-    downside: 'Creates make 25% less of it.',
+    downside: 'Procurements make 25% less of it.',
     family: 'create',
     effects: { tier: { platform: 1 }, createOutput: 0.75 }
   }),
@@ -239,7 +239,7 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     id: 'hazardous',
     name: 'Hazardous',
     icon: '🚨',
-    upside: 'As a Create input, it counts 1.5× its worth.',
+    upside: 'As a Procurement input, it counts 1.5× its worth.',
     downside: 'Storage expansions for it cost double the clock weeks.',
     family: 'clock',
     effects: { createInput: 1.5, clock: 2 }
@@ -249,7 +249,7 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     name: 'Untraceable',
     icon: '🕶️',
     upside: 'Storage expansions for it cost no clock weeks.',
-    downside: 'Creates make half as much of it.',
+    downside: 'Procurements make half as much of it.',
     family: 'clock',
     effects: { clock: 0, createOutput: 0.5 }
   }),
@@ -350,8 +350,8 @@ export const weeklyLossOf = (r: HasTraits) =>
   1 - effectsOf(r).reduce((keep, e) => keep * (1 - (e.loss ?? 0)), 1)
 
 /**
- * How much easier or harder a resource is to build up in Phase 1, where Creates are the only
- * income: what Creates make of it, and half of the weekly loss (a 50% loss makes the goal 25%
+ * How much easier or harder a resource is to build up in Phase 1, where Procurements are the only
+ * income: what Procurements make of it, and half of the weekly loss (a 50% loss makes the goal 25%
  * smaller). The Phase 1 goal cost is scaled by this.
  */
 export function goalIncomeFactor(r: HasTraits): number {

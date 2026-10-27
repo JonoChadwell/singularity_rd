@@ -51,7 +51,7 @@ const game = useGameStore()
 const flows = computed(() => game.preview.flows[props.resource.id] ?? [])
 const biggest = computed(() => Math.max(1e-9, ...flows.value.map((f) => Math.abs(f.amount))))
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
-/** Create payouts still to come into it, soonest first. */
+/** Procurement payouts still to come into it, soonest first. */
 const pending = computed(() =>
   game.state.deliveries
     .filter((d) => d.target.kind === 'resource' && d.target.id === props.resource.id)

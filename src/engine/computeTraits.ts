@@ -10,7 +10,7 @@ export const RESEARCH_TYPES = ['create', 'strategy', 'unit', 'unit-upgrade', 'co
 export type ResearchType = (typeof RESEARCH_TYPES)[number]
 
 export const RESEARCH_TYPE_LABEL: Record<ResearchType, string> = {
-  create: 'Create',
+  create: 'Procurements',
   strategy: 'strategies',
   unit: 'unit designs',
   'unit-upgrade': 'unit upgrades',

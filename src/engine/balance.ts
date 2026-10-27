@@ -81,12 +81,12 @@ export const GOAL_CAPS: Record<1 | 2, number> = { 1: 0.35, 2: 8 }
 /**
  * Phase 1's goal cost, in worth, before the approach multiplier: divided by the goal resource's
  * value to give units, so it doesn't depend on storage. It is 0.35 of a tier 1 resource's
- * STORAGE_WORTH, scaled to CREATE_WORTH, so the goal stays the same number of Creates as before.
+ * STORAGE_WORTH, scaled to CREATE_WORTH, so the goal stays the same number of Procurements as before.
  */
 export const GOAL_WORTH_1 = 2400
 /**
  * Phase 2's goal cost in worth, before the approach multiplier: 8 of a tier 3 resource's
- * STORAGE_WORTH, scaled by CREATE_WORTH over the 6000 a tier 3 Create used to pay (400 / 6000).
+ * STORAGE_WORTH, scaled by CREATE_WORTH over the 6000 a tier 3 Procurement used to pay (400 / 6000).
  */
 export const GOAL_WORTH_2 = 53000
 
@@ -303,7 +303,7 @@ export const holderReach = (iq: number) => HOLDERS.filter(([, minIQ]) => minIQ <
 // ---------------------------------------------------------------- create
 
 /**
- * Create's base output worth, before the scalars. The same for every target, so two resources of
+ * Procurement's base output worth, before the scalars. The same for every target, so two resources of
  * the same value are made in the same amount; a target above your IQ's tier pays through Reach.
  */
 export const CREATE_WORTH = 400
@@ -314,7 +314,7 @@ export const CREATE_INPUT_RETURN = 1.2
  * Efficiency × Reach). Paid in full now, whatever the timing.
  */
 export const CREATE_INPUT_SHARE = 1
-/** Units made by Create cost this many times what a sourcing contract would charge. */
+/** Units made by Procurement cost this many times what a sourcing contract would charge. */
 export const CREATE_UNIT_PREMIUM = 2
 /** Industry scalar: 1 at no units, up to INDUSTRY_MAX, one step per decade of unit worth from INDUSTRY_FROM. */
 export const INDUSTRY_FROM = 1e3

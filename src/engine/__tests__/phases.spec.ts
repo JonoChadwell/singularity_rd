@@ -66,7 +66,7 @@ function addRobots(s: GameState, count = 0) {
   return u
 }
 
-/** A Create's every-week payout, by hand. */
+/** A Procurement's every-week payout, by hand. */
 const forever = (resourceId: string, amount: number): Delivery => ({ name: 'Coding', target: { kind: 'resource', id: resourceId }, amount, delay: 0, weeks: null })
 
 const createSpec = { name: 'Freelance coding', description: '', target: { kind: 'resource' as const, id: MONEY_ID } }
@@ -259,7 +259,7 @@ describe('loss conditions', () => {
 // ---------------------------------------------------------------- unlocks
 
 describe('unlocks', () => {
-  it('Phase 1 has only resources, Creates, storage and upgrades', async () => {
+  it('Phase 1 has only resources, Procurements, storage and upgrades', async () => {
     const s = await phase1()
     for (const f of ['resource', 'create', 'storage', 'upgrade'] as Feature[]) expect(lockReason(s, f)).toBeNull()
     for (const f of ['strategy', 'unit', 'sourcing', 'cover', 'mind', 'unit-upgrade'] as Feature[]) {
@@ -346,7 +346,7 @@ describe('risk', () => {
     expect(Object.keys(p2.calls[0]!.questions)).toContain('alarm')
   })
 
-  it('pays: a risky Create makes 1.5× and takes its weeks at once', async () => {
+  it('pays: a risky Procurement makes 1.5× and takes its weeks at once', async () => {
     const s = phase2()
     const calm = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec)
     const v = await judgeCreate(s, new FakeJudge({ alarm: score(3), timing: choice('now') }), createSpec)

@@ -14,7 +14,7 @@ export function costMultiplier(plausibility: number, bar: number): number {
   return 1 + (B.IMPLAUSIBLE_COST - 1) * t
 }
 
-/** Resources something makes: a Create delivery or a strategy. */
+/** Resources something makes: a Procurement delivery or a strategy. */
 function produced(state: GameState): Set<string> {
   return new Set([
     ...state.deliveries.flatMap((d) => (d.target.kind === 'resource' ? [d.target.id] : [])),

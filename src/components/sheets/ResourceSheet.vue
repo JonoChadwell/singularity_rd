@@ -58,7 +58,7 @@
     </section>
 
     <template #foot>
-      <button class="small" :disabled="!!lockReason(game.state, 'create')" @click="ui.openInvent({ kind: 'create', outputId: r.id })">+ Create</button>
+      <button class="small" :disabled="!!lockReason(game.state, 'create')" @click="ui.openInvent({ kind: 'create', outputId: r.id })">+ Procure</button>
       <button class="small" :disabled="!!lockReason(game.state, 'storage')" @click="ui.openInvent({ kind: 'storage', resourceId: r.id })">+ Store</button>
       <button v-if="!lockReason(game.state, 'strategy')" class="small" @click="ui.openInvent({ kind: 'strategy', outputId: r.id })">+ Strategy</button>
     </template>

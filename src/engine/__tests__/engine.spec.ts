@@ -1205,7 +1205,7 @@ describe('compute traits', () => {
     s.research = [upgrade]
     expect(researchIQ(s, upgrade)).toBe(50)
     expect(researchBlocker(s, 'x')).toMatch(/Needs IQ 100\. Your smartest mind is IQ 100, which counts as 50 for this/)
-    // Goals and platforms always use the raw IQ; Creates count their own.
+    // Goals and platforms always use the raw IQ; Procurements count their own.
     expect(iqFor(s, null)).toBe(100)
     expect(iqFor(withTraits(moneyWorld(), 'keen-create'), 'create')).toBe(150)
   })

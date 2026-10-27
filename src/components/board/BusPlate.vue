@@ -28,7 +28,7 @@
           :title="`Have the mind make ${r.name} directly`"
           @click.stop="ui.openInvent({ kind: 'create', outputId: r.id })"
         >
-          + Create
+          + Procure
         </button>
         <button
           class="link small"

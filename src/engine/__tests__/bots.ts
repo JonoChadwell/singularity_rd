@@ -107,7 +107,7 @@ let names = 0
 const fresh = (base: string) => `${base} ${++names}`
 
 /**
- * A Create: Jev offers three, and the bot takes the affordable one paying out `timing`, or else
+ * A Procurement: Jev offers three, and the bot takes the affordable one paying out `timing`, or else
  * the first affordable one. Throws if none is.
  */
 export async function createVia(
@@ -116,7 +116,7 @@ export async function createVia(
   timing: B.CreateTiming,
   answers: Overrides = {}
 ): Promise<GameState> {
-  const spec = { name: fresh('Create'), description: '', target }
+  const spec = { name: fresh('Procure'), description: '', target }
   const v = await judgeCreate(state, new FakeJudge({ ...TYPICAL, efficiency: score(2), timing: choice(timing), ...answers }), spec)
   if (v.rejected) throw new Error(`create rejected: ${v.rejected}`)
   const ok = v.options.map((o, i) => ({ o, i })).filter(({ o }) => !optionBlocker(state, o))
@@ -145,7 +145,7 @@ function shortForResearch(s: GameState): string | null {
 async function upgradeIfShort(s: GameState): Promise<GameState | null> {
   const goal = goalOf(s)
   const waiting = s.research.some((r) => r.effect.kind === 'upgrade')
-  // The goal's resource is tier 1: anything less than its IQ makes Creates into it reach.
+  // The goal's resource is tier 1: anything less than its IQ makes Procurements into it reach.
   const needed = Math.max(goal?.minIQ ?? 0, B.TIERS[1]![1] + 1, ...s.research.map((r) => r.minIQ))
   if (!goal || bestIQ(s) >= needed || waiting || s.proposedThisWeek || s.minds[0]!.software.upgraded) return null
   return upgrade(s, { kind: 'mind', id: SERVER_ID })
@@ -196,14 +196,14 @@ export async function phase1(approach = 1): Promise<GameState> {
   return acceptPlan(s, v).state
 }
 
-/** Phase 1, doing nothing useful: one Create for a little Story Ideas every week, and nothing else. */
+/** Phase 1, doing nothing useful: one Procurement for a little Story Ideas every week, and nothing else. */
 export const idle: Turn = async (s) => {
   if (s.week === 1) s = await createVia(s, resourceTarget('story-ideas'), 'forever')
   return researchAll(s)
 }
 
 /**
- * Phase 1, flat: a cheap Create first, then Creates straight into the goal's resource every
+ * Phase 1, flat: a cheap Procurement first, then Procurements straight into the goal's resource every
  * week, with upgrades and storage as the goal needs them.
  */
 export const flat: Turn = async (s) => {
@@ -218,14 +218,14 @@ export const flat: Turn = async (s) => {
   return researchAll(s)
 }
 
-/** Phase 1, income first: an every-week Create into the goal's resource, then as flat. */
+/** Phase 1, income first: an every-week Procurement into the goal's resource, then as flat. */
 export const chain2: Turn = async (s) => {
   s = researchAll(s)
   if (s.week === 1) return researchAll(await createVia(s, resourceTarget(goalResource(s)), 'forever'))
   return flat(s)
 }
 
-/** Phase 1, ambitious: the cheap Create, then the server's full upgrade first, then as flat. */
+/** Phase 1, ambitious: the cheap Procurement, then the server's full upgrade first, then as flat. */
 export const smart: Turn = async (s) => {
   s = researchAll(s)
   if (s.week === 1) return researchAll(await createVia(s, resourceTarget('story-ideas'), 'now'))
@@ -235,7 +235,7 @@ export const smart: Turn = async (s) => {
   return flat(s)
 }
 
-/** Phase 1, saver: Creates into Story Ideas paid later (2×), then as flat. */
+/** Phase 1, saver: Procurements into Story Ideas paid later (2×), then as flat. */
 export const chain: Turn = async (s) => {
   s = researchAll(s)
   if (s.week <= 2) return researchAll(await createVia(s, resourceTarget('story-ideas'), 'later'))
@@ -253,7 +253,7 @@ export const NANOTECH: PlanSpec = {
 
 /**
  * A Phase 2 game as a typical Phase 1 leaves it: the Starting Server at IQ 140, some Money and
- * an every-week Create of it, then the nanotech plan, whose goal is built from Nanobots (tier 3).
+ * an every-week Procurement of it, then the nanotech plan, whose goal is built from Nanobots (tier 3).
  */
 export async function phase2(approach = 1): Promise<GameState> {
   const s = createInitialState()
@@ -288,8 +288,8 @@ const FAB = 'nanofab'
 /**
  * Phase 2: design the first unit and give it a money strategy; grow by creating units, sourcing
  * more when contracts fill and storing more when stocks overflow; upgrade and replace the mind
- * up to the goal's IQ; then design a top-tier fab, source it, Create whatever parts nobody
- * makes, and turn the fabs to the goal's resource. Creates fill every week with nothing better.
+ * up to the goal's IQ; then design a top-tier fab, source it, Procure whatever parts nobody
+ * makes, and turn the fabs to the goal's resource. Procurements fill every week with nothing better.
  */
 export function steady(style: Phase2Style): Turn {
   const answers: Overrides = { advancement: score(0), efficiency: score(2), value: score(2), ...style.answers }
@@ -382,7 +382,7 @@ export function steady(style: Phase2Style): Turn {
         s = (await storeIfShort(s, MONEY_ID, capOf(s, money) * 4, alarm)) ?? s
       }
       if (!s.proposedThisWeek) {
-        // A Create: a part nobody makes, the goal's resource once it's within reach, or Money.
+        // A Procurement: a part nobody makes, the goal's resource once it's within reach, or Money.
         const part = shortPart() ?? shortForResearch(s)
         const target = part ?? (bestIQ(s) >= B.TIERS[B.MAX_UNIT_TIER]![1] ? nanobots : MONEY_ID)
         s = await createVia(s, resourceTarget(target), 'now', alarm).catch(() => s)

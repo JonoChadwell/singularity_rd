@@ -119,7 +119,7 @@
         </template>
       </template>
 
-      <!-- Create: three offers. -->
+      <!-- Procurement: three offers. -->
       <template v-else-if="verdict.kind === 'create'">
         <div class="scalars">
           <span class="scalar" title="Grows with the worth of the units you own"><span class="lbl">Industry</span><b class="num">×{{ sig(verdict.scalars.industry) }}</b></span>

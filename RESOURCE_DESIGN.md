@@ -22,11 +22,11 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
 ## Terms
 
 - **Costs** are research costs and unit parts. A trait that changes costs applies when the
-  research or contract is **priced**, so the number shown is the number paid. Create inputs and a
+  research or contract is **priced**, so the number shown is the number paid. Procurement inputs and a
   phase goal's cost are never changed by these traits **(Claude's default)**: the goal stays the
-  size the phase was tuned for, and a Create always gives back more than it uses.
-- **Phase 1 goal cost follows income.** Creates are Phase 1's only income, so the goal's cost in
-  its resource is scaled by what Creates make of it (Untraceable halves the goal, Staple and
+  size the phase was tuned for, and a Procurement always gives back more than it uses.
+- **Phase 1 goal cost follows income.** Procurements are Phase 1's only income, so the goal's cost in
+  its resource is scaled by what Procurements make of it (Untraceable halves the goal, Staple and
   Prestigious cut it 25%, Exotic's +50% scales it up) and by half the weekly loss (a 50% loss
   makes the goal 25% smaller). Phase 2 goals are not scaled by traits. No goal depends on the
   resource's storage cap.
@@ -34,7 +34,7 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
   real tier everywhere else. The purposes are:
   - **units making it:** a unit making something above its own tier is penalised, and below its
     tier gets a bonus.
-  - **Create reach:** a target above your IQ's tier is penalised.
+  - **Procurement reach:** a target above your IQ's tier is penalised.
   - **platform payment:** the smartest platforms must be paid in a resource of a high enough tier.
 - **Weekly effects** happen at the end of the week, in this order: losses, then overflow past the
   cap, then growth into the room that's left. Each has its own row in the resource's breakdown
@@ -46,7 +46,7 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
 | --- | --- | --- | --- |
 | ⚡ Energetic | Costs in it are 50% less | Loses 50% of what's left each week | spend |
 | 🧪 Catalytic | Strategies and upkeep use 50% less of it | Costs in it are doubled | spend |
-| 🧱 Staple | Research costs in it are 25% less | Creates make 25% less of it | spend |
+| 🧱 Staple | Research costs in it are 25% less | Procurements make 25% less of it | spend |
 | 🔁 Recyclable | 50% of what's spent on costs comes back next week | Costs in it are 25% more | spend |
 | 🎰 Speculative | Some weeks, new costs in it are as little as ×0.25 | Other weeks, up to ×2 | spend |
 | ⛏️ Crude | Units making it need a tier less | Research costs in it are 25% more | making |
@@ -58,11 +58,11 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
 | 🍋 Perishable | Units make 50% more of it | 10% of what's left spoils each week | loss |
 | 🌋 Volatile | Units make twice as much of it | 25% of what's left is lost each week | loss |
 | 💧 Liquid | Cap ×1.5 | 5% of what's left leaks each week | loss |
-| 🔬 Exotic | Creates make 50% more of it | Units make 50% less of it | create |
-| 📦 Mundane | Creates of it need a tier less | Creates of it pay 25% less | create |
-| 👑 Prestigious | Pays for platforms as if a tier higher | Creates make 25% less of it | create |
-| 🚨 Hazardous | Counts 1.5× its worth as a Create input | Storage expansions for it cost double the clock weeks | clock |
-| 🕶️ Untraceable | Storage expansions for it cost no clock weeks | Creates make half as much of it | clock |
+| 🔬 Exotic | Procurements make 50% more of it | Units make 50% less of it | create |
+| 📦 Mundane | Procurements of it need a tier less | Procurements of it pay 25% less | create |
+| 👑 Prestigious | Pays for platforms as if a tier higher | Procurements make 25% less of it | create |
+| 🚨 Hazardous | Counts 1.5× its worth as a Procurement input | Storage expansions for it cost double the clock weeks | clock |
+| 🕶️ Untraceable | Storage expansions for it cost no clock weeks | Procurements make half as much of it | clock |
 | 🔒 Contraband | Storage expansions for it hold twice as much | They cost triple the clock weeks | clock |
 
 A resource's two traits never share a family, so one lever is never doubled up or cancelled out.
@@ -73,7 +73,7 @@ Several weekly losses compound (Perishable and Liquid together lose 14.5%, not 1
 - **Speculative.** The week's factor is drawn from a hash of the run, the week and the resource
   (log-evenly from 0.25 to 2), so the preview and every reload agree. A cost is multiplied by the
   factor of the week it was priced in and keeps it. The resource's hover card says the current
-  factor. Create inputs are left alone, as for every cost trait.
+  factor. Procurement inputs are left alone, as for every cost trait.
 - **Recyclable.** The refund is a one-week delivery, listed under "Still to come" on the resource.
   It covers research, unit parts and cover. It is half of what was actually paid.
 - **Cap traits** (Renewable, Liquid) scale the starting cap and every storage expansion.

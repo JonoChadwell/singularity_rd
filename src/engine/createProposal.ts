@@ -27,7 +27,7 @@ import { proposalText } from './stateText'
 import type { CreateTarget, Flow, GameState } from './types'
 
 /**
- * Create: the mind makes something directly, from what you have or from nothing. It's an action,
+ * Procurement: the mind gets something directly, from what you have or from nothing. It's an action,
  * not research: no IQ gate, but reaching above your IQ's tier costs output.
  */
 export interface CreateSpec {
@@ -74,7 +74,7 @@ function targetTier(state: GameState, t: CreateTarget, purpose: TierPurpose): nu
   return r ? effectiveTier(r, purpose) : 0
 }
 
-/** What Creates of the target pay, as a factor: some resource traits make less. */
+/** What Procurements of the target pay, as a factor: some resource traits make less. */
 function targetOutput(state: GameState, t: CreateTarget): number {
   const r = t.kind === 'resource' ? findResource(state, t.id) : undefined
   return r ? createOutputFactor(r) : 1

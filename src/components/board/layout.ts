@@ -4,7 +4,7 @@ import type { GameState, WeekReport } from '@/engine/types'
 // The circuit board's geometry, worked out from the game alone so it renders the same everywhere
 // (and in tests). Resources are horizontal buses; below them sits one row of chips (the platform,
 // then each unit type); each chip owns vertical lanes that rise from its pins to the buses they
-// touch. A lane is a strategy (inputs in, output out), an upkeep feed, or a Create payout.
+// touch. A lane is a strategy (inputs in, output out), an upkeep feed, or a Procurement payout.
 
 /** Height of a bus row. */
 export const ROW = 46
@@ -104,7 +104,7 @@ export function boardLayout(state: GameState, preview: WeekReport): BoardLayout 
     x += w + GAP
   }
 
-  // The platform: Create payouts still to come, and any stock it burns.
+  // The platform: Procurement payouts still to come, and any stock it burns.
   for (const mind of state.minds) {
     const lanes: Omit<Lane, 'x' | 'top' | 'pin'>[] = []
     state.deliveries.forEach((d, n) => {

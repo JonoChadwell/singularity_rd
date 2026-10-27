@@ -236,7 +236,7 @@ function printStatus(s: GameState) {
   say(`WEEK ${s.week} · Jev calls ${s.stats.jevCalls}`)
   say(
     `Best IQ ${Math.round(bestIQ(s))}${lockReason(s, 'mind') ? '' : ` · a new platform can be up to ${B.MAX_IQ_STEP} IQ smarter (steps ${B.PLATFORM_STEPS.join('/')}) and replaces this one for good`} · ` +
-      (s.proposedThisWeek ? 'action TAKEN this week' : 'one action this week (a research proposal or Create)')
+      (s.proposedThisWeek ? 'action TAKEN this week' : 'one action this week (a research proposal or Procure)')
   )
   say('\nRESOURCES')
   for (const r of s.resources) {
@@ -274,7 +274,7 @@ function printStatus(s: GameState) {
       for (const c of contracts) {
         say(
           `      contract ${c.id} "${c.name}" ${fmtCount(c.used)}/${fmtCount(c.total)}${c.risky ? ' RISKY' : ''}` +
-            (c.parts.length ? ` · parts ${describeFlows(s, partsFor(u, c))} each · create up to ${fmtCount(creatable(s, c, weeklyUse(preview)))} now` : ' · made by Creates')
+            (c.parts.length ? ` · parts ${describeFlows(s, partsFor(u, c))} each · create up to ${fmtCount(creatable(s, c, weeklyUse(preview)))} now` : ' · made by Procurements')
         )
       }
       if (u.traits.length) say(`      traits: ${traitText(u.traits)}`)
@@ -514,7 +514,7 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
                                (replaces your platform for good; Jev offers three takes, each a perk+drawback pair at its own IQ step (25-100) and payer, pick with option <n>)
   propose cover '{"name":"..","description":".."}'
   dismiss <cardId|all>         dismiss explainer cards
-  verdict | pick <key> <value> | option <n> (a unit's take, a platform's perk+drawback pair, a Create offer, a contract or an expansion)
+  verdict | pick <key> <value> | option <n> (a unit's take, a platform's perk+drawback pair, a Procurement offer, a contract or an expansion)
   accept | discard
   upgrade <unit|mind> <id>      ask Jev for three ways to improve it (a platform gets one software upgrade, ever)
   choose <n> [size]            take upgrade option n as research (a platform upgrade also takes a size: 25/50/75/100 IQ, default 100)

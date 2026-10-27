@@ -5,7 +5,7 @@ import { byTier } from '@/engine/model'
 import type { GameState } from '@/engine/types'
 import { boardLayout, LANE } from '../layout'
 
-/** A board with four buses, two units, three strategies and a Create payout. */
+/** A board with four buses, two units, three strategies and a Procurement payout. */
 function busy(): GameState {
   const s = createInitialState()
   s.resources.push(
@@ -64,7 +64,7 @@ describe('boardLayout', () => {
     for (let i = 1; i < xs.length; i++) if (lanes[i]!.col === lanes[i - 1]!.col) expect(xs[i]! - xs[i - 1]!).toBe(LANE)
   })
 
-  it('wires each strategy from its inputs to its output, plus upkeep and Create payouts', () => {
+  it('wires each strategy from its inputs to its output, plus upkeep and Procurement payouts', () => {
     const s = busy()
     const layout = boardLayout(s, previewWeek(s))
     const fab = layout.cols.find((c) => c.id === 'fab')!

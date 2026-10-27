@@ -159,18 +159,18 @@ function useOf(runner: Runner, id: string, settled: ReturnType<typeof settle>): 
   return need * settled.f
 }
 
-/** The contract that takes units made by Creates: created on first use, always full. */
+/** The contract that takes units made by Procurements: created on first use, always full. */
 function createdContract(state: GameState, u: UnitType): Sourcing {
   let c = contractsFor(state, u.id).find((x) => x.name === CREATED)
   if (!c) {
-    c = { id: makeId(state, `${u.name} created`), unitId: u.id, name: CREATED, description: 'Made by Create.', parts: [], total: 0, used: 0, risky: false }
+    c = { id: makeId(state, `${u.name} created`), unitId: u.id, name: CREATED, description: 'Made by Procurement.', parts: [], total: 0, used: 0, risky: false }
     state.sourcing.push(c)
   }
   return c
 }
 export const CREATED = 'Created directly'
 
-/** Units made by a Create arrive with cap to match. */
+/** Units made by a Procurement arrive with cap to match. */
 export function deliverUnits(state: GameState, u: UnitType, n: number) {
   if (n <= 0) return
   const c = createdContract(state, u)
@@ -271,7 +271,7 @@ export function simulateWeek(state: GameState): WeekReport {
     }
   }
 
-  // Creates deliver.
+  // Procurements deliver.
   const unitsIn = new Map<string, number>()
   state.deliveries = state.deliveries.filter((d) => {
     if (d.delay > 0) {

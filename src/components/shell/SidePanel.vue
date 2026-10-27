@@ -63,7 +63,7 @@ const memo = computed(() => game.cards[0])
 const tape = computed(() => [...game.state.log].reverse().slice(0, 5))
 
 const ACTIONS: { kind: InventKind; feature: Feature; label: string; title: string }[] = [
-  { kind: 'create', feature: 'create', label: 'Create', title: 'Have the mind make something directly' },
+  { kind: 'create', feature: 'create', label: 'Procure', title: 'Have the mind get something directly' },
   { kind: 'strategy', feature: 'strategy', label: 'Strategy', title: 'Something a unit does every week' },
   { kind: 'unit', feature: 'unit', label: 'Unit', title: 'Design an industry unit' },
   { kind: 'sourcing', feature: 'sourcing', label: 'Sourcing', title: 'A contract for how many units you may own' },

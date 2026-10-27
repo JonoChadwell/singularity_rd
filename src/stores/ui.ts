@@ -98,7 +98,7 @@ export const useUiStore = defineStore('ui', () => {
   function follow(prompt: Prompt) {
     switch (prompt.kind) {
       case 'make-resource': {
-        // Before industry, the only way to make something is Create.
+        // Before industry, the only way to make something is Procurement.
         const state = useGameStore().state
         return openInvent(
           lockReason(state, 'strategy')

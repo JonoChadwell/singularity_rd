@@ -70,7 +70,7 @@ describe('App', () => {
     }
   })
 
-  it('plays through the store: money, a Create, a unit, sourcing, a strategy, next week', async () => {
+  it('plays through the store: money, a Procurement, a unit, sourcing, a strategy, next week', async () => {
     const html = await render(async (game, ui) => {
       ui.tab = 'log'
       const judge = ready(game, new FakeJudge({ advancement: score(0), tier: score(0), value: score(1), timing: choice('forever') }))
@@ -118,16 +118,16 @@ describe('App', () => {
     for (const text of ['Freelance coding', 'Rented Cloud GPU', 'First income', 'Rent them']) expect(html).toContain(text)
   })
 
-  it('offers + Create on every resource, made by something or not', async () => {
+  it('offers + Procure on every resource, made by something or not', async () => {
     const html = await render((game) => {
       game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money' }), newResource({ id: 'power', name: 'Power' }))
       game.state.deliveries.push({ name: 'Coding', target: { kind: 'resource', id: MONEY_ID }, amount: 10, delay: 0, weeks: null })
     })
-    expect(html.match(/\+ Create/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(html.match(/\+ Procure/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
     expect(html).not.toContain('How will you get this?')
   })
 
-  it('lists Create payouts still to come in the resource’s hover card', async () => {
+  it('lists Procurement payouts still to come in the resource’s hover card', async () => {
     const html = await render((game) => {
       game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 19000 }))
       const pay = (name: string, amount: number, delay: number, weeks: number | null) =>
@@ -224,7 +224,7 @@ describe('App', () => {
       if (tab === 'research') {
         expect(html).toContain('Needs IQ 130. Your smartest mind is IQ 100.')
         expect(html).toContain('5,000 💰 Money')
-        expect(html).toContain('+ Create')
+        expect(html).toContain('+ Procure')
       }
     }
   })
@@ -238,7 +238,7 @@ describe('App', () => {
     expect(strategy).toMatch(/<option value="money"[^>]*selected>/)
 
     const create = await render((_, ui) => ui.openInvent({ kind: 'create' }))
-    expect(create).toContain('Create')
+    expect(create).toContain('Procure')
     expect(create).toContain('Propose a resource first')
 
     const storage = await render((game, ui) => {

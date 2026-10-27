@@ -220,8 +220,8 @@ export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
   const [, iq1, mult1, iq2, mult2] = B.pick(B.GOAL_APPROACH, level)
   const minIQ = v.phase === 1 ? iq1 : iq2
   const fit = costMultiplier(v.plausibility, v.bar)
-  // Both goals are sized by worth, so they don't follow storage. Phase 1's only income is Create,
-  // so its goal follows what the traits do to Creates and loss.
+  // Both goals are sized by worth, so they don't follow storage. Phase 1's only income is Procurement,
+  // so its goal follows what the traits do to Procurements and loss.
   const amount =
     v.phase === 1
       ? (B.GOAL_WORTH_1 * mult1 * fit * goalIncomeFactor(top)) / top.value

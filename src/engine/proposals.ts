@@ -360,7 +360,7 @@ export function logProposal(state: GameState, tone: 'good' | 'ai', text: string)
 
 /**
  * One action a week: accepting a research proposal (strategy, unit, mind, upgrade, sourcing,
- * storage, cover) or a Create uses it. Resources don't. Doing research already proposed has no
+ * storage, cover) or a Procurement uses it. Resources don't. Doing research already proposed has no
  * weekly limit.
  */
 export const proposalSlotBlocker = (state: GameState): string | null =>

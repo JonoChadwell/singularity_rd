@@ -1,7 +1,7 @@
 # Economy
 
-Status: **built** (2026-10-24, save version 14; the Create action was named Convert until save
-version 15). It replaces the unbounded economy of version 13,
+Status: **built** (2026-10-24, save version 14; the Procure action was named Convert until save
+version 15, then Create). It replaces the unbounded economy of version 13,
 where the best strategy was to design two units, loop resources through both, and create as many
 as you could afford every week for 20 to 30 weeks. Where this file and the code disagree, the code
 wins. All numbers live in [src/engine/balance.ts](src/engine/balance.ts). Phase 1 has been tuned
@@ -13,7 +13,7 @@ lose on the clock, so the Phase 2 targets are skipped until a retune.
 ## Pillars
 
 1. **One action a week.** Either propose a research (a unit, strategy, platform, upgrade,
-   sourcing contract, storage expansion or cover) or Create. Proposing a resource, doing
+   sourcing contract, storage expansion or cover) or Procure. Proposing a resource, doing
    research already on the list, creating units and assigning them are all free.
 2. **Everything is bounded.** Each unit type can only be owned up to the size of its sourcing
    contracts, and a new design has room for none. Each resource can only be held up to its
@@ -21,7 +21,7 @@ lose on the clock, so the Phase 2 targets are skipped until a retune.
 3. **Expanding is risky.** In Phase 2, the main thing humans notice is caps growing: every
    sourcing contract and storage expansion costs clock weeks by how much it adds.
 4. **IQ makes new actions better, never old ones.** A smarter mind gets better contracts and
-   expansions, and bigger Creates. What you already own doesn't change.
+   expansions, and bigger Procurements. What you already own doesn't change.
 
 ## Resources and storage
 
@@ -60,9 +60,9 @@ its costs, what's made and used of it, and what it loses or grows each week: see
 - **Removed:** build strategies, and the Builder and Self-replicating traits. There are 14 unit
   traits now.
 
-## Create
+## Procure
 
-The mind makes something directly: a resource, or units of a designed type.
+The mind gets something directly: a resource, or units of a designed type.
 
 - **Proposing:** the player names the target and says how. Jev rates the idea's efficiency and
   ranks the resources it would naturally use up and how it would pay out. The game offers three
@@ -81,9 +81,9 @@ The mind makes something directly: a resource, or units of a designed type.
   every timing takes the same input as "now", and a weak or over-reaching offer asks for less.
 - **Output:** `(inputs × 1.2 + CREATE_WORTH × Industry × IQ) × Efficiency × payout ×
   Reach`. Over its lifetime, an input therefore comes back as at least 1.2 × its worth × payout,
-  so a Create paid now never returns less than it uses up.
+  so a Procurement paid now never returns less than it uses up.
   - **Industry:** 1 to 10, one step per decade of the worth of the units you own.
-  - **IQ:** (IQ counted for Creates / 100)².
+  - **IQ:** (IQ counted for Procurements / 100)².
   - **Reach:** no IQ gate, but a target above your IQ's tier is penalised smoothly. Your IQ is
     read as a fractional tier between the tiers' IQs, and the penalty is log-interpolated, so 25
     IQ short is always gentler than 125 IQ short.
@@ -93,7 +93,7 @@ The mind makes something directly: a resource, or units of a designed type.
 
 ## Repeat ideas
 
-The game remembers every Create, strategy, sourcing contract and storage expansion the player
+The game remembers every Procurement, strategy, sourcing contract and storage expansion the player
 accepts. When a new one of the same kind is proposed, Jev is shown up to the last 40 and asked
 whether it's the same idea, perhaps under another name. A repeat is one step lower on the
 effectiveness scale (Brilliant becomes Clever, and so on), never below Wasteful. The verdict says
@@ -112,11 +112,11 @@ which earlier idea it repeats.
 - **Values:** unit and resource values use irregular steps (units 10, 50, 200, 700, 1,500,
   4,000), so costs never land on exact 3× or 10× multiples.
 - **Goals:** a goal costs `GOAL_WORTH_1` or `GOAL_WORTH_2` times the approach, divided by its
-  resource's value, so it doesn't depend on storage. Create worth is the same for every target
+  resource's value, so it doesn't depend on storage. Procurement worth is the same for every target
   (`CREATE_WORTH`), so two resources of equal value are made in equal amounts; only reaching
   above your IQ's tier costs output. The Phase 2 goal is much bigger than one cap, so its
   resource's storage has to grow.
 - **Research costs** that are more than a resource can hold say so ("store more first").
-- **Create offers** warn when part of a payout won't fit in storage.
+- **Procurement offers** warn when part of a payout won't fit in storage.
 - **Platforms:** cost `1000 × (IQ/100)³`, so a platform is within a few expansions of the
   resource it's paid in. Software upgrades cost 15% of the difference in `softwareCost`.

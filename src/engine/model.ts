@@ -165,7 +165,7 @@ export function describeFlows(state: GameState, flows: Flow[], multiplier = 1): 
     .join(' + ')
 }
 
-/** A Create's target, by name and icon. */
+/** A Procurement's target, by name and icon. */
 export function targetLabel(state: GameState, t: CreateTarget): string {
   const thing = t.kind === 'unit' ? findUnit(state, t.id) : findResource(state, t.id)
   return thing ? `${thing.icon} ${thing.name}` : '?'
@@ -301,7 +301,7 @@ export function industryScalar(state: GameState): number {
   return 1 + (B.INDUSTRY_MAX - 1) * Math.min(1, decades / B.INDUSTRY_DECADES)
 }
 
-/** The IQ scalar: (IQ / 100)², with the IQ counted for Creates. */
+/** The IQ scalar: (IQ / 100)², with the IQ counted for Procurements. */
 export const iqScalar = (state: GameState) => (iqFor(state, 'create') / 100) ** 2
 
 // ---------------------------------------------------------------- creating units

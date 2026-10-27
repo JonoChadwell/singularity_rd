@@ -25,7 +25,7 @@
 
     <div class="tags">
       <span v-if="pending" class="tag">+{{ fmtCount(pending) }} on the way</span>
-      <span v-if="incoming" class="tag good">+{{ fmt(incoming) }} from Create</span>
+      <span v-if="incoming" class="tag good">+{{ fmt(incoming) }} from Procurement</span>
       <span v-for="w in warnings" :key="w.text" class="tag" :class="w.tone" :title="w.title">{{ w.text }}</span>
       <button
         v-for="t in unit.traits"
@@ -95,7 +95,7 @@ const alloc = computed(() => allocation(game.state, props.unit))
 const contracts = computed(() => contractsFor(game.state, props.unit.id))
 const cap = computed(() => unitCap(game.state, props.unit.id))
 const pending = computed(() => props.unit.pending.reduce((n, p) => n + p.count, 0))
-/** Units a Create still owes this type. */
+/** Units a Procurement still owes this type. */
 const incoming = computed(() =>
   game.state.deliveries.filter((d) => d.target.kind === 'unit' && d.target.id === props.unit.id).reduce((n, d) => n + d.amount, 0)
 )

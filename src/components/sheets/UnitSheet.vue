@@ -41,7 +41,7 @@
           <tr v-for="c in contracts" :key="c.id">
             <td>{{ c.name }} <span v-if="c.risky" class="bad">· risky</span></td>
             <td class="num">{{ fmtCount(c.used) }}/{{ fmtCount(c.total) }}</td>
-            <td class="num">{{ c.parts.length ? describeFlows(game.state, partsFor(u, c)) : 'made by Create' }}</td>
+            <td class="num">{{ c.parts.length ? describeFlows(game.state, partsFor(u, c)) : 'made by Procurement' }}</td>
           </tr>
         </tbody>
       </table>

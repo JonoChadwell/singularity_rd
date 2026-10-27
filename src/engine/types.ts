@@ -157,11 +157,11 @@ export interface Strategy {
   weeksRun?: number
 }
 
-/** What a Create delivers: a resource, or units of a designed type (with cap to match). */
+/** What a Procurement delivers: a resource, or units of a designed type (with cap to match). */
 export type CreateTarget = { kind: 'resource' | 'unit'; id: string }
 
 /**
- * A delivery from a Create: `amount` of the target each week it pays, starting after `delay`
+ * A delivery from a Procurement: `amount` of the target each week it pays, starting after `delay`
  * weeks, for `weeks` weeks (null: every week, for good).
  */
 export interface Delivery {
@@ -334,7 +334,7 @@ export interface UnitWeek {
   unpaidFor: string | null
   /** Not working this week (Intermittent). */
   resting: boolean
-  /** Arrived from a Create. */
+  /** Arrived from a Procurement. */
   built: number
   lost: number
 }
@@ -360,13 +360,13 @@ export interface GameState {
   sourcing: Sourcing[]
   strategies: Strategy[]
   research: Research[]
-  /** What Creates still have to deliver, including every-week ones. */
+  /** What Procurements still have to deliver, including every-week ones. */
   deliveries: Delivery[]
   /** Ideas accepted so far, for spotting repeats. */
   ideas: Idea[]
   /** Names of finished upgrades, for the log and the end of a run. */
   upgrades: { name: string; targetId: string; week: number; key?: string }[]
-  /** One action a week: a research proposal (not a resource) or a Create. */
+  /** One action a week: a research proposal (not a resource) or a Procurement. */
   proposedThisWeek: boolean
   inventions: Invention[]
   milestones: Milestone[]

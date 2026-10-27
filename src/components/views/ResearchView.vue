@@ -4,7 +4,7 @@
       <h2>Work orders</h2>
       <span class="lbl">Doing research is instant. Proposing it takes the week.</span>
       <span class="buttons">
-        <button class="small" :disabled="!!lockReason(game.state, 'create')" @click="ui.openInvent({ kind: 'create' })">+ Create</button>
+        <button class="small" :disabled="!!lockReason(game.state, 'create')" @click="ui.openInvent({ kind: 'create' })">+ Procure</button>
         <button v-if="!coverLock" class="small" @click="ui.openInvent({ kind: 'cover' })">+ Cover</button>
       </span>
     </div>

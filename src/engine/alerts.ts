@@ -103,7 +103,7 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
 
   // The week's action.
   if (state.phase.status === 'playing' && !state.proposedThisWeek) {
-    add({ key: 'action', tone: 'info', text: 'This week’s action is unused: propose a research, or Create.' })
+    add({ key: 'action', tone: 'info', text: 'This week’s action is unused: propose a research, or Procure.' })
   }
 
   // The clock.
