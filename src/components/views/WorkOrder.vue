@@ -15,7 +15,7 @@
       <div class="req" :title="iqTitle">
         <Led :tone="iq >= r.minIQ ? 'good' : 'bad'" />
         <span class="lbl">IQ</span>
-        <Gauge :value="Math.min(iq, r.minIQ)" :max="r.minIQ" :segments="10" :tone="iq >= r.minIQ ? 'good' : 'bad'" />
+        <Gauge :value="Math.max(0, Math.min(iq, r.minIQ) - IQ_FLOOR)" :max="Math.max(1, r.minIQ - IQ_FLOOR)":segments="10" :tone="iq >= r.minIQ ? 'good' : 'bad'" />
         <span class="num">{{ Math.round(iq) }}/{{ r.minIQ }}</span>
       </div>
       <div v-for="c in r.cost" :key="c.resourceId" class="req">
@@ -55,6 +55,8 @@ import Led from '../kit/StatusLed.vue'
 import { costText, effectText, researchPartNo } from '../sheets/text'
 
 const props = defineProps<{ r: Research }>()
+/** The IQ bar's empty end: an IQ of 100 is an unfilled bar. */
+const IQ_FLOOR = 100
 const game = useGameStore()
 const ui = useUiStore()
 
