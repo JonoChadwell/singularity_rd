@@ -73,7 +73,7 @@ The mind gets something directly: a resource, or units of a designed type.
   | Once, now | ×1 |
   | Spread over 4 weeks | ×1.5 |
   | Once, in 4 weeks | ×2 |
-  | Every week, for good | ×⅛ a week |
+  | Every week for 20 weeks | ×4 (⅕ a week) |
 
 - **Inputs are paid in full when you accept, whatever the timing.** Timing only changes when and
   how the payout arrives. An option's input is worth what the mind makes before timing,

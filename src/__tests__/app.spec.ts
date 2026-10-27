@@ -73,7 +73,7 @@ describe('App', () => {
   it('plays through the store: money, a Procurement, a unit, sourcing, a strategy, next week', async () => {
     const html = await render(async (game, ui) => {
       ui.tab = 'log'
-      const judge = ready(game, new FakeJudge({ advancement: score(0), tier: score(0), value: score(1), timing: choice('forever') }))
+      const judge = ready(game, new FakeJudge({ advancement: score(0), tier: score(0), value: score(1), timing: choice('weekly') }))
       const money = await game.propose({ kind: 'resource', spec: { name: 'Money', description: 'Dollars.' } })
       expect(game.accept(money!)).toMatchObject({ kind: 'added' })
 
@@ -82,7 +82,7 @@ describe('App', () => {
         spec: { name: 'Freelance coding', description: '', target: { kind: 'resource', id: MONEY_ID } }
       })
       if (coding?.kind !== 'create') throw new Error('expected a create')
-      coding.choice = coding.options.findIndex((o) => o.timing === 'forever')
+      coding.choice = coding.options.findIndex((o) => o.timing === 'weekly')
       expect(game.accept(coding)).toMatchObject({ kind: 'added' })
       game.nextWeek()
       expect(findResource(game.state, MONEY_ID)!.amount).toBe(coding.options[coding.choice]!.amount)

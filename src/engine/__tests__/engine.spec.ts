@@ -233,10 +233,10 @@ describe('create', () => {
     const worth = (t: string) => v.options.find((o) => o.timing === t)?.outputWorth
     if (worth('now') !== undefined) expect(worth('now')).toBe(B.CREATE_WORTH)
     if (worth('later') !== undefined) expect(worth('later')).toBe(B.CREATE_WORTH * 2)
-    if (worth('forever') !== undefined) expect(worth('forever')).toBe(B.CREATE_WORTH * 0.125)
+    if (worth('weekly') !== undefined) expect(worth('weekly')).toBe(B.CREATE_WORTH * 4)
   })
 
-  it('pays now, later, spread over weeks, or every week for good, and uses the week’s action', async () => {
+  it('pays now, later, spread over weeks, or every week for 20 weeks, and uses the week’s action', async () => {
     const pick = async (timing: string) => {
       const s = moneyWorld()
       const v = await judgeCreate(s, new FakeJudge({ timing: choice(timing) }), createSpec())
@@ -266,12 +266,16 @@ describe('create', () => {
     expect(money(s)).toBeCloseTo(spread.amount * 4)
     expect(s.deliveries).toEqual([])
 
-    const forever = await pick('forever')
-    s = forever.s
+    const weekly = await pick('weekly')
+    s = weekly.s
     for (let w = 0; w < 10; w++) s = runWeek(s)
-    expect(money(s)).toBeCloseTo(forever.amount * 10)
+    expect(money(s)).toBeCloseTo(weekly.amount * 10)
     expect(s.deliveries).toHaveLength(1)
     expect(s.milestones.map((m) => m.key)).toContain('first-income')
+    for (let w = 0; w < 10; w++) s = runWeek(s)
+    expect(money(s)).toBeCloseTo(weekly.amount * 20)
+    expect(money(s)).toBeCloseTo(now.amount * 4)
+    expect(s.deliveries).toEqual([])
   })
 
   it('remembers ideas, and makes a repeat one step less effective, never below Wasteful', async () => {
@@ -359,7 +363,7 @@ describe('create', () => {
     }
     const now = await inputFor('now')
     expect(now).toBe(B.CREATE_WORTH * B.CREATE_INPUT_SHARE)
-    for (const timing of ['spread', 'later', 'forever']) expect(await inputFor(timing), timing).toBe(now)
+    for (const timing of ['spread', 'later', 'weekly']) expect(await inputFor(timing), timing).toBe(now)
     // Wasteful halves what the mind makes, and so the input.
     expect(await inputFor('now', { efficiency: score(0) })).toBe(now! * B.EFFICIENCY[0]![1])
     // Reaching a tier above your IQ shrinks it by the same factor as the output.
@@ -380,7 +384,7 @@ describe('create', () => {
     s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY }))
     server(s).software = { name: 'v2', iq: 100, upgraded: true }
     // Jev would never pay out now; but Money (tier 0) is easy at IQ 200.
-    const v = await judgeCreate(s, new FakeJudge({ timing: choice('forever', { forever: 0.5, later: 0.3, spread: 0.2 }) }), createSpec())
+    const v = await judgeCreate(s, new FakeJudge({ timing: choice('weekly', { weekly: 0.5, later: 0.3, spread: 0.2 }) }), createSpec())
     expect(v.options.some((o) => o.timing === 'now' && !o.inputs.length)).toBe(true)
   })
 

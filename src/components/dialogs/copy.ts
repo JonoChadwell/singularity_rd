@@ -43,7 +43,7 @@ export const COPY: Record<
   },
   create: {
     title: 'Procure',
-    help: 'Procure is the mind getting something directly, from scratch or from what you have: say what and how. Jev offers three ways, each using a different resource (or nothing) and paying out differently: once now, spread over four weeks (1.5×), once in four weeks (2×), or every week for good (⅛ a week). Inputs are paid in full now, whatever the timing; timing only changes when the payout arrives. Output is (inputs × 1.2 + a base for its tier × Industry × IQ) × Efficiency. Reaching above your IQ’s tier costs output, a little for a little. Units made this way cost twice what sourcing would. It uses the week’s one action.',
+    help: 'Procure is the mind getting something directly, from scratch or from what you have: say what and how. Jev offers three ways, each using a different resource (or nothing) and paying out differently: once now, spread over four weeks (1.5×), once in four weeks (2×), or every week for 20 weeks (⅕ a week, 4× in all). Inputs are paid in full now, whatever the timing; timing only changes when the payout arrives. Output is (inputs × 1.2 + a base for its tier × Industry × IQ) × Efficiency. Reaching above your IQ’s tier costs output, a little for a little. Units made this way cost twice what sourcing would. It uses the week’s one action.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. Freelance coding, Quant trading',
     description: 'How will you get it? (helps Jev)',

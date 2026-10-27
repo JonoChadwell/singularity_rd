@@ -195,7 +195,7 @@ function priceOption(
   const risky = v.risk ? B.RISK_OUTPUT : 1
   const outputWorth =
     (inputWorth * B.CREATE_INPUT_RETURN + base) * efficiency * reach * mult * risky * targetOutput(state, v.spec.target)
-  const perDelivery = timing === 'spread' ? outputWorth / weeks : outputWorth
+  const perDelivery = timing === 'spread' || timing === 'weekly' ? outputWorth / weeks : outputWorth
   return { timing, inputs, inputWorth, outputWorth, amount: amountOf(state, v.spec.target, perDelivery) }
 }
 
@@ -217,8 +217,8 @@ export function describeOption(state: GameState, v: Pick<CreateVerdict, 'spec'>,
       return `${what} a week for 4 weeks`
     case 'later':
       return `${what} in 4 weeks`
-    case 'forever':
-      return `${what} every week, for good`
+    case 'weekly':
+      return `${what} a week for 20 weeks`
   }
 }
 
@@ -262,7 +262,7 @@ export function acceptCreate(current: GameState, v: CreateVerdict): Accepted {
       target: { ...t },
       amount: option.amount,
       delay: option.timing === 'later' ? weeks - 1 : 0,
-      weeks: option.timing === 'forever' ? null : option.timing === 'later' ? 1 : weeks
+      weeks: option.timing === 'later' ? 1 : weeks
     })
   }
   if (v.risk) moveClock(state, -v.risk.weeks, `${name} alarmed humans`)

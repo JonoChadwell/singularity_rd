@@ -387,7 +387,7 @@ onMounted(async () => {
   nameInput.value?.focus()
 })
 
-const TIMING: Record<string, string> = { now: 'Pays now', spread: 'Over 4 weeks', later: 'In 4 weeks', forever: 'Every week' }
+const TIMING: Record<string, string> = { now: 'Pays now', spread: 'Over 4 weeks', later: 'In 4 weeks', weekly: 'For 20 weeks' }
 
 /** Option part numbers: OPT-A, OPT-B, OPT-C. */
 const opt = (i: number) => `OPT-${String.fromCharCode(65 + i)}`

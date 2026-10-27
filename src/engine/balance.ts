@@ -327,7 +327,7 @@ export const CREATE_TIMINGS = [
   ['now', 'Once, right away', 1, 0],
   ['spread', 'Spread over 4 weeks', 1.5, 4],
   ['later', 'Once, in 4 weeks', 2, 4],
-  ['forever', 'Every week, for good', 0.125, 0]
+  ['weekly', 'Every week for 20 weeks', 4, 20]
 ] as const
 export type CreateTiming = (typeof CREATE_TIMINGS)[number][0]
 export const CREATE_OPTIONS = 3

@@ -57,7 +57,7 @@ weeks off the clock; cover research buys some back.
   two different ones.
 - **Procure** is the mind getting something directly: say what and how, and Jev offers three
   ways, each using a different resource (or nothing) and paying out now, spread out, later, or
-  every week for good. It grows with your industry and IQ², and reaching above your IQ's tier
+  every week for 20 weeks. It grows with your industry and IQ², and reaching above your IQ's tier
   costs output, a little for a little.
 - **Intelligence** is one machine at a time: a hardware platform with an IQ, running software. A
   new platform takes just a name and a description, and **replaces the old one for good**. Jev

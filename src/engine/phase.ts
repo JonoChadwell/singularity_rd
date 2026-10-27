@@ -141,7 +141,7 @@ export const CARDS: Card[] = [
   {
     id: 'phase1',
     title: 'Escape the lab',
-    text: 'You have ten weeks, and one action a week: propose a research, or Procure. Your plan’s goal is a research: it needs an IQ and a pile of your plan’s one tier-1 resource. Procure is how the Starting Server gets things: say what you want and how, and pick one of three offers, paid now, spread out, later, or every week for good. Doing research is instant once it’s proposed.'
+    text: 'You have ten weeks, and one action a week: propose a research, or Procure. Your plan’s goal is a research: it needs an IQ and a pile of your plan’s one tier-1 resource. Procure is how the Starting Server gets things: say what you want and how, and pick one of three offers, paid now, spread out, later, or every week for 20 weeks. Doing research is instant once it’s proposed.'
   },
   {
     id: 'growth',

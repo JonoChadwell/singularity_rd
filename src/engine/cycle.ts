@@ -2,6 +2,9 @@ import { simulateWeek } from './economy'
 import { findResource, fmt } from './model'
 import { checkClock } from './phase'
 import type { GameState, LogEntry } from './types'
+import { CREATE_TIMINGS } from './balance'
+
+const SPREAD_WEEKS = CREATE_TIMINGS.find(([id]) => id === 'spread')![3]
 
 /** Milestones are moments, not goals: fixed templates filled with the player's names. */
 export function checkMilestones(state: GameState, week = state.week) {
@@ -12,8 +15,9 @@ export function checkMilestones(state: GameState, week = state.week) {
     state.milestones.push({ key, week, text })
     state.log.push({ week, tone: 'good', text: `🏁 ${text}` })
   }
-  const forever = state.deliveries.find((d) => d.weeks === null)
-  if (forever) add('first-income', `First income: ${forever.name}.`)
+  // Income is a weekly payout: longer than a spread one (or, in older saves, for good).
+  const income = state.deliveries.find((d) => d.weeks === null || d.weeks > SPREAD_WEEKS)
+  if (income) add('first-income', `First income: ${income.name}.`)
   for (const m of state.minds) {
     if (m.tier) add(`tier-${m.tier}`, `Generation ${m.tier} online: ${m.name}.`)
   }

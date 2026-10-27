@@ -198,7 +198,7 @@ export async function phase1(approach = 1): Promise<GameState> {
 
 /** Phase 1, doing nothing useful: one Procurement for a little Story Ideas every week, and nothing else. */
 export const idle: Turn = async (s) => {
-  if (s.week === 1) s = await createVia(s, resourceTarget('story-ideas'), 'forever')
+  if (s.week === 1) s = await createVia(s, resourceTarget('story-ideas'), 'weekly')
   return researchAll(s)
 }
 
@@ -221,7 +221,7 @@ export const flat: Turn = async (s) => {
 /** Phase 1, income first: an every-week Procurement into the goal's resource, then as flat. */
 export const chain2: Turn = async (s) => {
   s = researchAll(s)
-  if (s.week === 1) return researchAll(await createVia(s, resourceTarget(goalResource(s)), 'forever'))
+  if (s.week === 1) return researchAll(await createVia(s, resourceTarget(goalResource(s)), 'weekly'))
   return flat(s)
 }
 
