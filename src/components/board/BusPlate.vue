@@ -12,8 +12,8 @@
     <div class="line1">
       <button type="button" class="name" :title="`${r.name}: open its datasheet`" @click="ui.openSheet({ kind: 'resource', id: r.id })">
         <span class="icon">{{ r.icon }}</span>
-        <span class="label">{{ r.name }}</span>
         <span class="tier num">T{{ r.tier }}</span>
+        <span class="label">{{ r.name }}</span>
       </button>
       <span class="amount num">{{ fmt(r.amount) }}<span class="cap"> / {{ fmt(cap) }}</span></span>
     </div>
