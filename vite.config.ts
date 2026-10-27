@@ -22,7 +22,10 @@ export default defineConfig(({ mode }) => {
         log
       })
     ],
+    // Listen on all interfaces so other machines on the LAN can play.
+    preview: { host: true },
     server: {
+      host: true,
       // Don't reload the page when run logs are written.
       watch: { ignored: ['**/logs/**'] }
     },

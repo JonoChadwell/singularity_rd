@@ -106,6 +106,10 @@ The key is read by the Vite dev/preview server (`server/jevProxy.ts`), which for
 `/api/jev` to `${JEV_BASE_URL}/v1/systemone`. It is never bundled into the browser code. The game
 needs this proxy, so it runs under `npm run dev` or `npm run preview`, not as static files.
 
+Both servers listen on all interfaces, so anyone on your LAN can play at `http://<your-ip>:5173`
+(Vite prints the "Network" URL at startup; Windows may ask to allow Node through the firewall).
+Their games use your Jev key and each browser keeps its own save.
+
 Optional settings in `.env.local`: `JEV_BASE_URL` (default `https://openrouter.ai/api`) and
 `JEV_MODEL` (default `jev-latest`).
 
