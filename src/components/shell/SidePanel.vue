@@ -3,7 +3,7 @@
     <section class="panel slot" :class="{ used }" :title="slotTitle">
       <header class="slot-head">
         <Led :tone="used ? 'off' : 'good'" />
-        <h2>{{ used ? 'Action used' : 'Action free' }}</h2>
+        <h2>{{ used ? 'Action used' : 'Action available' }}</h2>
         <span class="lbl">1 / week</span>
       </header>
       <p class="sr-only">{{ slotTitle }}</p>
