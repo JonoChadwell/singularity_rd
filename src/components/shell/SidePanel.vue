@@ -20,12 +20,6 @@
           {{ a.label }}
         </button>
       </div>
-      <div class="free">
-        <span class="lbl">Free</span>
-        <button type="button" class="small act" title="Propose a new resource. Doesn’t use the week." @click="ui.openInvent({ kind: 'resource' })">
-          + Resource
-        </button>
-      </div>
     </section>
 
     <section v-if="memo" class="memo" aria-label="Memo">
@@ -121,19 +115,6 @@ const slotTitle = computed(() =>
 
 .act {
   padding: 3px 4px;
-}
-
-.free {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--chrome-3);
-}
-
-.free .act {
-  flex: 1;
 }
 
 /* A paper memo pinned to the bench. */
