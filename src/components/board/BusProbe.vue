@@ -81,6 +81,7 @@ const overflowsLater = computed(() =>
   top: calc(100% + 4px);
   left: 0;
   width: 330px;
+  pointer-events: none;
   padding: 8px 10px;
   font-family: var(--font-mono);
   font-size: 11.5px;
