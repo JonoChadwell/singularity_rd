@@ -1,5 +1,6 @@
 import { doResearch, researchBlocker } from './actions'
 import { computeTrait } from './computeTraits'
+import type { CoverVerdict } from './coverProposal'
 import { findResource, findUnit, fmt, makeId, tierLabel } from './model'
 import { draftMind, type MindVerdict } from './mindProposal'
 import {
@@ -22,11 +23,12 @@ import type { Verdict } from './dispatch'
 // Banking: every option Jev offers can be saved to the research list for later (all of them, for
 // one action), or applied now (just that one, researched at once if the mind and stocks allow).
 
-export type BankableVerdict = UnitVerdict | MindVerdict | StorageVerdict | SourcingVerdict | StrategyVerdict
+export type BankableVerdict = UnitVerdict | MindVerdict | StorageVerdict | SourcingVerdict | StrategyVerdict | CoverVerdict
 
 /** Verdicts whose options become research. A plan's first unit comes designed, so it isn't one. */
 export const isBankable = (v: Verdict): v is BankableVerdict =>
   v.kind === 'mind' ||
+  v.kind === 'cover' ||
   v.kind === 'storage' ||
   v.kind === 'sourcing' ||
   v.kind === 'strategy' ||
@@ -93,6 +95,19 @@ function draftOption(state: GameState, v: BankableVerdict, i: number): Draft {
         cost: o.cost,
         effect: { kind: 'storage', resourceId: r.id, expansion: { name: v.spec.name, added: o.added } },
         risk: o.risk
+      }
+    }
+    case 'cover': {
+      const o = v.options[i]!
+      return {
+        label: `${o.label}, +${o.weeks} weeks`,
+        name: `${v.spec.name} (+${o.weeks} weeks)`,
+        description: `Buys ${o.weeks} more weeks on the clock: ${v.spec.description || v.spec.name}.`,
+        icon: '🕶️',
+        minIQ: o.minIQ,
+        cost: o.cost,
+        effect: { kind: 'cover', weeks: o.weeks },
+        risk: null
       }
     }
     case 'sourcing': {

@@ -74,7 +74,7 @@ export const COMPUTE_TRAITS: ComputeTrait[] = [
     name: 'Discreet',
     icon: '🥷',
     kind: 'perk',
-    rule: `Humans notice it less: +${B.COMPUTE_CLOCK} weeks on the clock when it arrives.`,
+    rule: `Buys time: +${B.COMPUTE_CLOCK} weeks on the clock when it arrives.`,
     family: 'clock',
     effect: { kind: 'clock', weeks: B.COMPUTE_CLOCK }
   },
@@ -97,7 +97,7 @@ export const COMPUTE_TRAITS: ComputeTrait[] = [
     name: 'Noisy',
     icon: '📢',
     kind: 'drawback',
-    rule: `Draws attention: −${B.COMPUTE_CLOCK} weeks on the clock when it arrives.`,
+    rule: `Costs time: −${B.COMPUTE_CLOCK} weeks on the clock when it arrives.`,
     family: 'clock',
     effect: { kind: 'clock', weeks: -B.COMPUTE_CLOCK }
   },

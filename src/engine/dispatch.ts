@@ -1,6 +1,7 @@
 import type { Judge } from '@/ai/jev'
 import { acceptCreate, judgeCreate, type CreateSpec, type CreateVerdict } from './createProposal'
-import { acceptCover, judgeCover, type CoverSpec, type CoverVerdict } from './coverProposal'
+import { bankVerdict } from './banking'
+import { judgeCover, type CoverSpec, type CoverVerdict } from './coverProposal'
 import { acceptMind, judgeMind, type MindSpec, type MindVerdict } from './mindProposal'
 import { acceptPlan, judgePlan, type PlanSpec, type PlanVerdict } from './planProposal'
 import {
@@ -82,7 +83,8 @@ export function acceptAny(s: GameState, verdict: Verdict): Accepted {
     case 'create':
       return acceptCreate(s, verdict)
     case 'cover':
-      return acceptCover(s, verdict)
+      // Saves the chosen option to Research, like the store's single-option bank.
+      return bankVerdict(s, verdict, verdict.choice)
     case 'plan':
       return acceptPlan(s, verdict)
   }

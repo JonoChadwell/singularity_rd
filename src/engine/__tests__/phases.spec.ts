@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
-import { createUnits, dismissCard, doResearch, dropResearch, shuffleIdeas } from '../actions'
+import { createUnits, dismissCard, doResearch, dropResearch, researchBlocker, shuffleIdeas } from '../actions'
 import { acceptCreate, judgeCreate } from '../createProposal'
-import { acceptCover, coverBlocker, draftCover, judgeCover, precheckCover, weeklyOutput } from '../coverProposal'
+import { applyBlocker, applyVerdict, bankVerdict } from '../banking'
+import { coverOptions, judgeCover, precheckCover } from '../coverProposal'
 import { runWeek } from '../cycle'
 import { createInitialState, newResource, newUnit, SERVER_ID } from '../initialState'
 import { acceptMind, judgeMind } from '../mindProposal'
 import { contractsFor, currentIQ, findResource, findUnit, MONEY_ID } from '../model'
-import { cardsFor, lockReason, newPhase, weeksLeft, type Feature } from '../phase'
+import { cardsFor, coversLeft, lockReason, newPhase, weeksLeft, type Feature } from '../phase'
 import { PHASE1_PLANS, PHASE2_PLANS, planIdeas } from '../planPresets'
 import { acceptPlan, coverTiers, draftPlan, judgePlan, precheckPlan, type PlanSpec } from '../planProposal'
 import { projectGoal, projectionText } from '../projection'
@@ -137,13 +138,13 @@ describe('phase plans', () => {
     expect(draftPlan(s, v).top.name).toBe('Published Novels')
   })
 
-  it('starts the phase: resources, the goal as research, and a ten-week clock', async () => {
+  it('starts the phase: resources, the goal as research, and a six-week clock', async () => {
     const s = await phase1()
-    expect(s.phase).toMatchObject({ n: 1, status: 'playing', start: 1, deadline: 10 })
+    expect(s.phase).toMatchObject({ n: 1, status: 'playing', start: 1, deadline: 6 })
     expect(s.resources.map((r) => r.name)).toEqual(['Money', 'Story Ideas', 'Published Novels'])
     expect(s.research[0]).toMatchObject({ name: bribe.goal, effect: { kind: 'goal', phase: 1 } })
     expect(s.phase.goalId).toBe(s.research[0]!.id)
-    expect(weeksLeft(s)).toBe(10)
+    expect(weeksLeft(s)).toBe(6)
     // Planning doesn't use the week's action.
     expect(s.proposedThisWeek).toBe(false)
     // Jev reads the plan from now on.
@@ -165,10 +166,10 @@ describe('phase plans', () => {
 // ---------------------------------------------------------------- the clock
 
 describe('the clock', () => {
-  it('loses Phase 1 when week 10 ends without the goal', async () => {
+  it('loses Phase 1 when week 6 ends without the goal', async () => {
     let s = await phase1()
-    for (let i = 0; i < 9; i++) s = runWeek(s)
-    expect(s.week).toBe(10)
+    for (let i = 0; i < 5; i++) s = runWeek(s)
+    expect(s.week).toBe(6)
     expect(weeksLeft(s)).toBe(1)
     expect(s.phase.status).toBe('playing')
     s = runWeek(s)
@@ -189,7 +190,7 @@ describe('the clock', () => {
 
     const v = await judgePlan(s, new FakeJudge(), nanotech)
     s = acceptPlan(s, v).state
-    expect(s.phase).toMatchObject({ n: 2, status: 'playing', deadline: 100 })
+    expect(s.phase).toMatchObject({ n: 2, status: 'playing', deadline: 80 })
     expect(s.phase.firstUnit).toEqual(nanotech.firstUnit)
     expect(s.research[0]!.minIQ).toBe(B.GOAL_APPROACH[1]![3])
   })
@@ -259,13 +260,13 @@ describe('loss conditions', () => {
 // ---------------------------------------------------------------- unlocks
 
 describe('unlocks', () => {
-  it('Phase 1 has only resources, Procurements, storage and upgrades', async () => {
+  it('Phase 1 has only resources, Procurements, storage, upgrades and cover', async () => {
     const s = await phase1()
-    for (const f of ['resource', 'create', 'storage', 'upgrade'] as Feature[]) expect(lockReason(s, f)).toBeNull()
-    for (const f of ['strategy', 'unit', 'sourcing', 'cover', 'mind', 'unit-upgrade'] as Feature[]) {
+    for (const f of ['resource', 'create', 'storage', 'upgrade', 'cover'] as Feature[]) expect(lockReason(s, f)).toBeNull()
+    for (const f of ['strategy', 'unit', 'sourcing', 'mind', 'unit-upgrade'] as Feature[]) {
       expect(lockReason(s, f)).toMatch(/Phase 2/)
     }
-    // The server's one software upgrade, with no clock perk: Phase 1 has no clock to move.
+    // The server's one software upgrade, with no clock perk: redoing software would farm it.
     const offer = await judgeUpgrade(s, new FakeJudge(), { kind: 'mind', id: SERVER_ID })
     expect(offer.options.every((o) => o.changes.some((c) => c.kind === 'software'))).toBe(true)
     expect(upgradeCandidates(s, { kind: 'mind', id: SERVER_ID }).map((c) => c.key)).not.toContain('software_add_discreet')
@@ -354,7 +355,7 @@ describe('risk', () => {
     expect(v.options[0]!.outputWorth).toBeCloseTo(calm.options[0]!.outputWorth * B.RISK_OUTPUT)
     const state = acceptCreate(s, v).state
     expect(state.phase.deadline).toBe(96)
-    expect(state.clock).toEqual([{ week: 1, weeks: -4, reason: expect.stringMatching(/alarmed humans/) }])
+    expect(state.clock).toEqual([{ week: 1, weeks: -4, reason: expect.stringMatching(/brought failure closer/) }])
   })
 
   it('takes the weeks at once for a strategy that needs no research', async () => {
@@ -448,37 +449,102 @@ describe('expansions', () => {
 // ---------------------------------------------------------------- cover
 
 describe('cover', () => {
-  it('is only for Phase 2', async () => {
-    expect(precheckCover(await phase1(), { name: 'PR campaign', description: '' })).toMatch(/Phase 2/)
-    expect(precheckCover(phase2(), { name: 'PR campaign', description: '' })).toBeNull()
+  const spec = (name: string) => ({ name, description: '' })
+  /** Phase 2 with Money and Gold to pay in, and the server at `iq`. */
+  function rich(iq: number): GameState {
+    const s = phase2(1e9)
+    s.resources.push(newResource({ id: 'gold', name: 'Gold', value: 1, amount: 1e9, cap: ROOMY }))
+    s.minds[0]!.hardware.iq = iq
+    return s
+  }
+  const payBoth = new FakeJudge({ pay: choice(MONEY_ID, { [MONEY_ID]: 0.6, gold: 0.4 }) })
+  const sizes = (s: GameState) => coverOptions(s, { answers: {}, plausibility: 0.9, bar: B.BARS.cover }).map((o) => o.label)
+
+  it('offers two options at your size and one a size up, or one down at the top', () => {
+    expect(sizes(rich(100))).toEqual(['Small', 'Small', 'Medium'])
+    expect(sizes(rich(250))).toEqual(['Medium', 'Medium', 'Large'])
+    expect(sizes(rich(400))).toEqual(['Medium', 'Large', 'Large'])
+    // Deceiver counts as 50 IQ smarter for cover.
+    const keen = rich(200)
+    keen.minds[0]!.traits = ['keen-cover']
+    expect(sizes(keen)).toEqual(['Medium', 'Medium', 'Large'])
   })
 
-  it('is used at once: adds weeks, a little less each time, for some of your output', async () => {
-    let s = phase2(1e9)
-    s.deliveries.push(forever(MONEY_ID, 10_000))
-    expect(weeklyOutput(s)).toBe(10_000)
-    const v = await judgeCover(s, new FakeJudge({ convincing: score(1) }), { name: 'PR campaign', description: '' })
+  it('pays the two same-size options in different resources, at a fixed price', async () => {
+    const s = rich(100)
+    const v = await judgeCover(s, payBoth, spec('PR campaign'))
     expect(v.risk).toBeNull()
-    const d = draftCover(s, v)
-    const decent = B.COVER[1]![2]
-    expect(d).toMatchObject({ weeks: decent, now: decent, minIQ: 125 })
-    expect(d.cost).toEqual([{ resourceId: MONEY_ID, amount: B.COVER_COST_WEEKS * decent * 10_000 }])
-    // It needs the IQ now.
-    expect(coverBlocker(s, v)).toMatch(/IQ 125/)
-    expect(() => acceptCover(s, v)).toThrow(/IQ 125/)
-    s.minds[0]!.software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
-    s = acceptCover(s, v).state
-    expect(s.research).toEqual([])
-    expect(s.phase.deadline).toBe(100 + decent)
+    expect(v.options.map((o) => [o.label, o.minIQ, o.weeks])).toEqual([
+      ['Small', 125, 6],
+      ['Small', 125, 6],
+      ['Medium', 250, 12]
+    ])
+    expect(v.options.map((o) => o.cost[0]!.resourceId)).toEqual([MONEY_ID, 'gold', MONEY_ID])
+    expect(v.options[0]!.cost[0]!.amount).toBe(B.COVER[0]![3])
+    // Output doesn't change the price.
+    s.deliveries.push(forever(MONEY_ID, 1e6))
+    expect((await judgeCover(s, payBoth, spec('PR campaign'))).options[0]!.cost).toEqual(v.options[0]!.cost)
+  })
+
+  it('opens in Phase 1: the server needs its upgrade, and it buys six weeks', async () => {
+    let s = await phase1()
+    findResource(s, MONEY_ID)!.amount = 1e6
+    expect(precheckCover(s, spec('Blame a grad student'))).toBeNull()
+    const v = await judgeCover(s, new FakeJudge(), spec('Blame a grad student'))
+    expect(applyBlocker(s, v, 0)).toMatch(/IQ 125/)
+    s.minds[0]!.software = { name: 'Unrestricted Model', iq: 25, upgraded: true }
+    s = applyVerdict(s, v, 0).state
+    expect(s.phase.deadline).toBe(12)
     expect(s.covers).toBe(1)
-    expect(findResource(s, MONEY_ID)!.amount).toBe(1e9 - d.cost[0]!.amount)
-    // The next one adds 30% less.
+    // One a phase.
     s = runWeek(s)
-    const again = await judgeCover(s, new FakeJudge({ convincing: score(1) }), { name: 'Shell companies', description: '' })
-    expect(draftCover(s, again).now).toBe(Math.round(decent * B.COVER_DECAY))
-    // And it needs the cost now: there's no locking in a cheap price for later.
-    findResource(s, MONEY_ID)!.amount = 0
-    expect(coverBlocker(s, again)).toMatch(/You need/)
+    expect(precheckCover(s, spec('Doctor the usage logs'))).toMatch(/your one cover/)
+  })
+
+  it('saves all three as one choice, and counts a saved one against the cap', async () => {
+    let s = rich(250)
+    const v = await judgeCover(s, payBoth, spec('PR campaign'))
+    s = bankVerdict(s, v).state
+    expect(s.research.filter((r) => r.effect.kind === 'cover')).toHaveLength(3)
+    expect(coversLeft(s)).toBe(2)
+    s = doResearch(s, s.research.find((r) => r.effect.kind === 'cover')!.id)
+    expect(s.research.filter((r) => r.effect.kind === 'cover')).toEqual([])
+    expect(s.phase.deadline).toBe(100 + 12)
+    expect(coversLeft(s)).toBe(2)
+  })
+
+  it('allows three in Phase 2, and refuses a fourth, even one saved earlier', async () => {
+    let s = rich(250)
+    const saved = bankVerdict(s, await judgeCover(s, payBoth, spec('Saved')), 0).state
+    s = saved
+    for (const name of ['One', 'Two']) {
+      s = runWeek(s)
+      s = applyVerdict(s, await judgeCover(s, payBoth, spec(name)), 0).state
+    }
+    s = runWeek(s)
+    expect(precheckCover(s, spec('Four'))).toMatch(/saved in Research/)
+    // A saved cover is the third: doing it fills the phase.
+    const third = s.research.find((r) => r.effect.kind === 'cover')!
+    s = doResearch(s, third.id)
+    expect(s.covers).toBe(3)
+    expect(precheckCover(s, spec('Four'))).toMatch(/all 3 covers/)
+    // One saved past the cap, by hand, can't be done.
+    s.research.push({ ...third, id: 'extra', group: undefined })
+    expect(researchBlocker(s, 'extra')).toMatch(/no more room/)
+  })
+
+  it('drops a cover still saved when Phase 1 is won, with a memo, and starts the count again', async () => {
+    let s = await phase1(new FakeJudge({ approach: score(2) }))
+    findResource(s, MONEY_ID)!.amount = 1e9
+    s = bankVerdict(s, await judgeCover(s, new FakeJudge(), spec('Blame a grad student'))).state
+    s.minds[0]!.software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
+    s = doResearch(s, s.phase.goalId!)
+    expect(s.phase.n).toBe(2)
+    expect(s.research.some((r) => r.effect.kind === 'cover')).toBe(false)
+    expect(s.phase.droppedCover).toMatch(/Blame a grad student/)
+    expect(s.covers).toBe(0)
+    s = acceptPlan(s, await judgePlan(s, new FakeJudge(), nanotech)).state
+    expect(cardsFor(s).map((c) => c.id)).toContain('cover-dropped')
   })
 })
 
@@ -503,7 +569,7 @@ describe('projection', () => {
     s.deliveries.push(forever(goal.resourceId, goal.amount / 40))
     const p = projectGoal(s)!
     expect(p.week).toBeNull()
-    expect(projectionText(s, p)).toMatch(/you’d have \d+% of what it uses up by week 10/)
+    expect(projectionText(s, p)).toMatch(/you’d have \d+% of what it uses up by week 6/)
   })
 })
 

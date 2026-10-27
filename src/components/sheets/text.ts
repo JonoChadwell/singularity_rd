@@ -1,5 +1,4 @@
 import { describeCost, describeFlows, findMind, findResource, findUnit, fmt } from '@/engine/model'
-import { coverWeeks } from '@/engine/phase'
 import type { GameState, Research } from '@/engine/types'
 import { describeChange } from '@/engine/upgrade'
 
@@ -26,7 +25,7 @@ export function effectText(state: GameState, r: Research): string {
     case 'storage':
       return `Room for ${fmt(e.expansion.added)} more ${findResource(state, e.resourceId)?.name ?? ''}.`
     case 'cover':
-      return `Adds ${coverWeeks(state, e.weeks)} weeks to the clock, once researched.`
+      return `Adds ${e.weeks} weeks to the clock, once researched.`
     case 'unit':
       return `A new industry unit: ${e.unit.name}.`
     case 'mind':

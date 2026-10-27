@@ -52,7 +52,7 @@ export const SPECULATIVE_RANGE: [number, number] = [0.25, 2]
 // ---------------------------------------------------------------- phases
 
 /** How long each phase's clock runs, by phase. Phase 3 has none. */
-export const PHASE_WEEKS: Record<1 | 2, number> = { 1: 10, 2: 100 }
+export const PHASE_WEEKS: Record<1 | 2, number> = { 1: 6, 2: 80 }
 /** Resources in a plan: [fewest, most]. Phase 2 needs this many new ones. */
 export const PLAN_RESOURCES: Record<1 | 2, [number, number]> = { 1: [3, 5], 2: [5, 8] }
 /** The tier of the plan's top resource, which the goal uses up. The rest of a Phase 1 plan is tier 0. */
@@ -114,19 +114,18 @@ export const RISK_PARTS = 0.5
  * tenfold after: 100k costs 1, 1M costs 2, 10M costs 3. Risky expansions cost twice that.
  */
 export const EXPANSION_NOTICE_FROM = 1e5
-/** Cover: [label, minimum IQ, weeks added]. */
-export const COVER: [string, number, number][] = [
-  ['A flimsy excuse', 100, 3],
-  ['A decent cover story', 125, 6],
-  ['A convincing deception', 150, 9],
-  ['A masterstroke of misdirection', 250, 15]
+/**
+ * Cover sizes: [label, minimum IQ, weeks added, worth it costs]. The price is fixed, so banking
+ * a cover early doesn't make it cheap; Phase 1 pays PHASE1_RESEARCH_COST of it, like all its
+ * research. See COVER_DESIGN.md.
+ */
+export const COVER: [string, number, number, number][] = [
+  ['Small', 125, 6, 2000],
+  ['Medium', 250, 12, 20000],
+  ['Large', 400, 18, 200000]
 ]
-/** Each cover already done shrinks the next by this factor. */
-export const COVER_DECAY = 0.7
-/** Cover costs this many weeks of your weekly output for each week it adds. */
-export const COVER_COST_WEEKS = 0.25
-/** Weekly output is counted as at least this much, so early cover isn't free. */
-export const COVER_MIN_OUTPUT = 300
+/** The most covers a phase allows. */
+export const COVER_MAX: Record<1 | 2, number> = { 1: 1, 2: 3 }
 
 // ---------------------------------------------------------------- research
 

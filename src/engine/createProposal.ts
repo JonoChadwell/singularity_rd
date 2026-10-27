@@ -265,7 +265,7 @@ export function acceptCreate(current: GameState, v: CreateVerdict): Accepted {
       weeks: option.timing === 'later' ? 1 : weeks
     })
   }
-  if (v.risk) moveClock(state, -v.risk.weeks, `${name} alarmed humans`)
+  if (v.risk) moveClock(state, -v.risk.weeks, `${name} brought failure closer`)
   state.inventions.push({ week: state.week, icon: '⚗️', name, kind: 'create' })
   recordIdea(state, 'create', name, `${v.spec.description} (makes ${targetLabel(state, t)})`)
   state.decidedThisWeek = true

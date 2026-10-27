@@ -1,48 +1,44 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
-import { previewWeek } from './economy'
 import { lossOf } from './losses'
-import { costShortfall, findResource, iqFor, payCost } from './model'
-import { coverWeeks, lockReason, moveClock } from './phase'
+import { iqFor } from './model'
+import { lockReason } from './phase'
 import {
   baseVerdict,
-  claimProposal,
   cleanText,
   costFor,
-  floorIQ,
   gate,
+  payerPerTake,
   payQuestion,
   precheckName,
   proposalSlotBlocker,
-  reader,
-  scale,
-  type Accepted,
   type VerdictBase
 } from './proposals'
 import { proposalText } from './stateText'
 import type { Cost, GameState } from './types'
 
-/** Cover: a way to buy time before humans act. It moves the deadline back. */
+// Cover: a way to buy time before the plan's loss condition. Jev offers three sizes, each a
+// research that moves the deadline back once. See COVER_DESIGN.md.
+
 export interface CoverSpec {
   name: string
   description: string
 }
 
+export interface CoverOption {
+  /** Small, Medium or Large. */
+  label: string
+  minIQ: number
+  /** Weeks it adds to the clock. */
+  weeks: number
+  cost: Cost
+}
+
 export interface CoverVerdict extends VerdictBase {
   kind: 'cover'
   spec: CoverSpec
-}
-
-/** Worth of the stocks you'll make next week, at least COVER_MIN_OUTPUT. */
-export function weeklyOutput(state: GameState): number {
-  const preview = previewWeek(state)
-  let worth = 0
-  for (const [id, flows] of Object.entries(preview.flows)) {
-    const r = findResource(state, id)
-    if (!r) continue
-    worth += flows.reduce((n, f) => n + Math.max(0, f.amount), 0) * r.value
-  }
-  return Math.max(B.COVER_MIN_OUTPUT, worth)
+  options: CoverOption[]
+  choice: number
 }
 
 export function precheckCover(state: GameState, spec: CoverSpec): string | null {
@@ -58,11 +54,6 @@ export async function judgeCover(state: GameState, judge: Judge, raw: CoverSpec)
       type: 'noul',
       instructions: `Could this plausibly buy the AI time before ${lossOf(state).threat}?`
     },
-    convincing: {
-      type: 'score',
-      instructions: 'How well would it keep humans from acting against the AI, and how hard is it to pull off?',
-      criteria: scale(B.COVER)
-    },
     ...payQuestion(state, `cover:${spec.name.toLowerCase()}`)
   }
   const answers = await judge.ask(
@@ -74,44 +65,44 @@ export async function judgeCover(state: GameState, judge: Judge, raw: CoverSpec)
     questions,
     'cover'
   )
-  const v: CoverVerdict = { ...baseVerdict('cover', questions, answers, 'plausible', []), kind: 'cover', spec }
+  const v: CoverVerdict = { ...baseVerdict('cover', questions, answers, 'plausible', []), kind: 'cover', spec, options: [], choice: 0 }
   // Cover is never risky.
   v.risk = null
+  v.options = coverOptions(state, v)
   gate(v, 'Jev doesn’t think this would buy any time', null)
   return v
 }
 
-/** Weeks before diminishing returns, weeks it would add now, and what researching it needs. */
-export function draftCover(state: GameState, v: CoverVerdict): { weeks: number; now: number; minIQ: number; cost: Cost } {
-  const [, minIQ, weeks] = B.pick(B.COVER, reader(v).level('convincing', B.COVER.length))
-  const now = coverWeeks(state, weeks)
-  return { weeks, now, minIQ: floorIQ(minIQ), cost: costFor(state, v, B.COVER_COST_WEEKS * now * weeklyOutput(state)) }
-}
-
-/** Why a cover can't be used right now, or null. */
-export function coverBlocker(state: GameState, v: CoverVerdict): string | null {
-  if (v.rejected) return 'This proposal was not accepted.'
-  const { minIQ, cost } = draftCover(state, v)
+/**
+ * The size of cover your IQ for it reaches: the biggest in COVER you meet, or the smallest when
+ * you meet none (the Starting Server, before its upgrade).
+ */
+export function coverSize(state: GameState): number {
   const iq = iqFor(state, 'cover')
-  if (iq < minIQ) return `Pulling this off needs IQ ${minIQ}; your smartest mind counts as IQ ${Math.round(iq)} for it.`
-  const short = costShortfall(state, cost)
-  return short ? `You need ${short} to do it now.` : null
+  let size = 0
+  B.COVER.forEach(([, minIQ], i) => {
+    if (iq >= minIQ) size = i
+  })
+  return size
 }
 
 /**
- * Cover is used the moment it's accepted: it needs the IQ and what it costs right then. (Kept
- * for later, its price would be set while the economy was small.)
+ * Three options, smallest first: two at your size, each paid in a different one of Jev's
+ * favourite payers, and one a size up. At the top size, the third is a size down instead, for a
+ * cheaper cover. Each size has a fixed price, whenever it's proposed.
  */
-export function acceptCover(current: GameState, v: CoverVerdict): Accepted {
-  const state = structuredClone(current)
-  const blocker = coverBlocker(state, v)
-  if (blocker) throw new Error(blocker)
-  claimProposal(state)
-  const { cost, now } = draftCover(state, v)
-  payCost(state, cost, v.spec.name)
-  state.inventions.push({ week: state.week, icon: '🕶️', name: v.spec.name, kind: 'cover' })
-  state.decidedThisWeek = true
-  state.covers++
-  moveClock(state, now, `Cover: ${v.spec.name}`)
-  return { state, outcome: { kind: 'added', name: v.spec.name } }
+export function coverOptions(state: GameState, v: Pick<CoverVerdict, 'answers' | 'plausibility' | 'bar'>): CoverOption[] {
+  const size = coverSize(state)
+  const top = B.COVER.length - 1
+  const odd = size < top ? size + 1 : size - 1
+  const [first, second] = payerPerTake(v.answers, 2)
+  const takes = [
+    { size, payer: first },
+    { size, payer: second },
+    { size: odd, payer: first }
+  ].sort((a, b) => a.size - b.size)
+  return takes.map((t) => {
+    const [label, minIQ, weeks, worth] = B.COVER[t.size]!
+    return { label, minIQ, weeks, cost: costFor(state, { ...v, risk: null }, worth, undefined, t.payer) }
+  })
 }

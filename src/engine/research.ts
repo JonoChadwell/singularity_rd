@@ -1,7 +1,7 @@
 import * as B from './balance'
 import { clockOf, computeTrait, costFactorOf } from './computeTraits'
 import { bestMind, contractsFor, defaultTask, findMind, findResource, findStrategy, findUnit, fmt, makeId } from './model'
-import { coverWeeks, moveClock, winPhase } from './phase'
+import { moveClock, winPhase } from './phase'
 import { costFactor } from './resourceTraits'
 import { has, type TraitId } from './traits'
 import type { Change, Cost, Flow, GameState, Mind, Research, Resource, Strategy, UnitType } from './types'
@@ -207,7 +207,7 @@ export function addMind(state: GameState, mind: Mind) {
 export function completeResearch(state: GameState, r: Research): string {
   const effect = r.effect
   state.research = state.research.filter((x) => x.id !== r.id && !(r.group && x.group === r.group))
-  if (r.risk?.weeks) moveClock(state, -r.risk.weeks, `${r.name} alarmed humans`)
+  if (r.risk?.weeks) moveClock(state, -r.risk.weeks, `${r.name} brought failure closer`)
   switch (effect.kind) {
     case 'unit': {
       addUnit(state, effect.unit)
@@ -226,9 +226,8 @@ export function completeResearch(state: GameState, r: Research): string {
     case 'goal':
       return winPhase(state, effect.phase)
     case 'cover': {
-      const weeks = coverWeeks(state, effect.weeks)
       state.covers++
-      moveClock(state, weeks, `Cover: ${r.name}`)
+      moveClock(state, effect.weeks, `Cover: ${r.name}`)
       return `${r.icon} ${r.name}: humans look the other way.`
     }
     case 'mind': {

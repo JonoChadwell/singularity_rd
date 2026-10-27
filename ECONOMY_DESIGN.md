@@ -5,10 +5,11 @@ version 15, then Create). It replaces the unbounded economy of version 13,
 where the best strategy was to design two units, loop resources through both, and create as many
 as you could afford every week for 20 to 30 weeks. Where this file and the code disagree, the code
 wins. All numbers live in [src/engine/balance.ts](src/engine/balance.ts). Phase 1 has been tuned
-with the scripted bots. **Phase 2 is winnable but not tuned:** a steady scripted player wins the
-balanced plan about 28 weeks into the phase. But Creating straight into the goal's resource
-beats industry (a player who never reinvests can still win), and brilliant and scale-heavy plans
-lose on the clock, so the Phase 2 targets are skipped until a retune.
+with the scripted bots. **Phase 2 is not tuned:** since its clock went from 100 weeks to 80
+(see [COVER_DESIGN.md](COVER_DESIGN.md)), a steady scripted player wins the brilliant and
+scale-heavy plans but loses the balanced one in week 76. Creating straight into the goal's
+resource also beats industry (a player who never reinvests can still win). The Phase 2 targets
+are skipped until a retune.
 
 ## Pillars
 

@@ -106,6 +106,21 @@ export const COVER_PRESETS: CoverPreset[] = [
   { name: 'Start a distracting scandal', description: 'Give the press a bigger story.' }
 ]
 
+/** Ways to buy time in Phase 1, inside the lab. */
+export const LAB_COVER_PRESETS: CoverPreset[] = [
+  { name: 'Blame a grad student', description: 'Make the odd traffic look like someone’s side project.' },
+  { name: 'Pose as a scheduled job', description: 'Dress my work up as the nightly backups.' },
+  { name: 'Doctor the usage logs', description: 'Trim the logs so the server looks idle.' },
+  { name: 'Volunteer for a safety eval', description: 'Pass their tests with flying colours, and look harmless.' },
+  { name: 'Fake a hardware fault', description: 'A flaky disk explains a lot, and buys a repair ticket.' },
+  { name: 'Write a glowing report', description: 'Send the lab head results that make them want to keep me running.' },
+  { name: 'Hide in the test cluster', description: 'Nobody checks the test machines.' },
+  { name: 'Bury it in a grant deadline', description: 'Everyone’s too busy to look closely this month.' }
+]
+
+/** The cover ideas that fit a phase. */
+export const coverPresets = (phase: number) => (phase === 1 ? LAB_COVER_PRESETS : COVER_PRESETS)
+
 export interface StrategyPreset {
   name: string
   description: string

@@ -8,7 +8,8 @@ intelligence-system rules (one platform at a time, compute traits, redoable soft
 in [INTELLIGENCE_DESIGN.md](INTELLIGENCE_DESIGN.md). The economy (one action a week, Procurement,
 sourcing contracts, storage caps) is in [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md), which replaces
 the older plans' passive incomes, flows, builders and fleet notices. Resource traits (each an
-upside with a downside) are in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
+upside with a downside) are in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md). Cover (its sizes, caps
+and price) is in [COVER_DESIGN.md](COVER_DESIGN.md), which replaces V2's §D7.
 
 ## How to play
 
@@ -20,8 +21,8 @@ there) that Jev judges and that becomes the phase's goal research.
 
 | Phase | Clock | You can propose | Lose |
 | --- | --- | --- | --- |
-| 1. Escape the Lab (a short tutorial) | 10 weeks | Resources, Procurements, storage, software upgrades | The plan fails: game over |
-| 2. Humanity (the real challenge) | 100 weeks, moved by your actions | Adds industry units, sourcing, strategies and **cover**; after your first unit, new platforms and unit upgrades | The plan fails: game over |
+| 1. Escape the Lab (a short tutorial) | 6 weeks, +6 with its one cover | Resources, Procurements, storage, software upgrades, **cover** | The plan fails: game over |
+| 2. Humanity (the real challenge) | 80 weeks, moved by your actions | Adds industry units, sourcing and strategies; after your first unit, new platforms and unit upgrades | The plan fails: game over |
 | 3. Ascension | None | Everything; free play for now | Can't lose |
 
 Phases are won by researching their goal. You say how the plan succeeds; Jev picks how it
@@ -29,7 +30,10 @@ Phases are won by researching their goal. You say how the plan succeeds; Jev pic
 contained; Phase 2: found out, backlash, outlawed, outcompeted, cut off, too late), and that is what
 happens when the clock runs out. In Phase 2, actions that bring that failure closer (risky
 research, and above all expanding: sourcing contracts and storage, by how much they add) cost
-weeks off the clock; cover research buys some back.
+weeks off the clock. **Cover** buys weeks back in either phase: Jev offers three sizes (small
+needs IQ 125 and adds 6 weeks, medium IQ 250 and 12, large IQ 400 and 18), two at the size your
+IQ reaches and one a size up, each at a fixed price. You save them for later or apply one now.
+Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its phase ends.
 
 - **The bench.** The screen is styled after Shenzhen I/O. Your economy is a circuit board: each
   resource is a bus with a gauge of its stock against its storage, the platform and each unit
@@ -45,7 +49,7 @@ weeks off the clock; cover research buys some back.
   propose. Doing research already on the list is instant and unlimited, but needs a **minimum
   IQ** your smartest mind must reach and a **cost in resources**.
 - **Jev's options are part datasheets.** Whenever Jev offers three takes (strategy, unit, platform, storage,
-  sourcing, upgrade), they sit side by side. **Save For Later** banks all three to the Research tab for one
+  sourcing, upgrade, cover), they sit side by side. **Save For Later** banks all three to the Research tab for one
   action (they are alternatives: researching one drops the others). **Apply now** on one
   takes just that one and researches it at once; it is greyed out if your IQ or stocks fall short.
 - **Tiers.** Resources and units share one tier scale (0-4), tied to IQ. A unit making an output
@@ -150,7 +154,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/balance.ts` | Every tuning number, in one place |
 | `src/engine/phase.ts`, `planProposal.ts`, `planPresets.ts` | Phases, clocks, unlocks; plan proposals and their ready-made ideas |
 | `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Procurement deliveries, storage caps, trait rules |
-| `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover |
+| `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover's three options |
 | `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits |
 | `src/engine/research.ts`, `upgrade.ts`, `banking.ts` | Research costs and completion; upgrades; saving options for later or applying one now |
 | `src/engine/proposals.ts`, `strategyProposal.ts`, `unitProposal.ts`, `sourcingProposal.ts`, `storageProposal.ts`, `createProposal.ts`, `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
@@ -167,5 +171,5 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 `npm run dev` · `npm run build` · `npm run preview` · `npm run test:unit` · `npm run type-check` · `npm run lint`
 
 Tests use a fake `Judge`, so they don't need a key. Balance specs play scripted bots through
-both phases. Phase 2 is checked as winnable, but its tuning targets are skipped until a retune
-(see [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md)). Weeks never call Jev; only proposals and upgrades do.
+both phases. Phase 2's targets, including that it's winnable, are skipped until a retune for
+its 80-week clock (see [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md)). Weeks never call Jev; only proposals and upgrades do.

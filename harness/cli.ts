@@ -15,7 +15,7 @@ import * as B from '@/engine/balance'
 import { alertsFor } from '@/engine/alerts'
 import { runWeek } from '@/engine/cycle'
 import { previewWeek } from '@/engine/economy'
-import { coverBlocker, draftCover } from '@/engine/coverProposal'
+
 import { acceptAny, judgeAny, type ProposalInput, type Verdict } from '@/engine/dispatch'
 import { describeOption, optionBlocker, overflowOf } from '@/engine/createProposal'
 import { createInitialState } from '@/engine/initialState'
@@ -59,7 +59,7 @@ import {
   UNIT_PRESETS
 } from '@/engine/presets'
 import { lossOf } from '@/engine/losses'
-import { cardsFor, clockMoved, lockReason, PHASE_NAMES, weeksLeft, type Feature } from '@/engine/phase'
+import { cardsFor, clockMoved, coversLeft, lockReason, PHASE_NAMES, weeksLeft, type Feature } from '@/engine/phase'
 import { plansFor, planIdeas } from '@/engine/planPresets'
 import { draftPlan } from '@/engine/planProposal'
 import { goalOf, projectGoal, projectionText } from '@/engine/projection'
@@ -189,8 +189,9 @@ function printPhase(s: GameState) {
   const left = weeksLeft(s)
   say(
     `PHASE ${p.n}: ${PHASE_NAMES[p.n]} · ${p.status.toUpperCase()}` +
-      (left !== null ? ` · ${p.n === 1 ? 'discovery' : 'humans stop you'} after week ${p.deadline} (${left} weeks left, counting this one)` : '') +
-      (s.clock.length ? ` · clock −${clockMoved(s, -1)}/+${clockMoved(s, 1)} so far` : '')
+      (left !== null ? ` · the plan fails (${lossOf(s).name}) after week ${p.deadline} (${left} weeks left, counting this one)` : '') +
+      (s.clock.length ? ` · clock −${clockMoved(s, -1)}/+${clockMoved(s, 1)} so far` : '') +
+      (p.n < 3 && p.status === 'playing' ? ` · covers left ${coversLeft(s)}` : '')
   )
   if (p.status === 'lost') {
     say(`GAME OVER in week ${s.week - 1}: ${p.lostReason}`)
@@ -313,7 +314,7 @@ function printStatus(s: GameState) {
         : e.kind === 'storage'
           ? ` · room for ${fmt(e.expansion.added)} more${e.expansion.catch ? ` (${describeCatch(s, e.expansion.catch)})` : ''}`
           : e.kind === 'cover'
-            ? ` · adds ${e.weeks} weeks before decay`
+            ? ` · adds ${e.weeks} weeks to the clock`
             : e.kind === 'goal'
               ? ' · THE GOAL'
               : ''
@@ -362,11 +363,11 @@ function printVerdict(s: GameState, v: Verdict) {
     return
   }
   if (v.kind === 'cover') {
-    const d = draftCover(s, v)
-    say(`  → used the moment you accept: adds ${d.now} weeks (${d.weeks} without your earlier covers)`)
-    say(`  → needs IQ ${d.minIQ}, uses up ${describeCost(s, d.cost)} now`)
-    const blocked = coverBlocker(s, v)
-    if (blocked) say(`  CAN’T USE IT NOW: ${blocked}`)
+    say(`  cover [option <n>]:`)
+    v.options.forEach((o, i) =>
+      say(`    ${i}${i === v.choice ? ' *' : ''}: ${o.label}: +${o.weeks} weeks · needs IQ ${o.minIQ}, uses up ${describeCost(s, o.cost)}`)
+    )
+    say(`  Covers left this phase: ${coversLeft(s)} (saving this uses one).`)
     return
   }
   if (v.kind === 'create') {

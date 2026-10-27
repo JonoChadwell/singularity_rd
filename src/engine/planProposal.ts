@@ -137,8 +137,8 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
     proposalText(state, [
       `The player plans Phase ${phase} of the game, “${PHASE_NAMES[phase]}”.`,
       phase === 1
-        ? 'In Phase 1 the AI has ten weeks to get out of the research lab before anyone notices.'
-        : 'In Phase 2 the AI has 100 weeks to deal with humanity before humans stop it.',
+        ? `In Phase 1 the AI has ${B.PHASE_WEEKS[1]} weeks to get out of the research lab before something goes wrong; cover can buy a little more.`
+        : `In Phase 2 the AI has ${B.PHASE_WEEKS[2]} weeks to deal with humanity before its plan fails; drawing attention costs time, and cover buys some back.`,
       `Goal: "${spec.goal}"`,
       `${phase === 1 ? 'How' : 'How it handles humans'}: "${spec.means || '(not said)'}"`,
       'Resources:',

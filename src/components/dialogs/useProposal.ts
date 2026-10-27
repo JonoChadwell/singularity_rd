@@ -1,12 +1,12 @@
 import { computed, reactive, ref, toRaw, watch } from 'vue'
 import { applyBlocker, isBankable } from '@/engine/banking'
 import { computeTrait } from '@/engine/computeTraits'
-import { coverBlocker, draftCover, precheckCover } from '@/engine/coverProposal'
+import { precheckCover } from '@/engine/coverProposal'
 import { precheckCreate } from '@/engine/createProposal'
 import { draftMind, precheckMind } from '@/engine/mindProposal'
 import { bestMind, capOf, describeCost, describeFlows, findResource, fmt, nextHardwareName, tierLabel, unitValueText } from '@/engine/model'
 import {
-  COVER_PRESETS,
+  coverPresets,
   CREATE_PRESETS,
   MIND_PRESETS,
   resolveResources,
@@ -79,7 +79,7 @@ export function useProposal(request: InventRequest) {
     if (kind === 'create') return CREATE_PRESETS.map((p) => ({ ...p, icon: '⚗️', blocked: null }))
     if (kind === 'sourcing') return SOURCING_PRESETS.map((p) => ({ ...p, icon: '📦', blocked: null }))
     if (kind === 'storage') return STORAGE_PRESETS.map((p) => ({ ...p, icon: '🏗️', blocked: null }))
-    if (kind === 'cover') return COVER_PRESETS.map((p) => ({ ...p, icon: '🕶️', blocked: blocked(p.name) }))
+    if (kind === 'cover') return coverPresets(game.state.phase.n).map((p) => ({ ...p, icon: '🕶️', blocked: blocked(p.name) }))
     if (kind === 'mind') return mindPresets.value.map((p) => ({ ...p, icon: '🧠', blocked: blocked(p.name) }))
     return UNIT_PRESETS.map((p) => ({ ...p, icon: '🏭', blocked: blocked(p.name) }))
   })
@@ -111,7 +111,7 @@ export function useProposal(request: InventRequest) {
       missingResources.value = output.missing
     } else if (kind === 'sourcing') fill(SOURCING_PRESETS.find((x) => x.name === presetId))
     else if (kind === 'storage') fill(STORAGE_PRESETS.find((x) => x.name === presetId))
-    else if (kind === 'cover') fill(COVER_PRESETS.find((x) => x.name === presetId))
+    else if (kind === 'cover') fill(coverPresets(game.state.phase.n).find((x) => x.name === presetId))
     else if (kind === 'mind') fill(mindPresets.value.find((x) => x.name === presetId))
     else fill(UNIT_PRESETS.find((x) => x.name === presetId))
   }
@@ -216,9 +216,6 @@ export function useProposal(request: InventRequest) {
     if (v?.kind !== 'resource') return []
     return v.options.map((ids, i) => ({ i, traits: ids.map(resourceTrait) }))
   })
-  // Cover previews next week, which structuredClones the state: it needs the raw state, not the proxy.
-  const coverDraft = computed(() => (verdict.value?.kind === 'cover' ? draftCover(toRaw(game.state), verdict.value) : null))
-  const coverBlock = computed(() => (verdict.value?.kind === 'cover' ? coverBlocker(toRaw(game.state), verdict.value) : null))
   // Jev's ways to do it, each drafted as if picked, to show what it uses and makes.
   const strategyOptions = computed(() => {
     const v = verdict.value
@@ -249,9 +246,8 @@ export function useProposal(request: InventRequest) {
   const acceptLabel = computed(() => {
     const v = verdict.value
     // These show their options as cards, each with its own button.
-    if (v && ['create', 'sourcing', 'storage', 'mind', 'unit', 'strategy'].includes(v.kind)) return null
+    if (v && ['create', 'sourcing', 'storage', 'mind', 'unit', 'strategy', 'cover'].includes(v.kind)) return null
     if (v?.kind === 'resource' && resourceOptions.value.length) return null
-    if (v?.kind === 'cover') return 'Use it now'
     return 'Accept'
   })
 
@@ -353,8 +349,6 @@ export function useProposal(request: InventRequest) {
     mindOptions,
     resourceOptions,
     strategyOptions,
-    coverDraft,
-    coverBlock,
     storageTotal,
     researchText,
     acceptLabel,

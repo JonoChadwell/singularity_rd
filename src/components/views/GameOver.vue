@@ -52,7 +52,7 @@ const rows = computed<SpecRow[]>(() => {
     out.push({ k: 'And used up', v: `${goal.cost.length ? describeCost(st, goal.cost) : 'nothing'}${short ? ` (you were short ${short})` : ''}`, tone: short ? 'bad' : 'good' })
   }
   for (const h of st.history) out.push({ k: `Phase ${h.n} won`, v: `${h.plan.goal}, week ${h.week}`, tone: 'good' })
-  if (st.clock.length) out.push({ k: 'The clock', v: `−${clockMoved(st, -1)} weeks to risk and notices, +${clockMoved(st, 1)} from cover` })
+  if (st.clock.length) out.push({ k: 'The clock', v: `−${clockMoved(st, -1)} weeks to risk and expansions, +${clockMoved(st, 1)} from cover` })
   return out
 })
 </script>

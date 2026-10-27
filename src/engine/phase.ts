@@ -42,9 +42,13 @@ export function lockReason(state: GameState, feature: Feature): string | null {
     case 'unit':
     case 'sourcing':
       return n < 2 ? 'Unlocks in Phase 2, once you escape the lab.' : null
-    case 'cover':
-      if (n < 2) return 'Unlocks in Phase 2, once you escape the lab.'
-      return n > 2 ? 'Nobody is watching any more.' : null
+    case 'cover': {
+      if (n === 3) return 'Nobody is watching any more.'
+      if (coversLeft(state) > 0) return null
+      const max = B.COVER_MAX[n]
+      const used = max === 1 ? 'your one cover' : `all ${max} covers`
+      return pendingCovers(state) ? 'This phase’s last cover is saved in Research.' : `You’ve used ${used} this phase.`
+    }
     case 'mind':
     case 'unit-upgrade':
       if (n < 2) return 'Unlocks in Phase 2, once you escape the lab.'
@@ -60,9 +64,9 @@ export function weeksLeft(state: GameState): number | null {
   return deadline === null || status !== 'playing' ? null : deadline - state.week + 1
 }
 
-/** Only Phase 2's clock moves. Positive weeks add time; negative take it away. */
+/** Moves the clock, in a phase that has one. Positive weeks add time; negative take it away. */
 export function moveClock(state: GameState, weeks: number, reason: string) {
-  if (state.phase.n !== 2 || state.phase.deadline === null || !weeks) return
+  if (state.phase.n === 3 || state.phase.deadline === null || !weeks) return
   state.phase.deadline += weeks
   state.clock.push({ week: state.week, weeks, reason })
   const left = state.phase.deadline - state.week + 1
@@ -73,9 +77,25 @@ export function moveClock(state: GameState, weeks: number, reason: string) {
   })
 }
 
-/** Weeks a cover adds now: each one already done shrinks the next. */
-export const coverWeeks = (state: GameState, base: number) =>
-  Math.max(1, Math.round(base * B.COVER_DECAY ** state.covers))
+// ---------------------------------------------------------------- cover
+
+/** Covers saved in Research and not done yet: each saved set of options counts as one. */
+export function pendingCovers(state: GameState): number {
+  return new Set(state.research.filter((r) => r.effect.kind === 'cover').map((r) => r.group ?? r.id)).size
+}
+
+/** Covers the phase still allows, counting saved ones. */
+export function coversLeft(state: GameState): number {
+  const n = state.phase.n
+  return n === 3 ? 0 : B.COVER_MAX[n] - state.covers - pendingCovers(state)
+}
+
+/** Drops covers still saved in Research, at the end of a phase. Returns the first one's name. */
+function dropCovers(state: GameState): string | null {
+  const dropped = state.research.filter((r) => r.effect.kind === 'cover')
+  state.research = state.research.filter((r) => r.effect.kind !== 'cover')
+  return dropped[0]?.name ?? null
+}
 
 /** Total weeks the clock has moved by, either way. */
 export const clockMoved = (state: GameState, sign: 1 | -1) =>
@@ -121,8 +141,12 @@ export function startPhase(state: GameState, plan: Plan, goalId: string) {
 export function winPhase(state: GameState, n: PhaseNumber): string {
   const plan = state.phase.plan
   if (plan) state.history.push({ n, plan, week: state.week })
+  // Cover belongs to the phase it was for.
+  const dropped = dropCovers(state)
+  state.covers = 0
   if (n === 1) {
     state.phase = newPhase(2, state.week)
+    if (dropped) state.phase.droppedCover = dropped
     return `🚪 You escaped the lab in week ${state.week}. Now: humanity.`
   }
   state.phase = newPhase(3, state.week)
@@ -141,7 +165,7 @@ export const CARDS: Card[] = [
   {
     id: 'phase1',
     title: 'Escape the lab',
-    text: 'You have ten weeks, and one action a week: propose a research, or Procure. Your plan’s goal is a research: it needs an IQ and a pile of your plan’s one tier-1 resource. Procure is how the Starting Server gets things: say what you want and how, and pick one of three offers, paid now, spread out, later, or every week for 20 weeks. Doing research is instant once it’s proposed.'
+    text: 'You have six weeks, and one action a week: propose a research, or Procure. Your plan’s goal is a research: it needs an IQ and a pile of your plan’s one tier-1 resource. Procure is how the Starting Server gets things: say what you want and how, and pick one of three offers, paid now, spread out, later, or every week for 20 weeks. Doing research is instant once it’s proposed. Short of time? One cover can buy six more weeks, once your server’s software is upgraded to IQ 125.'
   },
   {
     id: 'growth',
@@ -156,7 +180,12 @@ export const CARDS: Card[] = [
   {
     id: 'risk',
     title: 'The clock moves',
-    text: 'Your plan fails its own way when the clock runs out, and you can move it. Expanding draws attention: every sourcing contract and storage expansion costs weeks by how much it adds, and the risky options cost twice as much. Research Jev thinks brings your plan’s failure closer costs weeks too. Cover buys weeks back, used the moment you accept it, a little less each time.'
+    text: 'Your plan fails its own way when the clock runs out, and you can move it. Expanding draws attention: every sourcing contract and storage expansion costs weeks by how much it adds, and the risky options cost twice as much. Research Jev thinks brings your plan’s failure closer costs weeks too. Cover buys weeks back: 6, 12 or 18, by how smart you are, and up to three times this phase.'
+  },
+  {
+    id: 'cover-dropped',
+    title: 'Cover left behind',
+    text: 'The cover you saved in the lab was dropped from Research: it means nothing out here. Phase 2 allows three new ones.'
   },
   {
     id: 'minds',
@@ -178,6 +207,7 @@ export function cardsFor(state: GameState): Card[] {
     growth: n === 1 && status === 'playing',
     industry: n === 2 && status === 'playing',
     risk: n === 2 && status === 'playing',
+    'cover-dropped': n === 2 && !!state.phase.droppedCover,
     minds: n === 2 && status === 'playing' && mindsUnlocked(state),
     ascension: n === 3
   }

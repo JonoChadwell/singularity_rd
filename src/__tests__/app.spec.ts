@@ -60,7 +60,7 @@ describe('App', () => {
         })
         expect(v?.kind).toBe('plan')
         expect(game.accept(v!)).toMatchObject({ kind: 'research' })
-        expect(game.state.phase).toMatchObject({ n: 1, status: 'playing', deadline: 10 })
+        expect(game.state.phase).toMatchObject({ n: 1, status: 'playing', deadline: 6 })
         expect(game.cards.map((c) => c.id)).toEqual(['phase1', 'growth'])
       },
       { fresh: true }

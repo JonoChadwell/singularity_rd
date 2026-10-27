@@ -253,21 +253,18 @@
         </div>
       </template>
 
-      <!-- Cover. -->
-      <template v-else-if="verdict.kind === 'cover' && coverDraft">
-        <SpecTable
-          class="strip"
-          :rows="[
-            {
-              k: 'Adds',
-              v: `${coverDraft.now} week${coverDraft.now === 1 ? '' : 's'} to the clock${coverDraft.now < coverDraft.weeks ? ` (would be ${coverDraft.weeks}; earlier covers make it less convincing)` : ''}`,
-              tone: 'good'
-            },
-            { k: 'Needs IQ', v: String(coverDraft.minIQ), num: true },
-            { k: 'Uses up now', v: coverDraft.cost.length ? describeCost(game.state, coverDraft.cost) : 'nothing' }
-          ]"
-        />
-        <p v-if="coverBlock" class="bad">{{ coverBlock }}</p>
+      <!-- Cover: three sizes. -->
+      <template v-else-if="verdict.kind === 'cover'">
+        <p class="lbl">Cover: pick one</p>
+        <div class="cards">
+          <PartSheet v-for="(o, i) in verdict.options" :key="i" :part="opt(i)" :title="o.label" :chosen="verdict.choice === i" @select="verdict.choice = i">
+            <p class="big num">+{{ o.weeks }} weeks</p>
+            <p class="muted">{{ researchText(o) }}</p>
+            <template #actions>
+              <ApplyButtons :blocker="blockers[i] ?? null" @apply="applyNow(i)" />
+            </template>
+          </PartSheet>
+        </div>
       </template>
 
       <!-- Platform: Jev's takes. -->
@@ -364,8 +361,6 @@ const {
   mindOptions,
   resourceOptions,
   strategyOptions,
-  coverDraft,
-  coverBlock,
   storageTotal,
   researchText,
   acceptLabel,

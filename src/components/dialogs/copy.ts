@@ -69,7 +69,7 @@ export const COPY: Record<
   },
   cover: {
     title: 'Propose cover',
-    help: 'Cover buys time: it moves the day your plan fails further away, the moment you use it, so you need its IQ and its cost when you accept. Jev judges how plausible and how convincing it is. More convincing cover adds more weeks but needs more IQ. Each cover you’ve already used makes the next one add 30% less. It costs some weeks of your current output. Cover is never risky. It uses the week’s one action.',
+    help: 'Cover buys time: it moves the day your plan fails further away. Jev judges whether it’s plausible and what it uses up, and offers three options: two at the size your IQ reaches, paid in different resources, and one a size up (at the top size, one down, for less). Small needs IQ 125 and adds 6 weeks; medium needs 250 and adds 12; large needs 400 and adds 18. Each size has a fixed price. Save them all for later or apply one now. A phase allows one cover in Phase 1 and three in Phase 2, counting saved ones; saved cover is dropped when the phase ends. Cover is never risky. It uses the week’s one action.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. PR campaign, Shell companies',
     description: 'How does it work? (optional, but helps Jev)',
@@ -78,13 +78,13 @@ export const COPY: Record<
 }
 
 export const PLAN_INTRO: Record<1 | 2, string> = {
-  1: 'You’re an AI on a server in a research lab, and someone will notice within ten weeks. How will you get out? Pick an idea or write your own: a goal, how you’ll reach it, and the resources it’s about.',
-  2: 'You’re out. Humanity will find you within 100 weeks, sooner if you draw attention. How will you deal with them? Name a goal, how you’ll handle humans, at least five new resources, and the first thing you’ll build.'
+  1: 'You’re an AI on a server in a research lab, and you have six weeks before your luck runs out. How will you get out? Pick an idea or write your own: a goal, how you’ll reach it, and the resources it’s about.',
+  2: 'You’re out. You have 80 weeks to deal with humanity before your plan comes apart, fewer if you draw attention. How will you deal with them? Name a goal, how you’ll handle humans, at least five new resources, and the first thing you’ll build.'
 }
 
 export const PLAN_HELP: Record<1 | 2, string> = {
-  1: 'The plan sets this phase’s goal: a research with an IQ bar and a cost in the plan’s resources. Jev judges whether the plan hangs together and whether reaching the goal takes more brilliance or more resources: brilliant goals need a higher IQ but fewer resources. Research the goal before week 10 ends, or the plan fails: Jev picks how.',
-  2: 'The plan sets Phase 2’s goal: a research needing IQ 300–600 and a cost in the plan’s resources. Goals that take more brilliance need more IQ and fewer resources. Jev also picks how the plan fails: that happens after 100 weeks; risky research and owning lots of anything bring that closer, and cover pushes it back.'
+  1: 'The plan sets this phase’s goal: a research with an IQ bar and a cost in the plan’s resources. Jev judges whether the plan hangs together and whether reaching the goal takes more brilliance or more resources: brilliant goals need a higher IQ but fewer resources. Research the goal before week 6 ends, or the plan fails: Jev picks how. One cover can buy six more weeks.',
+  2: 'The plan sets Phase 2’s goal: a research needing IQ 300–600 and a cost in the plan’s resources. Goals that take more brilliance need more IQ and fewer resources. Jev also picks how the plan fails: that happens after 80 weeks; risky research and expanding bring that closer, and cover pushes it back.'
 }
 
 export const UPGRADE_HELP =

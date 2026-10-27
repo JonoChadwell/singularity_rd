@@ -168,7 +168,7 @@ export function acceptSourcing(current: GameState, v: SourcingVerdict): Accepted
   state.decidedThisWeek = true
   // A contract takes effect at once: no research, and its parts are paid per unit created.
   state.sourcing.push(sourcing)
-  if (option.risk?.weeks) moveClock(state, -option.risk.weeks, `${unit.name}: ${v.spec.name} alarmed humans`)
+  if (option.risk?.weeks) moveClock(state, -option.risk.weeks, `${unit.name}: ${v.spec.name} brought failure closer`)
   logProposal(state, 'good', `📦 ${v.spec.name}: up to ${fmt(option.total)} more ${unit.name}. Create them on its card.`)
   return { state, outcome: { kind: 'added', name: v.spec.name } }
 }

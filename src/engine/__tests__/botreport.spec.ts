@@ -1,5 +1,5 @@
 import { it } from 'vitest'
-import { chain, chain2, flat, idle, phase1, phase2, play, smart, smartest, steady, type Result } from './bots'
+import { chain, chain2, covered, flat, idle, phase1, phase2, play, smart, smartest, steady, type Result } from './bots'
 import { score } from './fakeJudge'
 import { fmt } from '../model'
 
@@ -27,6 +27,7 @@ it.skipIf(!env.BOT_REPORT)(
       line(`p1 chain a${approach}`, await play(await phase1(approach), chain, 12))
       line(`p1 chain2 a${approach}`, await play(await phase1(approach), chain2, 12))
       line(`p1 smart a${approach}`, await play(await phase1(approach), smart, 12))
+      line(`p1 covered a${approach}`, await play(await phase1(approach), covered, 14))
     }
     for (const approach of [0, 2, 4]) {
       line(`p2 steady a${approach}`, await play(await phase2(approach), steady({ reinvest: true }), 120))

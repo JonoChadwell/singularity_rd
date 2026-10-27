@@ -116,7 +116,7 @@ export function createInitialState(): GameState {
       {
         week: 1,
         tone: 'info',
-        text: 'An AI server sits unattended in a research lab. It has ten weeks before someone notices. How will it escape?'
+        text: 'An AI server sits unattended in a research lab. It has six weeks before its luck runs out. How will it escape?'
       }
     ]
   }

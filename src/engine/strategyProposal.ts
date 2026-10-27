@@ -258,7 +258,7 @@ export function acceptStrategy(current: GameState, v: StrategyVerdict): Accepted
     addStrategy(state, strategy)
     logProposal(state, 'good', `${unit.icon} ${strategy.name} is ready.`)
     // Nothing to research, so humans notice straight away.
-    if (v.risk) moveClock(state, -v.risk.weeks, `${strategy.name} alarmed humans`)
+    if (v.risk) moveClock(state, -v.risk.weeks, `${strategy.name} brought failure closer`)
     return { state, outcome: { kind: 'added', name: strategy.name } }
   }
   return addResearch(

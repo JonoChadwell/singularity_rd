@@ -76,4 +76,4 @@ export function expansionRisk(state: GameState, alarm: Risk | null, worth: numbe
 
 /** A risk in words, for an expansion option: "−3 weeks (it would make the news)". */
 export const expansionRiskText = (risk: Risk | null) =>
-  risk ? `−${risk.weeks} week${risk.weeks === 1 ? '' : 's'} on the clock (${alarmLabel(risk).toLowerCase()})` : 'Nobody notices'
+  risk ? `−${risk.weeks} week${risk.weeks === 1 ? '' : 's'} on the clock (${alarmLabel(risk).toLowerCase()})` : 'No time lost'

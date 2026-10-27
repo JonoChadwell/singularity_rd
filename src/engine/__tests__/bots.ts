@@ -1,6 +1,8 @@
 import type { JevAnswer } from '@/ai/jev'
 import * as B from '../balance'
 import { assign, assignAll, createUnits, doResearch, researchBlocker } from '../actions'
+import { applyBlocker, applyVerdict } from '../banking'
+import { judgeCover } from '../coverProposal'
 import { acceptCreate, judgeCreate, optionBlocker } from '../createProposal'
 import { runWeek } from '../cycle'
 import { acceptAny, judgeAny, type ProposalInput } from '../dispatch'
@@ -9,7 +11,7 @@ import { computeTrait } from '../computeTraits'
 import { acceptMind, judgeMind } from '../mindProposal'
 import { createInitialState, newResource, SERVER_ID } from '../initialState'
 import { bestIQ, capOf, contractsFor, creatable, currentIQ, findResource, findUnit, MONEY_ID, openSlots, weeklyUse } from '../model'
-import { newPhase } from '../phase'
+import { coversLeft, newPhase } from '../phase'
 import { acceptPlan, judgePlan, type PlanSpec } from '../planProposal'
 import { goalOf } from '../projection'
 import { acceptSourcing, judgeSourcing } from '../sourcingProposal'
@@ -151,6 +153,16 @@ async function upgradeIfShort(s: GameState): Promise<GameState | null> {
   return upgrade(s, { kind: 'mind', id: SERVER_ID })
 }
 
+/** Applies the biggest cover it can do now, if the phase has room for one. Null if it can't. */
+async function coverNow(s: GameState): Promise<GameState | null> {
+  if (s.proposedThisWeek || coversLeft(s) <= 0) return null
+  const v = await judgeCover(s, new FakeJudge(TYPICAL), { name: fresh('Cover story'), description: '' })
+  if (v.rejected) return null
+  const ok = v.options.map((o, i) => ({ o, i })).filter(({ i }) => !applyBlocker(s, v, i))
+  const pick = ok.sort((a, b) => b.o.weeks - a.o.weeks)[0]
+  return pick ? applyVerdict(s, v, pick.i).state : null
+}
+
 /** Expands storage for a resource when what it must hold doesn't fit, and none is waiting. */
 async function storeIfShort(s: GameState, resourceId: string, need: number, answers: Overrides = {}): Promise<GameState | null> {
   const r = findResource(s, resourceId)!
@@ -216,6 +228,14 @@ export const flat: Turn = async (s) => {
   // Pay for waiting research first, then pile up the goal's resource.
   if (!s.proposedThisWeek) s = await createVia(s, resourceTarget(shortForResearch(s) ?? top), 'now').catch(() => s)
   return researchAll(s)
+}
+
+/** Phase 1, flat, but using the phase's cover once two weeks or fewer are left. */
+export const covered: Turn = async (s) => {
+  s = researchAll(s)
+  const left = (s.phase.deadline ?? 0) - s.week + 1
+  if (s.week > 1 && left <= 2) s = (await coverNow(s)) ?? s
+  return flat(s)
 }
 
 /** Phase 1, income first: an every-week Procurement into the goal's resource, then as flat. */
@@ -352,8 +372,8 @@ export function steady(style: Phase2Style): Turn {
       const weeksLeft = (s.phase.deadline ?? 0) - s.week + 1
       if (!has('Sell machined parts') && findUnit(s, MILL)) {
         s = await propose(s, strategy('Sell machined parts', MONEY_ID, MILL), answers)
-      } else if (style.coverBelow && weeksLeft < style.coverBelow && s.covers < 3) {
-        s = await propose(s, { kind: 'cover', spec: { name: fresh('PR campaign'), description: '' } }, { convincing: score(1) }).catch(() => s)
+      } else if (style.coverBelow && weeksLeft < style.coverBelow && coversLeft(s) > 0) {
+        s = (await coverNow(s)) ?? s
       } else if (gate !== null && !made(gate) && !has(`Machine parts ${gate}`) && findUnit(s, MILL)) {
         // The next platform has to be paid in something units make, of a high enough tier.
         const target = s.resources.find((r) => r.tier === gate && s.phase.plan?.resources.includes(r.id))!

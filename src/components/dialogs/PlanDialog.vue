@@ -86,7 +86,7 @@
               { k: 'Needs IQ', v: String(draft.goal.minIQ), num: true },
               { k: 'Uses up', v: draft.goal.cost.length ? describeCost(draft.state, draft.goal.cost) : 'nothing' },
               { k: 'Approach', v: approachLabel },
-              { k: 'Clock', v: `${PHASE_WEEKS[phase]} weeks${phase === 2 ? ', moved by your actions' : ''}` },
+              { k: 'Clock', v: `${PHASE_WEEKS[phase]} weeks${phase === 2 ? ', moved by your actions' : ', +6 with cover'}` },
               { k: 'Fails by', v: `${verdict.loss.name}: ${verdict.loss.threat}`, tone: 'bad' }
             ]"
           />

@@ -276,6 +276,10 @@ week." Bigger units mean smaller counts, so a player can trade unit size for att
 
 ### D7. Cover (Phase 2)
 
+> Replaced by [COVER_DESIGN.md](COVER_DESIGN.md): cover now has three fixed-price sizes, can be
+> saved or applied, is capped per phase (1 in Phase 1, 3 in Phase 2) with no decay, and opens in
+> Phase 1. The text below is the original design.
+
 Cover is a research kind: "how will you buy time?" You name it ("PR campaign", "Shell
 companies", "Blame the Russians"). Jev judges plausibility (bar 0.3) and how convincing it
 is, on a four-level scale that sets its minimum IQ and the weeks it adds: 2, 4, 6 or 10.

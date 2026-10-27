@@ -208,7 +208,7 @@ export type ResearchEffect =
   | { kind: 'storage'; resourceId: string; expansion: Expansion }
   /** A phase's goal: researching it wins the phase. */
   | { kind: 'goal'; phase: PhaseNumber }
-  /** Cover: moves the deadline back. `weeks` before diminishing returns. */
+  /** Cover: moves the deadline back by `weeks`. */
   | { kind: 'cover'; weeks: number }
 
 /** What a research uses up: amounts of resources. */
@@ -274,6 +274,8 @@ export interface PhaseState {
   firstUnit: { name: string; description: string } | null
   /** Moves on to show three other plan ideas. */
   ideaShift: number
+  /** Phase 2: the Phase 1 cover still saved when the lab was escaped, dropped (for the memo). */
+  droppedCover?: string
   /** Why the game ended. */
   lostReason?: string
 }
@@ -348,7 +350,7 @@ export interface GameState {
   history: { n: PhaseNumber; plan: Plan; week: number }[]
   /** Every change to the clock. */
   clock: ClockChange[]
-  /** Cover researches done, for diminishing returns. */
+  /** Covers done this phase, for the cap (COVER_MAX). */
   covers: number
   /** Explainer cards the player has dismissed. */
   cardsSeen: string[]
