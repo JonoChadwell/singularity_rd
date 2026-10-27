@@ -1,7 +1,7 @@
 <template>
   <article class="order" :class="{ goal: isGoal, ready: !blocker }">
     <header class="head">
-      <span class="no num">{{ partNo(isGoal ? 'GOAL' : 'WO', r.id) }}</span>
+      <span class="no num">{{ researchPartNo(r, game.state.phase.n) }}</span>
       <span class="kind lbl">{{ KIND[r.effect.kind] }}</span>
       <Led :tone="blocker ? 'off' : 'good'" :title="blocker ?? 'Ready to research'" />
     </header>
@@ -52,7 +52,7 @@ import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 import Gauge from '../kit/SegGauge.vue'
 import Led from '../kit/StatusLed.vue'
-import { costText, effectText, partNo } from '../sheets/text'
+import { costText, effectText, researchPartNo } from '../sheets/text'
 
 const props = defineProps<{ r: Research }>()
 const game = useGameStore()

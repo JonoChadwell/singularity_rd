@@ -1,5 +1,5 @@
 <template>
-  <DataSheet v-if="r" :part="partNo(r.effect.kind === 'goal' ? 'GOAL' : 'WO', r.id)" :title="r.name" :icon="r.icon" :subtitle="r.description">
+  <DataSheet v-if="r" :part="researchPartNo(r, game.state.phase.n)" :title="r.name" :icon="r.icon" :subtitle="r.description">
     <section>
       <h4>{{ r.effect.kind === 'goal' ? 'Goal' : 'Work order' }}</h4>
       <p>{{ effectText(game.state, r) }}</p>
@@ -30,7 +30,7 @@ import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 import DataSheet from '../kit/DataSheet.vue'
 import SpecTable, { type SpecRow } from '../kit/SpecTable.vue'
-import { costText, effectText, partNo } from './text'
+import { costText, effectText, researchPartNo } from './text'
 
 const props = defineProps<{ id: string }>()
 const game = useGameStore()

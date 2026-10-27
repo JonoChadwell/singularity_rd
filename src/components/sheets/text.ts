@@ -10,6 +10,11 @@ export function partNo(prefix: string, id: string): string {
   return `${prefix}-${String(h).padStart(3, '0')}`
 }
 
+/** A research's part label: the phase goal is G-<phase>, any other research is hashed from its id. */
+export function researchPartNo(r: { id: string; effect: { kind: string } }, phase: number): string {
+  return r.effect.kind === 'goal' ? `G-${phase}` : partNo('WO', r.id)
+}
+
 /** One line on what a research does once researched. */
 export function effectText(state: GameState, r: Research): string {
   const e = r.effect
