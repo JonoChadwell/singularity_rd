@@ -290,7 +290,17 @@ function stripTraits(s: GameState): GameState {
   return s
 }
 
-/** The platform's software upgrade, at the biggest size on offer. */
+/** The IQ step the bots take: the option nearest +50, the smaller on a tie, never +0. */
+export const IQ_STEP = 50
+const nearestStep = (steps: number[]) =>
+  steps.reduce((best, step, i) => {
+    if (step <= 0) return best
+    const b = steps[best]!
+    const closer = Math.abs(step - IQ_STEP) < Math.abs(b - IQ_STEP) || (Math.abs(step - IQ_STEP) === Math.abs(b - IQ_STEP) && step < b)
+    return b <= 0 || closer ? i : best
+  }, 0)
+
+/** The platform's software upgrade, at the size nearest +50. */
 export const software = (): Move => ({
   kind: 'software',
   key: 'software',
@@ -300,14 +310,13 @@ export const software = (): Move => ({
       const mind = s.minds[0]!
       if (mind.software.upgraded || s.research.some((r) => r.effect.kind === 'upgrade' && r.effect.target.kind === 'mind')) return null
       const offer = await judgeUpgrade(s, judge(ctx, 'software', { 'd_*': score(1) }), { kind: 'mind', id: mind.id })
-      const steps = offer.options.map((o) => o.step ?? 0)
-      const after = stripTraits(acceptUpgrade(s, offer, steps.indexOf(Math.max(...steps))).state)
+      const after = stripTraits(acceptUpgrade(s, offer, nearestStep(offer.options.map((o) => o.step ?? 0))).state)
       used(ctx, 'software')
       return after
     })
 })
 
-/** A new platform, at the biggest step on offer. */
+/** A new platform, at the step nearest +50. */
 export const platform = (): Move => ({
   kind: 'platform',
   key: 'platform',
@@ -317,7 +326,7 @@ export const platform = (): Move => ({
       if (s.research.some((r) => r.effect.kind === 'mind')) return null
       const v = await judgeMind(s, judge(ctx, 'platform'), { name: fresh(ctx, 'Platform'), description: '' })
       if (v.rejected || !v.options.length) return null
-      v.choice = v.options.reduce((best, o, i) => (o.step > v.options[best]!.step ? i : best), 0)
+      v.choice = nearestStep(v.options.map((o) => o.step))
       const after = stripTraits(acceptMind(s, v).state)
       used(ctx, 'platform')
       return after
