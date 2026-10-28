@@ -204,12 +204,12 @@ closer"). Resource, unit and compute traits are out of scope. The roster:
 seconds); chart it with `node scripts/econCharts.mjs` (`logs/econ/charts.html`: income, worth,
 fleet by tier, IQ, clock, goal progress, spend and action mix per bot, by approach).
 
-**Status (2026-10-28): Phase 2 is not balanced yet.** No bot wins. With the steeper yields,
-lighter upkeep and the new Industry curve, the best climbing economies reach the anchors (scale
-$311M a week by week 45 and $1.9B by 60; greedy $2.1B by 70), but every one stalls at IQ 300:
-the next platform costs about $28B (with Jev's typical plausibility), paid in a tier 1 resource
-units make. The tier 0 bot still snowballs fastest (a unit that makes its own parts replicates
-every 1.5 weeks; $10.7B a week by week 45) and loses only to the clock.
+**Status (2026-10-28): Phase 2 is not balanced yet.** No bot wins. The bots take IQ steps
+nearest +50 (`IQ_STEP`). The climbing bots now beat the income anchors ($0.4–4.8B a week by week
+45, $5–15B by 60) and reach IQ 425–475, but run out of clock around weeks 60–73: the 350→425 stretch
+of `HARDWARE_COSTS` holds most of the hardware cost, and storing the goal resource takes many
+expansions. The tier 0 bot still snowballs fastest early ($21B a week by week 30) and loses to
+the clock.
 
 ## Costs and values
 

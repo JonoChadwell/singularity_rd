@@ -395,8 +395,10 @@ export function research(state: GameState, ctx: Ctx): GameState {
     const saving = savingFor(s)
     for (const r of order()) {
       if (s.phase.n !== state.phase.n || researchBlocker(s, r.id)) continue
-      // Nothing small spends what a platform or a design is half saved up for.
-      if (!KEY_RESEARCH.has(r.effect.kind) && r.effect.kind !== 'goal' && r.cost.some((c) => saving.has(c.resourceId))) continue
+      // Nothing small spends what a platform or a design is half saved up for, except storage,
+      // which is what lets a big cost fit.
+      const small = !KEY_RESEARCH.has(r.effect.kind) && r.effect.kind !== 'goal' && r.effect.kind !== 'storage'
+      if (small && r.cost.some((c) => saving.has(c.resourceId))) continue
       const before = worthOf(s).stock
       s = doResearch(s, r.id)
       const kind = r.effect.kind === 'upgrade' && r.effect.target.kind === 'mind' ? 'iq' : SPEND_OF[r.effect.kind]
@@ -530,6 +532,8 @@ function reserved(s: GameState): Record<string, number> {
     if (bestIQ(s) < r.minIQ) continue
     const worth = r.cost.reduce((n, c) => n + c.amount * (findResource(s, c.resourceId)?.value ?? 0), 0)
     if (worth > reach) continue
+    // Keeping back for a cost that can't fit in storage yet only stops the growth.
+    if (r.cost.some((c) => { const x = findResource(s, c.resourceId); return !x || c.amount > capOf(s, x) })) continue
     for (const c of r.cost) out[c.resourceId] = (out[c.resourceId] ?? 0) + c.amount
   }
   return out
@@ -584,9 +588,10 @@ function bestOutput(s: GameState, unitId: string): string | null {
 
 /** Resources that something uses (inputs or upkeep) but nothing makes and nothing delivers. */
 function unsupplied(s: GameState): string[] {
-  // Made only if some unit is actually there to make it.
+  // Made only if some unit is actually there to make it, or a strategy for it is waiting as research.
   const made = new Set([
     ...s.strategies.filter((x) => x.kind === 'make' && findUnit(s, x.unitId)?.count).map((x) => x.outputId),
+    ...s.research.flatMap((r) => (r.effect.kind === 'strategy' ? [r.effect.strategy.outputId] : [])),
     ...s.deliveries.flatMap((d) => (d.target.kind === 'resource' ? [d.target.id] : []))
   ])
   const needed = new Set<string>()
@@ -620,6 +625,9 @@ function makerFor(s: GameState, resourceId: string): string | null {
   return (fit ?? [...can].sort((a, b) => b.tier - a.tier)[0])?.id ?? null
 }
 
+/** Share of its cap a stock must reach before more room for it is worth an action. */
+const NEAR_CAP = 0.75
+
 /**
  * A cost of waiting research bigger than its resource can hold, with no storage waiting for it.
  * The goal's counts once something makes its resource, or the goal's IQ is a step away. Any other
@@ -637,6 +645,7 @@ function tooBig(s: GameState): { resourceId: string; amount: number } | null {
       const res = findResource(s, c.resourceId)
       const waiting = s.research.some((x) => x.effect.kind === 'storage' && x.effect.resourceId === c.resourceId)
       if (!res || capOf(s, res) >= c.amount || waiting) continue
+      if (r.effect.kind !== 'goal' && res.amount < NEAR_CAP * capOf(s, res)) continue
       if (r.effect.kind === 'goal' || c.amount <= 4 * capOf(s, res) || c.amount * res.value <= 8 * grossIncome(s)) return c
     }
   }
@@ -779,9 +788,16 @@ export function candidates(s: GameState, style: Style): Play[] {
   // IQ toward the goal.
   if (g && needIQ(g.minIQ) && (style.lean !== 'scale' || highestTier(s) >= Math.min(style.maxTier, 3))) push(...iqPlay())
   structural = false
-  // What the economy wants more of than it holds: make it, store room for it, and buy it in.
+  // What the economy wants more of than it holds, counting only research due soon: make it, store
+  // room for it, and buy it in. First, parts that open contract slots are starved of: buying them
+  // in grows the fleet at once.
   if (!style.procureOnly) {
-    const want = demand(s)
+    for (const c of s.sourcing) {
+      if (!openSlots(c) || !c.parts.length || creatable(s, c) > 0) continue
+      const starved = c.parts.find((p) => (findResource(s, p.resourceId)?.amount ?? 0) < p.amount)
+      if (starved) push(procure(starved.resourceId))
+    }
+    const want = demand(s, true)
     for (const [id, need] of Object.entries(want)) {
       const r = findResource(s, id)
       if (!r || r.amount >= need || id === top) continue
@@ -795,18 +811,21 @@ export function candidates(s: GameState, style: Style): Play[] {
         .filter((u) => u.count > 0 && !makes(u.id) && !u.upkeep.some((f) => f.resourceId === id))
         .sort((a, b) => b.count * b.value - a.count * a.value)[0]
       if (helper && maker && makes(maker)) push(strategy(helper.id, id))
-      if (capOf(s, r) < need) {
+      // Room only helps once the stock is near its cap; before that, making more is what's short.
+      if (capOf(s, r) < need && r.amount >= NEAR_CAP * capOf(s, r)) {
         push(storage(id, need))
         push(storage(id, need), procure(id))
       }
     }
   }
   // Storage for what overflows.
+  const wanted = demand(s)
   const report = previewWeek(s)
   const income = Math.max(1, grossIncome(s, report))
   for (const [id, wasted] of Object.entries(report.wasted)) {
     const r = findResource(s, id)
-    if (r && wasted * r.value > income * 0.05) push(storage(id, capOf(s, r) * 4))
+    // Only what the economy wants: room for an output nothing uses is wasted too.
+    if (r && wasted * r.value > income * 0.05 && (wanted[id] ?? 0) > 0) push(storage(id, capOf(s, r) * 4))
   }
   if (weeksLeft < 15) push(cover())
   // Something to Procure: what's short, the goal's resource, or Money.
