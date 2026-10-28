@@ -20,8 +20,6 @@ export function effectText(state: GameState, r: Research): string {
   switch (e.kind) {
     case 'goal':
       return 'Researching it wins the phase.'
-    case 'sourcing':
-      return `Room for ${fmt(e.sourcing.total)} ${findUnit(state, e.sourcing.unitId)?.name ?? ''}, each made from ${describeFlows(state, e.sourcing.parts)}.`
     case 'storage':
       return `Room for ${fmt(e.expansion.added)} more ${findResource(state, e.resourceId)?.name ?? ''}.`
     case 'cover':

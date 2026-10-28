@@ -12,15 +12,14 @@ import {
   resolveResources,
   RESOURCE_PRESETS,
   runnerFor,
-  SOURCING_PRESETS,
   STORAGE_PRESETS,
   STRATEGY_PRESETS,
   taken,
-  UNIT_PRESETS
+  UNIT_PRESETS,
+  UNIT_PROCURE_PRESETS
 } from '@/engine/presets'
 import { draftResource, precheckName } from '@/engine/proposals'
 import { resourceTrait } from '@/engine/resourceTraits'
-import { precheckSourcing } from '@/engine/sourcingProposal'
 import { precheckStorage } from '@/engine/storageProposal'
 import { draftStrategy, precheckStrategy } from '@/engine/strategyProposal'
 import type { CreateTarget } from '@/engine/types'
@@ -57,7 +56,6 @@ export function useProposal(request: InventRequest) {
     const [k, ...id] = creation.target.split(':')
     return { kind: k === 'unit' ? 'unit' : 'resource', id: id.join(':') }
   })
-  const sourcing = reactive({ unitId: request.unitId ?? game.state.units[0]?.id ?? '' })
   const storage = reactive({ resourceId: request.resourceId ?? game.state.resources[0]?.id ?? '' })
 
   // ---------------------------------------------------------------- presets
@@ -76,8 +74,8 @@ export function useProposal(request: InventRequest) {
     const blocked = (n: string) => (taken(game.state, n) ? 'Already in the game.' : null)
     if (kind === 'resource') return RESOURCE_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
     if (kind === 'strategy') return STRATEGY_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
+    if (kind === 'create' && creationTarget.value.kind === 'unit') return UNIT_PROCURE_PRESETS.map((p) => ({ ...p, icon: '📦', blocked: null }))
     if (kind === 'create') return CREATE_PRESETS.map((p) => ({ ...p, icon: '⚗️', blocked: null }))
-    if (kind === 'sourcing') return SOURCING_PRESETS.map((p) => ({ ...p, icon: '📦', blocked: null }))
     if (kind === 'storage') return STORAGE_PRESETS.map((p) => ({ ...p, icon: '🏗️', blocked: null }))
     if (kind === 'cover') return coverPresets(game.state.phase.n).map((p) => ({ ...p, icon: '🕶️', blocked: blocked(p.name) }))
     if (kind === 'mind') return mindPresets.value.map((p) => ({ ...p, icon: '🧠', blocked: blocked(p.name) }))
@@ -103,14 +101,14 @@ export function useProposal(request: InventRequest) {
       const output = resolveResources(game.state, [p.output])
       if (output.ids[0]) strategy.outputId = output.ids[0]
       missingResources.value = output.missing
-    } else if (kind === 'create') {
+    } else if (kind === 'create' && creationTarget.value.kind === 'unit') fill(UNIT_PROCURE_PRESETS.find((x) => x.name === presetId))
+    else if (kind === 'create') {
       const p = CREATE_PRESETS.find((x) => x.name === presetId)
       if (!fill(p) || !p) return
       const output = resolveResources(game.state, [p.output])
       if (output.ids[0]) creation.target = `resource:${output.ids[0]}`
       missingResources.value = output.missing
-    } else if (kind === 'sourcing') fill(SOURCING_PRESETS.find((x) => x.name === presetId))
-    else if (kind === 'storage') fill(STORAGE_PRESETS.find((x) => x.name === presetId))
+    } else if (kind === 'storage') fill(STORAGE_PRESETS.find((x) => x.name === presetId))
     else if (kind === 'cover') fill(coverPresets(game.state.phase.n).find((x) => x.name === presetId))
     else if (kind === 'mind') fill(mindPresets.value.find((x) => x.name === presetId))
     else fill(UNIT_PRESETS.find((x) => x.name === presetId))
@@ -138,7 +136,6 @@ export function useProposal(request: InventRequest) {
     if (kind === 'unit') return { kind, spec: { ...base, first } }
     if (kind === 'mind') return { kind, spec: base }
     if (kind === 'create') return { kind, spec: { ...base, target: creationTarget.value } }
-    if (kind === 'sourcing') return { kind, spec: { ...base, unitId: sourcing.unitId } }
     if (kind === 'storage') return { kind, spec: { ...base, resourceId: storage.resourceId } }
     if (kind === 'cover') return { kind, spec: base }
     return { kind: 'resource', spec: base }
@@ -151,7 +148,6 @@ export function useProposal(request: InventRequest) {
     if (i.kind === 'unit') return precheckUnit(game.state, i.spec)
     if (i.kind === 'mind') return precheckMind(game.state, i.spec)
     if (i.kind === 'create') return precheckCreate(game.state, i.spec)
-    if (i.kind === 'sourcing') return precheckSourcing(game.state, i.spec)
     if (i.kind === 'storage') return precheckStorage(game.state, i.spec)
     if (i.kind === 'cover') return precheckCover(game.state, i.spec)
     return precheckName(game.state, name.value)
@@ -193,7 +189,7 @@ export function useProposal(request: InventRequest) {
         i,
         tier: tierLabel(o.tier),
         worth: unitValueText(draft.unit.value),
-        runsOn: findResource(game.state, o.upkeepId)?.name ?? '?',
+        runsOn: o.upkeepId ? (findResource(game.state, o.upkeepId)?.name ?? '?') : 'Nothing',
         traits: o.traits,
         draft
       }
@@ -246,7 +242,7 @@ export function useProposal(request: InventRequest) {
   const acceptLabel = computed(() => {
     const v = verdict.value
     // These show their options as cards, each with its own button.
-    if (v && ['create', 'sourcing', 'storage', 'mind', 'unit', 'strategy', 'cover'].includes(v.kind)) return null
+    if (v && ['create', 'storage', 'mind', 'unit', 'strategy', 'cover'].includes(v.kind)) return null
     if (v?.kind === 'resource' && resourceOptions.value.length) return null
     return 'Accept'
   })
@@ -333,7 +329,6 @@ export function useProposal(request: InventRequest) {
     strategy,
     current,
     creation,
-    sourcing,
     storage,
     presetName,
     presetItems,

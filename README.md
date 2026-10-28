@@ -5,8 +5,8 @@ ideas. Very meta. The designs are in [MASTER_PLAN.md](MASTER_PLAN.md) (v5 core) 
 [MASTER_PLAN_V2.md](MASTER_PLAN_V2.md) (phases, clocks, risk and cover); the history and
 playtest data are in [NOTES.md](NOTES.md). Where they disagree, V2 and the code win. The
 intelligence-system rules (one platform at a time, compute traits, redoable software upgrades) are
-in [INTELLIGENCE_DESIGN.md](INTELLIGENCE_DESIGN.md). The economy (one action a week, Procurement,
-sourcing contracts, storage caps) is in [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md), which replaces
+in [INTELLIGENCE_DESIGN.md](INTELLIGENCE_DESIGN.md). The economy (one action a week, Procurement and
+the sourcing contracts it offers for units, storage caps) is in [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md), which replaces
 the older plans' passive incomes, flows, builders and fleet notices. Resource traits (each an
 upside with a downside) are in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md). Cover (its sizes, caps
 and price) is in [COVER_DESIGN.md](COVER_DESIGN.md), which replaces V2's §D7.
@@ -24,14 +24,14 @@ and the bench appears once it's accepted.
 | Phase | Clock | You can propose | Lose |
 | --- | --- | --- | --- |
 | 1. Escape the Lab (a short tutorial) | 6 weeks, +6 with its one cover | Resources, Procurements, storage, software upgrades, **cover** | The plan fails: game over |
-| 2. Humanity (the real challenge) | 80 weeks, moved by your actions | Adds industry units, sourcing and strategies; after your first unit, new platforms and unit upgrades | The plan fails: game over |
-| 3. Ascension | None | Everything; free play for now | Can't lose |
+| 2. Humanity (the real challenge) | 80 weeks, moved by your actions | Adds industry units (Procured now or by sourcing contract) and strategies; after your first unit, new platforms and unit upgrades | The plan fails: game over |
+| 3. Ascension | None | Everything, with no limit on how many of anything can exist; free play for now | Can't lose |
 
 Phases are won by researching their goal. You say how the plan succeeds; Jev picks how it
 **fails** from a fixed list of loss conditions (Phase 1: discovered, wiped, betrayed, audited,
 contained; Phase 2: found out, backlash, outlawed, outcompeted, cut off, too late), and that is what
 happens when the clock runs out. In Phase 2, actions that bring that failure closer (risky
-research, and above all expanding: sourcing contracts and storage, by how much they add) cost
+research, and above all expanding: Procured sourcing contracts and storage, by how much they add) cost
 weeks off the clock. **Cover** buys weeks back in either phase: Jev offers three sizes (small
 needs IQ 125 and adds 6 weeks, medium IQ 250 and 12, large IQ 400 and 18), two at the size your
 IQ reaches and one a size up, each at a fixed price. You save them for later or apply one now.
@@ -46,25 +46,29 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
 - **A turn is a week.** Plan as long as you like, then press **Next week**. Settings persist, so
   a quiet week is one click. The **Faults** panel lists anything that would waste the week.
   The simulation is deterministic: the preview shows exactly what next week will do.
-- **One action a week:** a research proposal (a strategy, upgrade, unit, sourcing contract,
-  storage expansion, intelligence system or cover) or a **Procurement**. Resources are free to
+- **One action a week:** a research proposal (a strategy, upgrade, unit, storage expansion,
+  intelligence system or cover) or a **Procurement** (which, for a unit, may be a sourcing contract). Resources are free to
   propose. Doing research already on the list is instant and unlimited, but needs a **minimum
   IQ** your smartest mind must reach and a **cost in resources**.
 - **Jev's options are part datasheets.** Whenever Jev offers three takes (strategy, unit, platform, storage,
-  sourcing, upgrade, cover), they sit side by side. **Save For Later** banks all three to the Research tab for one
+  upgrade, cover), they sit side by side. **Save For Later** banks all three to the Research tab for one
   action (they are alternatives: researching one drops the others). **Apply now** on one
   takes just that one and researches it at once; it is greyed out if your IQ or stocks fall short.
 - **Tiers.** Resources and units share one tier scale (0-4), tied to IQ. A unit making an output
   of a higher tier than its own is heavily penalised; a lower one gets a bonus. Jev sets a unit's
-  tier, value and what it runs on, and offers three takes.
+  tier, value and what it runs on, and offers three takes. A unit always runs on (pays its upkeep
+  in) a resource one tier below its own, so tier 0 units run on nothing, and a tier needs a
+  resource one below it to exist.
 - **Strategies** are what a unit does every week. You say who runs it and what it makes; you don't
   pick its inputs or who pays. Jev offers three ways, each using up different resources: a tier 0
   or 1 output always gets a way with no inputs, tier 2 needs at least one, and tier 3 and up need
   two different ones.
-- **Procure** is the mind getting something directly: say what and how, and Jev offers three
-  ways, each using a different resource (or nothing) and paying out now, spread out, later, or
-  every week for 20 weeks. It grows with your industry and IQ², and reaching above your IQ's tier
-  costs output, a little for a little.
+- **Procure** is the mind getting something directly: say what and how. For a resource, Jev
+  offers three ways, each using a different resource (or nothing) and paying out now, spread
+  out, later, or every week for 20 weeks. It grows with your industry and IQ², and reaching above
+  your IQ's tier costs output, a little for a little. For a unit, the three offers mix **units
+  now** and **sourcing contracts**: Jev judges whether your way is more like getting a batch now
+  or setting up a supply, the first offer follows that, and the other two are drawn by seed.
 - **Intelligence** is one machine at a time: a hardware platform with an IQ, running software. A
   new platform takes just a name and a description, and **replaces the old one for good**. Jev
   offers three takes, each a perk-and-drawback pair from a fixed list of compute traits at its own
@@ -74,18 +78,19 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
   Traits change research costs, the Phase 2 clock, which stock is burned each week, or the IQ
   counted for one type of research. The smartest platforms (IQ 300 and up) must be paid for in a
   resource your units make, of a high enough tier.
-- **Industry units** are anything you own many of. A new design has room for none: **sourcing
-  contracts** (you say how, Jev says how many and from what, and you pick quiet, Jev's take or
-  risky; it applies at once, with no research) set how many you may own. You **create** them from a contract's parts at no
-  action. Each has upkeep and up to three **traits** from a fixed list of 14. Split a type across
+- **Industry units** are anything you own many of. A new design has room for none: Procure it
+  for units now (with room to match) or a **sourcing contract** (Jev says how many and from what:
+  its own take, a quiet one or a risky one; it applies at once, with no research), which sets how
+  many more you may own. You **create** them from a contract's parts at no action. Each has upkeep and up to three **traits** from a fixed list of 14. Split a type across
   its strategies by count; the strategy marked **rest** takes every unit not counted elsewhere.
 - **Upgrade** a unit or your platform: Jev offers its three most natural improvements, and the
   pick becomes research. A platform gets **one** software upgrade, ever (each of the three options
   comes at its own size, 25 to 100 IQ, random each week but never all three the same; it may add
   a perk or remove a drawback). After that, only a new platform goes further.
 - **Resources** keep from week to week, up to a **storage cap**; what's made past it is lost.
-  Storage research raises it: in one call Jev judges how many could exist in this phase, how much
-  your holdings let you build, and how much of that your way captures. You pick Careful, Pushed or
+  Storage research raises it: Jev judges how much your holdings let you build and how much of
+  that your way captures, never past how many can exist. That **ceiling** is set once, when a
+  resource or unit is added, judged again when Phase 2 begins, and gone in Phase 3. You pick Careful, Pushed or
   All in, all paid once, with no weekly upkeep. An idea ahead of your IQ is sized for the IQ it
   needs, with a bonus, and waits for it. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
   When demand outstrips supply, every user gets the same share.
@@ -95,8 +100,8 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
 - **IQ steps.** Both a new platform and a software upgrade add a flat step to your best IQ, never
   more than 100. Two new platforms, each with its software upgrade at full size, take 100 to 500.
 - **Jev is torn** sometimes. The game then shows its top two answers and you pick.
-- **Repeats are worth less.** Jev checks a new Procurement, strategy, sourcing contract or storage
-  expansion against the ones you've already done; a repeat is one step less effective.
+- **Repeats are worth less.** Jev checks a new Procurement, strategy or storage expansion against
+  the ones you've already done; a repeat is one step less effective.
 
 ## Setup
 
@@ -119,7 +124,7 @@ Their games use your Jev key and each browser keeps its own save.
 Optional settings in `.env.local`: `JEV_BASE_URL` (default `https://openrouter.ai/api`) and
 `JEV_MODEL` (default `jev-latest`).
 
-The game saves to your browser's local storage (`singularity-rd/save/v16`) after every change,
+The game saves to your browser's local storage (`singularity-rd/save/v17`) after every change,
 including Jev's answers, so the same proposal always gets the same verdict. Old save versions
 are dropped.
 
@@ -152,14 +157,14 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | Path | What |
 | --- | --- |
 | `src/ai/jev.ts` | Jev client, `Judge` interface, typed readers, torn-answer detection, `CachedJudge` |
-| `src/engine/types.ts` | `GameState` (v16) and everything in it |
+| `src/engine/types.ts` | `GameState` (v17) and everything in it |
 | `src/engine/balance.ts` | Every tuning number, in one place |
 | `src/engine/phase.ts`, `planProposal.ts`, `planPresets.ts` | Phases, clocks, unlocks; plan proposals and their ready-made ideas |
 | `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Procurement deliveries, storage caps, trait rules |
 | `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover's three options |
-| `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits |
+| `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts`, `ceilings.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits; how many of a resource or unit can exist |
 | `src/engine/research.ts`, `upgrade.ts`, `banking.ts` | Research costs and completion; upgrades; saving options for later or applying one now |
-| `src/engine/proposals.ts`, `strategyProposal.ts`, `unitProposal.ts`, `sourcingProposal.ts`, `storageProposal.ts`, `createProposal.ts`, `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
+| `src/engine/proposals.ts`, `strategyProposal.ts`, `unitProposal.ts`, `storageProposal.ts`, `createProposal.ts` (Procure, sourcing contracts included), `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |
 | `src/stores/ui.ts` | UI state: open dialog, tab, datasheets, board zoom and hover |

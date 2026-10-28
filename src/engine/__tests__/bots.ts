@@ -3,7 +3,7 @@ import * as B from '../balance'
 import { assign, assignAll, createUnits, doResearch, researchBlocker } from '../actions'
 import { applyBlocker, applyVerdict } from '../banking'
 import { judgeCover } from '../coverProposal'
-import { acceptCreate, judgeCreate, optionBlocker } from '../createProposal'
+import { acceptCreate, isContract, judgeCreate, optionBlocker } from '../createProposal'
 import { runWeek } from '../cycle'
 import { acceptAny, judgeAny, type ProposalInput } from '../dispatch'
 import { previewWeek } from '../economy'
@@ -14,7 +14,6 @@ import { bestIQ, capOf, contractsFor, creatable, currentIQ, findResource, findUn
 import { coversLeft, newPhase } from '../phase'
 import { acceptPlan, judgePlan, type PlanSpec } from '../planProposal'
 import { goalOf } from '../projection'
-import { acceptSourcing, judgeSourcing } from '../sourcingProposal'
 import { acceptStorage, judgeStorage } from '../storageProposal'
 import type { CreateTarget, GameState, UpgradeTarget } from '../types'
 import { acceptUpgrade, judgeUpgrade } from '../upgrade'
@@ -324,7 +323,7 @@ export function steady(style: Phase2Style): Turn {
     }
     const has = (name: string) => s.strategies.some((x) => x.name === name) || s.research.some((r) => r.name === name)
     const waiting = (kind: string, id?: string) =>
-      s.research.some((r) => r.effect.kind === kind && (!id || (r.effect.kind === 'sourcing' ? r.effect.sourcing.unitId === id : r.effect.kind === 'storage' ? r.effect.resourceId === id : true)))
+      s.research.some((r) => r.effect.kind === kind && (!id || (r.effect.kind === 'storage' ? r.effect.resourceId === id : true)))
     const strategy = (name: string, outputId: string, unitId: string): ProposalInput => ({
       kind: 'strategy',
       spec: { name, description: '', unitId, outputId }
@@ -332,18 +331,24 @@ export function steady(style: Phase2Style): Turn {
     /** A unit whose contracts are nearly full gets another, unless one is waiting. */
     const needsSourcing = (unitId: string) => {
       const u = findUnit(s, unitId)
-      if (!u || waiting('sourcing', unitId)) return false
+      if (!u) return false
       const contracts = contractsFor(s, unitId).filter((c) => c.parts.length)
       return !contracts.length || contracts.every((c) => openSlots(c) <= c.total * 0.2)
     }
+    /** A sourcing contract, Procured: Jev's own take, or the one that cuts corners when risky. */
     const source = async (unitId: string) => {
-      const v = await judgeSourcing(s, new FakeJudge({ ...TYPICAL, limit: score(2), efficiency: score(2), ...alarm, ...answers }), {
-        unitId,
-        name: fresh('Contract a factory'),
-        description: ''
-      })
-      v.choice = style.risky ? 2 : 1
-      return acceptSourcing(s, v).state
+      const v = await judgeCreate(
+        s,
+        new FakeJudge({ ...TYPICAL, limit: score(2), efficiency: score(2), mode: choice('supply'), ...alarm, ...answers }),
+        { target: { kind: 'unit', id: unitId }, name: fresh('Contract a factory'), description: '' }
+      )
+      const label = (i: number) => {
+        const o = v.options[i]!
+        return isContract(o) ? o.label : null
+      }
+      const risky = v.options.findIndex((_, i) => label(i) === 'Cut corners')
+      v.choice = style.risky && risky >= 0 ? risky : 0
+      return acceptCreate(s, v).state
     }
     /** A part some open contract needs and you have too little of. */
     const shortPart = () => {

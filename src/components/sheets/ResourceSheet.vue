@@ -23,7 +23,8 @@
         :rows="[
           { k: 'To start', v: fmt(r.cap), num: true },
           ...r.expansions.map((e) => ({ k: e.name, v: `+${fmt(e.added)}`, num: true })),
-          { k: 'Holds', v: fmt(cap), num: true }
+          { k: 'Holds', v: fmt(cap), num: true },
+          { k: 'Can exist', v: ceilingLabel('resource', r.ceiling) }
         ]"
       />
     </section>
@@ -67,6 +68,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ceilingLabel } from '@/engine/ceilings'
 import { netFlow } from '@/engine/economy'
 import { bandText, capOf, deliveryTiming, findResource, fmt, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'

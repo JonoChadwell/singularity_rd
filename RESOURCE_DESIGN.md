@@ -98,22 +98,43 @@ Caps are there for realism and storytelling. They stop paths that pass realistic
 billion hired humans in Phase 2), and they push the player toward a blend of resources instead of
 one or two.
 
-## Three questions, one Jev call
+## Ceilings: how many can exist
 
-**Expand Storage** asks Jev three questions in a single `storage` call. None of them depends on
-another's answer.
+Status: **built** (2026-10-27, save version 17). Code: [src/engine/ceilings.ts](src/engine/ceilings.ts).
 
-1. **How many can exist?** (`ceiling`) Jev picks a rung on `STORAGE_CEILINGS`, one per two powers
-   of ten from a thousand to ten quintillion (nine rungs; the Jev API allows at most 10 criteria). It is asked fresh on every proposal. Phases 1 and 2 are
-   bound to Earth unless the world text says otherwise; from Phase 3 the AI may count other
-   worlds. Room = ceiling − current cap. With no room left, the proposal is refused.
-2. **How much could the AI build now?** (`reach`) This is judged from its holdings, units,
+Every resource and unit has a `ceiling`: how many could exist in the AI's world, made or owned
+by anyone. It is not asked on every proposal. It is settled at three points:
+
+- **When the thing is added.** A resource (from the + Resource dialog or a plan) and a unit (when
+  it's designed) are asked in their own Jev call. Resources pick a rung on `STORAGE_CEILINGS`,
+  one per two powers of ten from a thousand to ten quintillion (nine rungs; the Jev API allows at
+  most 10 criteria). Units pick a rung on `UNIT_CEILINGS`, one per power of ten from ten to ten
+  billion **(Claude's default)**. Phases 1 and 2 are bound to Earth unless the world text says
+  otherwise.
+- **When Phase 2 begins.** The Phase 2 plan's Jev call asks again for every resource and unit
+  already in the game (`ceiling_r_<id>`, `ceiling_u_<id>`), and accepting the plan writes the
+  answers **(Claude's default: folded into the plan call, so no extra call)**. A cap already past
+  its new ceiling is kept; it just has no room left.
+- **When Phase 2 is won.** Every ceiling is cleared, and nothing added in Phase 3 is asked:
+  Phase 3 has no ceilings. Storage caps and contract slots still apply.
+
+Storage room = ceiling − current cap, and a unit's room = ceiling − the sum of its contracts.
+With no room left, a storage expansion or a Procurement of the unit is refused. The world text
+Jev reads lists each ceiling, so later answers stay consistent with it. Resource and unit
+datasheets show it as "Can exist".
+
+## Two questions, one Jev call
+
+**Expand Storage** asks Jev two questions in a single `storage` call. Neither depends on the
+other's answer. How many can exist is the resource's stored ceiling, above.
+
+1. **How much could the AI build now?** (`reach`) This is judged from its holdings, units,
    platforms and industry, not from the proposal. The baseline is the old formula:
    `STORAGE_WORTH[tier]` × `STORAGE_REACH_SIZE` (10) × Industry × (IQ/100)² ÷ value × the
    resource's cap and expansion traits. Jev's band on `STORAGE_REACH` scales it by ×0.25 to ×8.
    The old ownership ladder (`HOLDERS`: an individual at IQ 100 up to the whole Earth at 500) is
    now only a guide in this prompt. Nothing is gated on it.
-3. **How good is the player's way?** Jev answers several questions about it:
+2. **How good is the player's way?** Jev answers several questions about it:
    - `plausible`: a no rejects the proposal.
    - `efficiency`: Wasteful to Brilliant on `STORAGE_CAPTURE`, which gives 0.15 to 1. That is the
      share of the reach this way captures, so it never goes past the reach.
@@ -152,7 +173,7 @@ and costs only once. **There are no ongoing costs:** no upkeep, decay or slow fi
 ## What the player sees
 
 - **Chips:**
-  - **Can exist:** the ceiling rung.
+  - **Can exist:** the resource's ceiling rung, or "No limit" in Phase 3.
   - **You could build:** the reach in units, with Jev's band and the IQ guide in the tooltip.
   - **This way:** the capture label.
 - **Cards** show:

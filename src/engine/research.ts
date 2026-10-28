@@ -211,12 +211,7 @@ export function completeResearch(state: GameState, r: Research): string {
   switch (effect.kind) {
     case 'unit': {
       addUnit(state, effect.unit)
-      return `${effect.unit.icon} ${effect.unit.name} is designed. Find sourcing for it on its card to own some.`
-    }
-    case 'sourcing': {
-      state.sourcing.push({ ...effect.sourcing, used: 0 })
-      const unit = findUnit(state, effect.sourcing.unitId)
-      return `${r.icon} ${effect.sourcing.name}: up to ${fmt(effect.sourcing.total)} more ${unit?.name ?? 'units'}. Create them on its card.`
+      return `${effect.unit.icon} ${effect.unit.name} is designed. Procure some from its card to own some.`
     }
     case 'storage': {
       const res = findResource(state, effect.resourceId)

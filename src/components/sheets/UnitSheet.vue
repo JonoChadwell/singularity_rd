@@ -45,12 +45,13 @@
           </tr>
         </tbody>
       </table>
-      <p v-else class="note warn">None yet: you can’t own any until you find a way to get them.</p>
+      <p v-else class="note warn">None yet: you can’t own any until you Procure some.</p>
+      <p class="note">Can exist: {{ ceilingLabel('unit', u.ceiling) }}</p>
     </section>
 
     <template #foot>
       <button class="small" @click="ui.openInvent({ kind: 'strategy', unitId: u.id })">+ Strategy</button>
-      <button class="small" @click="ui.openInvent({ kind: 'sourcing', unitId: u.id })">Find sourcing</button>
+      <button class="small" @click="ui.openInvent({ kind: 'create', unitId: u.id })">Procure</button>
       <button
         class="small"
         :disabled="!!lockReason(game.state, 'unit-upgrade')"
@@ -80,6 +81,7 @@ import {
   unitCap,
   unitValueText
 } from '@/engine/model'
+import { ceilingLabel } from '@/engine/ceilings'
 import { lockReason } from '@/engine/phase'
 import { strategyRate } from '@/engine/research'
 import { TRAITS } from '@/engine/traits'

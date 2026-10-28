@@ -18,6 +18,7 @@ export function newUnit(fields: Pick<UnitType, 'id' | 'name'> & Partial<UnitType
     tier: 0,
     plausibility: 1,
     upkeep: [],
+    ceiling: null,
     built: 0,
     traits: [],
     crew: null,
@@ -57,6 +58,7 @@ export function newResource(fields: Pick<Resource, 'id' | 'name'> & Partial<Reso
     cap: startingCap(fields.tier ?? 0, fields.value ?? 1),
     expansions: [],
     traits: [],
+    ceiling: null,
     ...fields
   }
 }
@@ -73,7 +75,7 @@ export function createInitialState(): GameState {
     starting: true
   })
   return {
-    version: 16,
+    version: 17,
     runId: newRunId(),
     week: 1,
     phase: {
@@ -103,7 +105,7 @@ export function createInitialState(): GameState {
     inventions: [],
     milestones: [],
     stats: {
-      proposals: { resource: 0, strategy: 0, unit: 0, mind: 0, upgrade: 0, sourcing: 0, storage: 0, create: 0, plan: 0, cover: 0 },
+      proposals: { resource: 0, strategy: 0, unit: 0, mind: 0, upgrade: 0, storage: 0, create: 0, plan: 0, cover: 0 },
       rejections: 0,
       researched: 0,
       jevCalls: 0

@@ -41,7 +41,7 @@ Jev no longer judges how convincing a cover is: the three options set its size i
 The IQ for cover is the one research uses, so the Deceiver (+50) and Honest to a fault (−50)
 compute traits move the size.
 
-**Save or apply.** Cover goes through the same banking as storage, sourcing and units
+**Save or apply.** Cover goes through the same banking as storage and units
 (`banking.ts`):
 
 - **Save For Later** banks all three options for one action. They are alternatives, so doing one

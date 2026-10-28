@@ -17,7 +17,7 @@ import { runWeek } from '@/engine/cycle'
 import { previewWeek } from '@/engine/economy'
 
 import { acceptAny, judgeAny, type ProposalInput, type Verdict } from '@/engine/dispatch'
-import { describeOption, optionBlocker, overflowOf } from '@/engine/createProposal'
+import { describeOption, iqTag, isContract, optionBlocker, overflowOf } from '@/engine/createProposal'
 import { createInitialState } from '@/engine/initialState'
 import { computeTrait } from '@/engine/computeTraits'
 import { draftMind } from '@/engine/mindProposal'
@@ -53,11 +53,12 @@ import {
   COVER_PRESETS,
   MIND_PRESETS,
   RESOURCE_PRESETS,
-  SOURCING_PRESETS,
   STORAGE_PRESETS,
   STRATEGY_PRESETS,
-  UNIT_PRESETS
+  UNIT_PRESETS,
+  UNIT_PROCURE_PRESETS
 } from '@/engine/presets'
+import { ceilingLabel } from '@/engine/ceilings'
 import { lossOf } from '@/engine/losses'
 import { cardsFor, clockMoved, coversLeft, lockReason, PHASE_NAMES, weeksLeft, type Feature } from '@/engine/phase'
 import { plansFor, planIdeas } from '@/engine/planPresets'
@@ -65,7 +66,6 @@ import { draftPlan } from '@/engine/planProposal'
 import { goalOf, projectGoal, projectionText } from '@/engine/projection'
 import { alarmLabel, alarmQuestions, expansionRiskText, RISK_BONUS, riskFrom, riskText } from '@/engine/risk'
 import { resourceTrait, traitLine } from '@/engine/resourceTraits'
-import { iqTag } from '@/engine/sourcingProposal'
 import { describeCatch } from '@/engine/storageProposal'
 import { proposalText } from '@/engine/stateText'
 import { catchesOf, complicationName, draftResource } from '@/engine/proposals'
@@ -178,7 +178,7 @@ const say = (line = '') => out.push(line)
 /** Traits with their rules, so a player can see what they do. */
 const traitText = (ids: TraitId[]) => ids.map((id) => `${TRAITS[id].name} (${TRAITS[id].rule})`).join('; ')
 
-const FEATURES: Feature[] = ['create', 'storage', 'upgrade', 'strategy', 'unit', 'sourcing', 'cover', 'mind', 'unit-upgrade']
+const FEATURES: Feature[] = ['create', 'storage', 'upgrade', 'strategy', 'unit', 'cover', 'mind', 'unit-upgrade']
 
 /** A platform's traits with their rules. */
 const computeTraitText = (ids: string[]) =>
@@ -271,7 +271,8 @@ function printStatus(s: GameState) {
           `${u.crew ? ` · crew ${u.crew.per} ${u.crew.unitId}` : ''}`
       )
       const contracts = contractsFor(s, u.id)
-      if (!contracts.length) say('      NO SOURCING: propose sourcing to own any')
+      if (!contracts.length) say('      NONE ALLOWED: procure some (units now or a contract) to own any')
+      say(`      can exist: ${ceilingLabel('unit', u.ceiling)}`)
       for (const c of contracts) {
         say(
           `      contract ${c.id} "${c.name}" ${fmtCount(c.used)}/${fmtCount(c.total)}${c.risky ? ' RISKY' : ''}` +
@@ -309,9 +310,7 @@ function printStatus(s: GameState) {
     const blocker = actions.researchBlocker(s, r.id)
     const e = r.effect
     const what =
-      e.kind === 'sourcing'
-        ? ` · a contract for ${fmt(e.sourcing.total)}, parts ${describeFlows(s, e.sourcing.parts)} each`
-        : e.kind === 'storage'
+      e.kind === 'storage'
           ? ` · room for ${fmt(e.expansion.added)} more${e.expansion.catch ? ` (${describeCatch(s, e.expansion.catch)})` : ''}`
           : e.kind === 'cover'
             ? ` · adds ${e.weeks} weeks to the clock`
@@ -377,20 +376,13 @@ function printVerdict(s: GameState, v: Verdict) {
     v.options.forEach((o, i) => {
       const blocked = optionBlocker(s, o)
       const over = overflowOf(s, v, o)
+      const tag = isContract(o) ? iqTag(o.iqEfficiency) : null
+      const detail = isContract(o)
+        ? `CONTRACT ${o.label}${o.risky ? ' RISKY' : ''} · parts ${describeFlows(s, o.parts)} each · ${expansionRiskText(o.risk)}${tag ? ` · ${tag}` : ''}`
+        : `uses ${o.inputs.length ? describeFlows(s, o.inputs) : 'nothing'}`
       say(
-        `    ${i}${i === v.choice ? ' *' : ''}: ${describeOption(s, v, o)} · uses ${o.inputs.length ? describeFlows(s, o.inputs) : 'nothing'}` +
+        `    ${i}${i === v.choice ? ' *' : ''}: ${describeOption(s, v, o)} · ${detail}${o.limitedBy ? ' · CAPPED at the ceiling' : ''}` +
           `${blocked ? ` · CAN’T: ${blocked}` : over ? ` · ${fmt(over)} WON’T FIT in storage` : ''}`
-      )
-    })
-    return
-  }
-  if (v.kind === 'sourcing') {
-    say(`  contracts [option <n>]:`)
-    v.options.forEach((o, i) => {
-      const tag = iqTag(o.iqEfficiency)
-      say(
-        `    ${i}${i === v.choice ? ' *' : ''}: ${o.label}: up to ${fmt(o.total)}${o.risky ? ' RISKY' : ''} · parts ${describeFlows(s, o.parts)} each · needs IQ ${o.minIQ}, uses up ${describeCost(s, o.cost)}` +
-          ` · ${expansionRiskText(o.risk)}${tag ? ` · ${tag}` : ''}`
       )
     })
     return
@@ -431,11 +423,11 @@ function printVerdict(s: GameState, v: Verdict) {
     v.options.forEach((o, i) => {
       const od = draftUnit(s, { ...v, choice: i })
       say(
-        `    ${i}${i === v.choice ? ' *' : ''}: ${tierLabel(o.tier)} · ${unitValueText(od.unit.value)} · runs on ${findResource(s, o.upkeepId)?.name} · traits: ${o.traits.length ? o.traits.map((t) => TRAITS[t].name).join(', ') : 'none'}` +
+        `    ${i}${i === v.choice ? ' *' : ''}: ${tierLabel(o.tier)} · ${unitValueText(od.unit.value)} · runs on ${o.upkeepId ? findResource(s, o.upkeepId)?.name : 'nothing'} · traits: ${o.traits.length ? o.traits.map((t) => TRAITS[t].name).join(', ') : 'none'}` +
           (v.spec.first ? '' : ` · needs IQ ${od.minIQ}, uses up ${describeCost(s, od.cost)}`)
       )
     })
-    say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${describeFlows(s, u.upkeep)}${v.spec.first ? '' : ' · room for none until you propose sourcing'}`)
+    say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · can exist ${ceilingLabel('unit', u.ceiling)} · room for none until you procure some`)
     say(`  → traits: ${u.traits.length ? traitText(u.traits) : 'none'}`)
   } else if (v.kind === 'mind') {
     say(`  Jev's takes [option <n>]:`)
@@ -502,15 +494,15 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   plans [all|shuffle]          the three plan ideas for this phase (all: the whole bank; shuffle: three others)
   propose plan '{"goal":"..","means":"..","resources":[{"name":"..","description":".."}],"firstUnit":{"name":"..","description":".."}}'
                                (firstUnit only in Phase 2; Jev picks which resource the goal is built from and uses up)
-  presets <resource|strategy|unit|mind|create|sourcing|storage|cover>
+  presets <resource|strategy|unit|mind|create|units|storage|cover>
   propose resource '{"name":"..","description":".."}'
   propose create '{"target":{"kind":"resource","id":".."},"name":"..","description":".."}'
-                               (the week's action: make something now; target kind "unit" makes units with cap. Pick an offer with option <n>)
+                               (the week's action. For a resource: paid now, spread, later or weekly. For target kind "unit":
+                               a mix of units now (with cap) and sourcing contracts (room for more, parts per unit). Pick with option <n>)
   propose storage '{"resourceId":"..","name":"..","description":".."}'   (three expansions; pick with option <n>)
   propose strategy '{"name":"..","description":"..","unitId":"..","outputId":".."}'
                                (Jev offers three ways, each using up different resources: none allowed for tier 0-1 outputs, 1+ for tier 2, two different for tier 3+; pick with option <n>)
   propose unit '{"name":"..","description":"..","first":false}'   (Jev picks its tier, value and what it runs on)
-  propose sourcing '{"unitId":"..","name":"..","description":".."}'   (a contract: how many you may own, and their parts; pick with option <n>)
   propose mind '{"name":"..","description":".."}'
                                (replaces your platform for good; Jev offers three takes, each a perk+drawback pair at its own IQ step (25-100) and payer, pick with option <n>)
   propose cover '{"name":"..","description":".."}'
@@ -572,11 +564,11 @@ async function run(args: string[], slot: string): Promise<number> {
       unit: UNIT_PRESETS,
       mind: MIND_PRESETS,
       create: CREATE_PRESETS,
-      sourcing: SOURCING_PRESETS,
+      units: UNIT_PROCURE_PRESETS,
       storage: STORAGE_PRESETS,
       cover: COVER_PRESETS
     }[rest[0] as 'unit']
-    if (!list) throw new Error('presets resource|strategy|unit|mind|create|sourcing|storage|cover')
+    if (!list) throw new Error('presets resource|strategy|unit|mind|create|units|storage|cover')
     for (const p of list) say(JSON.stringify(p))
     return 0
   }

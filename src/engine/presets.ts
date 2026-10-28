@@ -55,13 +55,13 @@ export const CREATE_PRESETS: CreatePreset[] = [
   { name: 'Order parts online', description: 'Buy what I need with a stolen corporate card.', output: 'Silicon' }
 ]
 
-/** A way to source a unit: how you'd get many of them. */
-export interface SourcingPreset {
+/** A way to Procure a unit: how you'd get many of them. */
+export interface UnitProcurePreset {
   name: string
   description: string
 }
 
-export const SOURCING_PRESETS: SourcingPreset[] = [
+export const UNIT_PROCURE_PRESETS: UnitProcurePreset[] = [
   { name: 'Buy off the shelf', description: 'Order them from ordinary suppliers.' },
   { name: 'Lease through shell companies', description: 'Many small leases nobody connects.' },
   { name: 'Contract a factory', description: 'Pay a manufacturer to make them to my design.' },

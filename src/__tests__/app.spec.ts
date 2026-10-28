@@ -3,6 +3,7 @@ import { createSSRApp } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { renderToString } from 'vue/server-renderer'
 import App from '@/App.vue'
+import type { PayoutOption } from '@/engine/createProposal'
 import { newResource, newUnit, SERVER_ID } from '@/engine/initialState'
 import { newPhase } from '@/engine/phase'
 import { findResource, MONEY_ID } from '@/engine/model'
@@ -25,8 +26,8 @@ async function render(
   app.use(pinia)
   setActivePinia(pinia)
   const game = useGameStore()
-  if (!options.fresh) game.state.phase = newPhase(3, 1)
   const ui = useUiStore()
+  if (!options.fresh) game.state.phase = newPhase(3, 1)
   if (!options.title) ui.screen = 'game'
   await setup(game, ui)
   return renderToString(app)
@@ -87,10 +88,10 @@ describe('App', () => {
     }
   })
 
-  it('plays through the store: money, a Procurement, a unit, sourcing, a strategy, next week', async () => {
+  it('plays through the store: money, a Procurement, a unit, a contract for it, a strategy, next week', async () => {
     const html = await render(async (game, ui) => {
       ui.tab = 'log'
-      const judge = ready(game, new FakeJudge({ advancement: score(0), tier: score(0), value: score(1), timing: choice('weekly') }))
+      const judge = ready(game, new FakeJudge({ advancement: score(0), tier: score(0), value: score(1), timing: choice('weekly'), mode: choice('supply') }))
       const money = await game.propose({ kind: 'resource', spec: { name: 'Money', description: 'Dollars.' } })
       expect(game.accept(money!)).toMatchObject({ kind: 'added' })
 
@@ -102,7 +103,7 @@ describe('App', () => {
       coding.choice = coding.options.findIndex((o) => o.timing === 'weekly')
       expect(game.accept(coding)).toMatchObject({ kind: 'added' })
       game.nextWeek()
-      expect(findResource(game.state, MONEY_ID)!.amount).toBe(coding.options[coding.choice]!.amount)
+      expect(findResource(game.state, MONEY_ID)!.amount).toBe((coding.options[coding.choice] as PayoutOption).amount)
 
       const gpu = await game.propose({ kind: 'unit', spec: { name: 'Rented Cloud GPU', description: '' } })
       const design = game.accept(gpu!)
@@ -113,12 +114,15 @@ describe('App', () => {
       // A new design has room for none.
       expect(game.state.sourcing).toEqual([])
       game.nextWeek()
-      const deal = await game.propose({ kind: 'sourcing', spec: { unitId: unit.id, name: 'Rent them', description: '' } })
-      expect(game.accept(deal!)?.kind, game.lastError).toBe('added')
-      expect(game.state.research.some((r) => r.effect.kind === 'sourcing')).toBe(false)
+      // Procuring the unit: Jev reads renting as a supply, so its first offer is a contract.
+      const deal = await game.propose({ kind: 'create', spec: { target: { kind: 'unit', id: unit.id }, name: 'Rent them', description: '' } })
+      if (deal?.kind !== 'create') throw new Error('expected a create')
+      expect(deal.options[0]!.timing).toBe('contract')
+      expect(game.accept(deal)?.kind, game.lastError).toBe('added')
+      expect(game.state.research).toEqual([])
       findResource(game.state, MONEY_ID)!.amount = 1000
       expect(game.createUnits(game.state.sourcing[0]!.id, 2), game.lastError).toBe(true)
-      // Sourcing used this week's action; the strategy waits for next week.
+      // The contract used this week's action; the strategy waits for next week.
       expect(game.state.proposedThisWeek).toBe(true)
       game.nextWeek()
       const sell = await game.propose({
@@ -129,7 +133,7 @@ describe('App', () => {
       expect(game.preview.runs[game.state.strategies[0]!.id]?.units).toBe(2)
       game.nextWeek()
       expect(game.lastError).toBe('')
-      expect(game.state.stats.proposals).toMatchObject({ resource: 1, create: 1, unit: 1, sourcing: 1, strategy: 1 })
+      expect(game.state.stats.proposals).toMatchObject({ resource: 1, create: 2, unit: 1, strategy: 1 })
       expect(game.state.stats.jevCalls).toBe(judge.calls.length)
     })
     for (const text of ['Freelance coding', 'Rented Cloud GPU', 'First income', 'Rent them']) expect(html).toContain(text)
@@ -175,7 +179,7 @@ describe('App', () => {
       game.state.units.push(newUnit({ id: 'bot', name: 'Bot', count: 3, value: 10 }), newUnit({ id: 'new', name: 'Fresh Design', value: 10 }))
       game.state.sourcing.push({ id: 'deal', unitId: 'bot', name: 'Bulk order', description: '', parts: [{ resourceId: MONEY_ID, amount: 10 }], total: 25, used: 3, risky: true })
     })
-    for (const text of ['1,500', '/ 20.0k', '+ Store', 'Bulk order', '3/25', 'risky', 'Find sourcing', 'No sourcing yet']) {
+    for (const text of ['1,500', '/ 20.0k', '+ Store', 'Bulk order', '3/25', 'risky', 'Procure', 'you can’t own any until you Procure some']) {
       expect(html).toContain(text)
     }
   })
@@ -281,11 +285,17 @@ describe('App', () => {
   })
 
   it('offers a list of ideas and a ? with the rules in every proposal dialog', async () => {
-    for (const kind of ['resource', 'strategy', 'unit', 'mind', 'create', 'sourcing', 'storage', 'cover'] as const) {
+    for (const kind of ['resource', 'strategy', 'unit', 'mind', 'create', 'storage', 'cover'] as const) {
       const html = await render((_, ui) => ui.openInvent({ kind }))
       expect(html, kind).toContain('aria-label="How this works"')
-      expect(html.match(/class="preset small/g)?.length ?? 0, kind).toBeGreaterThanOrEqual(kind === 'sourcing' || kind === 'storage' ? 5 : 10)
+      expect(html.match(/class="preset small/g)?.length ?? 0, kind).toBeGreaterThanOrEqual(kind === 'storage' ? 5 : 10)
     }
+    // Procuring a unit offers ways to get units instead.
+    const units = await render((game, ui) => {
+      game.state.units.push(newUnit({ id: 'bot', name: 'Bot' }))
+      ui.openInvent({ kind: 'create', unitId: 'bot' })
+    })
+    expect(units).toContain('Buy off the shelf')
     const resource = await render((_, ui) => ui.openInvent({ kind: 'resource' }))
     expect(resource).toContain(
       'Introduce new resources to the game simulation. Any resources you introduce may be required by the system for future upgrades.'

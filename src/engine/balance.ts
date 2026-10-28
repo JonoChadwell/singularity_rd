@@ -209,8 +209,9 @@ export const FIRST_UNIT_MAX_BAND = 2
 // ---------------------------------------------------------------- caps
 
 /**
- * Sourcing: how many of a unit Jev thinks could be had one way, [label, units]. A contract is a
- * lease on that many: you create them later, from its parts, at no action.
+ * Sourcing contracts, offered by Procuring a unit: how many Jev thinks could be had one way,
+ * [label, units]. A contract is a lease on that many: you create them later, from its parts, at
+ * no action.
  */
 export const SOURCING_LIMITS: [string, number][] = [
   ['A handful: a few dozen at most', 25],
@@ -222,8 +223,11 @@ export const SOURCING_LIMITS: [string, number][] = [
 ]
 /** A risky contract cuts corners for this many times the units. */
 export const RISK_SOURCING = 10
-/** Sourcing takes Jev offers. */
-export const SOURCING_OPTIONS = 3
+/**
+ * When a unit is Procured, slots after the first are units now with this chance (Jev's odds that
+ * the way is a one-off, kept inside these bounds), otherwise a contract.
+ */
+export const PROCURE_NOW_ODDS: [number, number] = [0.2, 0.8]
 
 /** Worth a resource of each tier can be stored to at the start, before expansions. Tier 3 up starts with none. */
 export const STARTING_STORAGE_WORTH = [20000, 8000, 2000, 0]
@@ -254,6 +258,19 @@ export const STORAGE_CEILINGS: [string, number][] = [
   'a hundred quadrillion',
   'ten quintillion'
 ].map((label, i) => [label, 10 ** (2 * i + 3)])
+/** How many of a unit could exist at most: [label, units]. One rung per power of ten. */
+export const UNIT_CEILINGS: [string, number][] = [
+  'ten',
+  'a hundred',
+  'a thousand',
+  'ten thousand',
+  'a hundred thousand',
+  'a million',
+  'ten million',
+  'a hundred million',
+  'a billion',
+  'ten billion'
+].map((label, i) => [label, 10 ** (i + 1)])
 /** What the AI's holdings, units and platforms let it build, as a multiple of the baseline: [label, factor]. */
 export const STORAGE_REACH: [string, number][] = [
   ['Barely anything: it owns almost nothing to build with', 0.25],
@@ -313,7 +330,7 @@ export const CREATE_INPUT_RETURN = 1.2
  * Efficiency × Reach). Paid in full now, whatever the timing.
  */
 export const CREATE_INPUT_SHARE = 1
-/** Units made by Procurement cost this many times what a sourcing contract would charge. */
+/** Units Procured now cost this many times what a sourcing contract would charge. */
 export const CREATE_UNIT_PREMIUM = 2
 /** Industry scalar: 1 at no units, up to INDUSTRY_MAX, one step per decade of unit worth from INDUSTRY_FROM. */
 export const INDUSTRY_FROM = 1e3
@@ -501,7 +518,6 @@ export const BARS = {
   strategy: 0.3,
   unit: 0.35,
   mind: 0.35,
-  sourcing: 0.3,
   storage: 0.3,
   create: 0.3,
   plan: 0.25,

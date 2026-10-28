@@ -108,7 +108,7 @@ function researchThing(r: Research): { id: string; name: string } | null {
 /** Ids a research will add, for picking fresh ids. */
 function researchIds(r: Research): string[] {
   const thing = researchThing(r)
-  return [...(thing ? [thing.id] : []), ...(r.effect.kind === 'sourcing' ? [r.effect.sourcing.id] : [])]
+  return thing ? [thing.id] : []
 }
 
 /** A stable id from a name, so the same world always gives Jev the same request. */
@@ -241,7 +241,6 @@ export function researchType(r: Research): ResearchType | null {
     case 'strategy':
       return 'strategy'
     case 'unit':
-    case 'sourcing':
       return 'unit'
     case 'cover':
       return 'cover'

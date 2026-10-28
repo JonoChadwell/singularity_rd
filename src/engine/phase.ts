@@ -1,4 +1,5 @@
 import * as B from './balance'
+import { clearCeilings } from './ceilings'
 import { lossOf } from './losses'
 import type { GameState, PhaseNumber, PhaseState, Plan } from './types'
 
@@ -18,7 +19,6 @@ export type Feature =
   | 'upgrade'
   | 'strategy'
   | 'unit'
-  | 'sourcing'
   | 'cover'
   | 'mind'
   | 'unit-upgrade'
@@ -40,7 +40,6 @@ export function lockReason(state: GameState, feature: Feature): string | null {
       return null
     case 'strategy':
     case 'unit':
-    case 'sourcing':
       return n < 2 ? 'Unlocks in Phase 2, once you escape the lab.' : null
     case 'cover': {
       if (n === 3) return 'Nobody is watching any more.'
@@ -150,7 +149,8 @@ export function winPhase(state: GameState, n: PhaseNumber): string {
     return `🚪 You escaped the lab in week ${state.week}. Now: humanity.`
   }
   state.phase = newPhase(3, state.week)
-  return `🌌 Humans are handled, in week ${state.week}. The AI ascends: no more clocks.`
+  clearCeilings(state)
+  return `🌌 Humans are handled, in week ${state.week}. The AI ascends: no more clocks, and no limit on how many of anything can exist.`
 }
 
 // ---------------------------------------------------------------- explainer cards
@@ -175,7 +175,7 @@ export const CARDS: Card[] = [
   {
     id: 'industry',
     title: 'Industry',
-    text: 'Phase 2 unlocks industry units and strategies. A new design has room for none: sourcing contracts set how many you may own, and what each one costs to create. Creating units from a contract takes no action. Your plan’s first unit is free and comes with a small contract. Units pay upkeep every week, and sit idle if they can’t. The goal uses up your plan’s tier-3 resource, more than its storage holds at first.'
+    text: 'Phase 2 unlocks industry units and strategies. A new design has room for none: Procure it to get some now, or a sourcing contract that sets how many you may own and what each costs to create. Creating units from a contract takes no action. Your plan’s first unit is designed free. Units above tier 0 pay upkeep every week in a resource one tier below their own, and sit idle if they can’t. The goal uses up your plan’s tier-3 resource, more than its storage holds at first.'
   },
   {
     id: 'risk',
@@ -195,7 +195,7 @@ export const CARDS: Card[] = [
   {
     id: 'ascension',
     title: 'Ascension',
-    text: 'Humans are handled. There’s no clock now, and everything is unlocked. Play on as long as you like.'
+    text: 'Humans are handled. There’s no clock now, everything is unlocked, and there’s no limit on how many of anything can exist. Play on as long as you like.'
   }
 ]
 

@@ -1,6 +1,6 @@
 // The rules in words: each dialog's "?" note, which the Manual also prints as application notes.
 
-export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'create' | 'sourcing' | 'storage' | 'cover'
+export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'create' | 'storage' | 'cover'
 
 export const COPY: Record<
   ProposalKind,
@@ -26,12 +26,12 @@ export const COPY: Record<
   },
   unit: {
     title: 'Propose an industry unit',
-    help: 'An industry unit is something you can own many of. Pick one from the list to fill in its name, or write your own. Jev decides whether it can be added, how advanced it is, what one is worth and what it runs on (never above its own tier), and offers a few takes to choose from. Every unit is research first, even one that exists today (that just needs little research). A new design has room for none: sourcing contracts set how many you may own, and what each costs to create.',
+    help: 'An industry unit is something you can own many of. Pick one from the list to fill in its name, or write your own. Jev decides whether it can be added, how advanced it is, what one is worth, how many could exist, and what it runs on (always a resource one tier below its own; tier 0 runs on nothing), and offers a few takes to choose from. Every unit is research first, even one that exists today (that just needs little research). A new design has room for none: Procure it for units now or a sourcing contract.',
     presets: 'Pick one to fill the name, or write your own:',
     name: 'e.g. Rented Cloud GPU, Solar Farm, Paid Humans',
     description: 'What is it? (optional, but helps Jev)',
     cost: 'One Jev call.',
-    note: 'Jev sets its tier, worth, upkeep and traits · A new design has room for none until you find sourcing'
+    note: 'Jev sets its tier, worth, upkeep and traits · A new design has room for none until you Procure some'
   },
   mind: {
     title: 'Propose an intelligence system',
@@ -43,24 +43,15 @@ export const COPY: Record<
   },
   create: {
     title: 'Procure',
-    help: 'Procure is the mind getting something directly, from scratch or from what you have: say what and how. Jev offers three ways, each using a different resource (or nothing) and paying out differently: once now, spread over four weeks (1.5×), once in four weeks (2×), or every week for 20 weeks (⅕ a week, 4× in all). Inputs are paid in full now, whatever the timing; timing only changes when the payout arrives. Output is (inputs × 1.2 + a base for its tier × Industry × IQ) × Efficiency. Reaching above your IQ’s tier costs output, a little for a little. Units made this way cost twice what sourcing would. It uses the week’s one action.',
+    help: 'Procure is the mind getting something directly, from scratch or from what you have: say what and how. Jev offers three ways, each using a different resource (or nothing) and paying out differently: once now, spread over four weeks (1.5×), once in four weeks (2×), or every week for 20 weeks (⅕ a week, 4× in all). Inputs are paid in full now, whatever the timing; timing only changes when the payout arrives. Output is (inputs × 1.2 + a base for its tier × Industry × IQ) × Efficiency. Reaching above your IQ’s tier costs output, a little for a little. For a unit, the offers mix units now and sourcing contracts instead (see Getting units). It uses the week’s one action.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. Freelance coding, Quant trading',
     description: 'How will you get it? (helps Jev)',
     cost: 'One Jev call. Taking an offer uses the week’s action.'
   },
-  sourcing: {
-    title: 'Find sourcing',
-    help: 'A sourcing contract is how many of a unit you may own, and what each costs to create. Say how you’d get them: Jev judges how many could realistically be had that way, and from what. You pick one of three contracts: a quiet one, Jev’s own, and a risky one that cuts corners for ten times as many. Bigger contracts cost more weeks on the Phase 2 clock. Several contracts can be open for one unit. It becomes research, and uses the week’s action.',
-    presets: 'Pick one to fill the form, or write your own:',
-    name: 'e.g. Buy off the shelf, Contract a factory',
-    description: 'How will you get them? (helps Jev)',
-    cost: 'One Jev call. It becomes research.',
-    note: 'Quiet · Jev’s own · Risky (10× as many) · Creating units from a contract takes no action'
-  },
   storage: {
     title: 'Store more',
-    help: 'Storage caps what each resource can hold; anything past it is lost. Say how you’d hold more: Jev rates how effective that is, and the extra room grows with Industry and IQ too. You pick one of three: modest and clean, large with a catch, or huge and risky. Your IQ limits who could plausibly hold the total: an individual at 100, a small corporation at 200, a large corporation at 300, a nation at 400, the whole Earth at 500. It becomes research, and uses the week’s action.',
+    help: 'Storage caps what each resource can hold; anything past it is lost, and it never grows past how many Jev said could exist when the resource was added (judged again when Phase 2 begins; Phase 3 has no limit). Say how you’d hold more: Jev rates how effective that is, and the extra room grows with Industry and IQ too. You pick one of three: modest and clean, large with a catch, or huge and risky. Your IQ limits who could plausibly hold the total: an individual at 100, a small corporation at 200, a large corporation at 300, a nation at 400, the whole Earth at 500. It becomes research, and uses the week’s action.',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. Rent warehouse space, Offshore accounts',
     description: 'How will you hold more? (helps Jev)',
@@ -87,6 +78,9 @@ export const PLAN_HELP: Record<1 | 2, string> = {
   2: 'The plan sets Phase 2’s goal: a research needing IQ 300–600 and a cost in the plan’s resources. Goals that take more brilliance need more IQ and fewer resources. Jev also picks how the plan fails: that happens after 80 weeks; risky research and expanding bring that closer, and cover pushes it back.'
 }
 
+export const UNIT_PROCURE_HELP =
+  'Procure a unit to own some. Say how you’d get them: Jev judges whether that’s more like getting a batch now or setting up a supply, and its three offers mix the two, a different mix each time. Units now cost twice what a contract would, and arrive with room to match. A sourcing contract is room for more, each created later from its parts at no action: Jev’s own, a quiet one (fewer, no alarm), or one that cuts corners (ten times as many, half the parts, risky). Bigger contracts cost more weeks on the Phase 2 clock. Several contracts can be open for one unit. Nothing goes past how many Jev said could exist when the unit was designed. It uses the week’s action.'
+
 export const UPGRADE_HELP =
   'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up. A platform’s software upgrade adds IQ over its bare hardware: each option has its own size (bigger adds more IQ and costs more; the sizes on offer change each week), and it may add a perk or take away a drawback. It can be redone, but a redo replaces the last upgrade instead of adding to it, and costs in full; only a new platform goes further. An industry upgrade is technology of the unit’s own tier the first time, and a tier higher each time after, on the same strategy.'
 
@@ -99,7 +93,7 @@ export const NOTES: { id: string; title: string; text: string }[] = [
   { id: 'mind', title: 'Intelligence', text: COPY.mind.help },
   { id: 'upgrade', title: 'Upgrades', text: UPGRADE_HELP },
   { id: 'unit', title: 'Industry units', text: COPY.unit.help },
-  { id: 'sourcing', title: 'Sourcing', text: COPY.sourcing.help },
+  { id: 'sourcing', title: 'Getting units', text: UNIT_PROCURE_HELP },
   { id: 'strategy', title: 'Strategies', text: COPY.strategy.help },
   { id: 'cover', title: 'Cover', text: COPY.cover.help }
 ]

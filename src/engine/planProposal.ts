@@ -1,5 +1,6 @@
 import { readNoul, answerFor, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
+import { applyCeilings, recomputeQuestions } from './ceilings'
 import { namesInUse } from './model'
 import { PHASE_NAMES, startPhase } from './phase'
 import {
@@ -132,6 +133,8 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
     }
   }
   for (const i of fresh) Object.assign(questions, resourceQuestions(state, prefix(i), spec.resources[i]!.name))
+  // Out of the lab, how many of everything can exist is judged again.
+  if (phase === 2) Object.assign(questions, recomputeQuestions(state))
   const answers = await judge.ask(
     proposalText(state, [
       `The player plans Phase ${phase} of the game, “${PHASE_NAMES[phase]}”.`,
@@ -205,6 +208,7 @@ export function coverTiers(fresh: Resource[], top: Resource): void {
  */
 export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
   const state = structuredClone(current)
+  if (v.phase === 2) applyCeilings(state, v.answers)
   const fresh = newIndexes(state, v.spec)
   const at = topIndex(v, fresh)
   const added: Resource[] = []

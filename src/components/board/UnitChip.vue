@@ -50,13 +50,13 @@
     <p v-else class="lock">No strategies yet.</p>
 
     <div class="feeders">
-      <p v-if="!contracts.length" class="nosrc"><Led tone="warn" /> No sourcing yet: you can’t own any until you find a way to get them.</p>
+      <p v-if="!contracts.length" class="nosrc"><Led tone="warn" /> None yet: you can’t own any until you Procure some.</p>
       <FeederRow v-for="c in contracts" :key="c.id" :contract="c" :unit="unit" />
     </div>
 
     <footer class="pkg-foot">
       <button class="link" @click="ui.openInvent({ kind: 'strategy', unitId: unit.id })">+ strategy</button>
-      <button class="link" @click="ui.openInvent({ kind: 'sourcing', unitId: unit.id })">Find sourcing</button>
+      <button class="link" @click="ui.openInvent({ kind: 'create', unitId: unit.id })">Procure</button>
       <button
         class="link"
         :disabled="!!upgradeLock"

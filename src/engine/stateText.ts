@@ -1,3 +1,4 @@
+import { ceilingLabel } from './ceilings'
 import { computeTrait } from './computeTraits'
 import { currentIQ, describeFlows, findUnit, softwareLabel } from './model'
 import { RESOURCE_TRAITS } from './resourceTraits'
@@ -12,6 +13,7 @@ export function describeState(state: GameState): string {
   const unitLine = (u: GameState['units'][number]) => {
     const bits: string[] = []
     if (u.upkeep.length) bits.push(`runs on ${describeFlows(state, u.upkeep)} a week`)
+    if (u.ceiling !== null) bits.push(`about ${ceilingLabel('unit', u.ceiling)} can exist`)
     if (u.traits.length) bits.push(u.traits.map((t) => TRAITS[t].name).join(', '))
     return `- ${u.name}${bits.length ? ` (${bits.join('; ')})` : ''}: ${u.description}`
   }
@@ -31,7 +33,9 @@ export function describeState(state: GameState): string {
     'Resources:',
     ...state.resources.map(
       (r) =>
-        `- ${r.name} (tier ${r.tier}${r.traits.length ? `; ${r.traits.map((t) => RESOURCE_TRAITS[t].name).join(', ')}` : ''}): ${r.description}`
+        `- ${r.name} (tier ${r.tier}${r.traits.length ? `; ${r.traits.map((t) => RESOURCE_TRAITS[t].name).join(', ')}` : ''}${
+          r.ceiling !== null ? `; about ${ceilingLabel('resource', r.ceiling)} can exist` : ''
+        }): ${r.description}`
     ),
     '',
     'Intelligence systems (single machines that think and do research):',

@@ -1,7 +1,7 @@
 import { doResearch, researchBlocker } from './actions'
 import { computeTrait } from './computeTraits'
 import type { CoverVerdict } from './coverProposal'
-import { findResource, findUnit, fmt, makeId, tierLabel } from './model'
+import { findResource, findUnit, tierLabel } from './model'
 import { draftMind, type MindVerdict } from './mindProposal'
 import {
   addResearch,
@@ -12,10 +12,9 @@ import {
   refuseUnaccepted,
   type Accepted
 } from './proposals'
-import type { SourcingVerdict } from './sourcingProposal'
 import { storageResearchText, type StorageVerdict } from './storageProposal'
 import { draftStrategy, strategyIdea, type StrategyVerdict } from './strategyProposal'
-import type { GameState, Research, Sourcing } from './types'
+import type { GameState, Research } from './types'
 import { draftUnit, type UnitVerdict } from './unitProposal'
 import { changeKey, describeChanges, targetName, type UpgradeOffer } from './upgrade'
 import type { Verdict } from './dispatch'
@@ -23,14 +22,13 @@ import type { Verdict } from './dispatch'
 // Banking: every option Jev offers can be saved to the research list for later (all of them, for
 // one action), or applied now (just that one, researched at once if the mind and stocks allow).
 
-export type BankableVerdict = UnitVerdict | MindVerdict | StorageVerdict | SourcingVerdict | StrategyVerdict | CoverVerdict
+export type BankableVerdict = UnitVerdict | MindVerdict | StorageVerdict | StrategyVerdict | CoverVerdict
 
 /** Verdicts whose options become research. A plan's first unit comes designed, so it isn't one. */
 export const isBankable = (v: Verdict): v is BankableVerdict =>
   v.kind === 'mind' ||
   v.kind === 'cover' ||
   v.kind === 'storage' ||
-  v.kind === 'sourcing' ||
   v.kind === 'strategy' ||
   (v.kind === 'unit' && !v.spec.first)
 
@@ -41,9 +39,10 @@ function draftOption(state: GameState, v: BankableVerdict, i: number): Draft {
   switch (v.kind) {
     case 'unit': {
       const { unit, minIQ, cost } = draftUnit(state, { ...v, choice: i })
-      const runsOn = findResource(state, v.options[i]!.upkeepId)?.name ?? '?'
+      const upkeepId = v.options[i]!.upkeepId
+      const runsOn = upkeepId ? `runs on ${findResource(state, upkeepId)?.name ?? '?'}` : 'runs on nothing'
       return {
-        label: `${tierLabel(v.options[i]!.tier)}, runs on ${runsOn}`,
+        label: `${tierLabel(v.options[i]!.tier)}, ${runsOn}`,
         name: `Design ${unit.name}`,
         description: `Design ${unit.name}.`,
         icon: unit.icon,
@@ -110,31 +109,6 @@ function draftOption(state: GameState, v: BankableVerdict, i: number): Draft {
         risk: null
       }
     }
-    case 'sourcing': {
-      const o = v.options[i]!
-      const unit = findUnit(state, v.spec.unitId)
-      if (!unit) throw new Error('That unit is gone.')
-      const sourcing: Sourcing = {
-        id: makeId(state, `${unit.name} ${v.spec.name}`),
-        unitId: unit.id,
-        name: v.spec.name,
-        description: v.spec.description || v.spec.name,
-        parts: o.parts,
-        total: o.total,
-        used: 0,
-        risky: o.risky
-      }
-      return {
-        label: o.label,
-        name: `${unit.name}: ${v.spec.name}`,
-        description: `Sourcing for up to ${fmt(o.total)} more ${unit.name}.`,
-        icon: '📦',
-        minIQ: 0,
-        cost: [],
-        effect: { kind: 'sourcing', sourcing },
-        risk: o.risk
-      }
-    }
   }
 }
 
@@ -153,7 +127,7 @@ export function bankVerdict(current: GameState, v: BankableVerdict, only?: numbe
   const group = `${v.kind}:${state.week}:${v.spec.name}`
   const first = draftOption(state, v, picks[0]!)
   state.inventions.push({ week: state.week, icon: first.icon, name: v.spec.name, kind: v.kind })
-  if (v.kind === 'storage' || v.kind === 'sourcing') recordIdea(state, v.kind, first.name, v.spec.description)
+  if (v.kind === 'storage') recordIdea(state, v.kind, first.name, v.spec.description)
   if (v.kind === 'strategy') {
     const idea = strategyIdea(state, v)
     recordIdea(state, 'strategy', idea.name, idea.description)

@@ -74,7 +74,7 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
       add({
         key: `cap-${u.id}`,
         tone: 'warn',
-        text: `${u.icon} ${u.name} is designed, but you have no sourcing for it yet.`,
+        text: `${u.icon} ${u.name} is designed, but you can’t own any yet: Procure some.`,
         prompt: { label: 'How will you get them?', to: { kind: 'source', unitId: u.id } }
       })
       continue

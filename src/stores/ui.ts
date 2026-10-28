@@ -5,7 +5,7 @@ import { lockReason } from '@/engine/phase'
 import type { UpgradeTarget } from '@/engine/types'
 import { useGameStore } from './game'
 
-export type InventKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'create' | 'sourcing' | 'storage' | 'cover'
+export type InventKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'create' | 'storage' | 'cover'
 
 /** Which proposal dialog is open, and anything to pre-fill from where it was opened. */
 export interface InventRequest {
@@ -124,7 +124,7 @@ export const useUiStore = defineStore('ui', () => {
       case 'create':
         return openInvent({ kind: 'create' })
       case 'source':
-        return openInvent({ kind: 'sourcing', unitId: prompt.unitId })
+        return openInvent({ kind: 'create', unitId: prompt.unitId })
       case 'storage':
         return openInvent({ kind: 'storage', resourceId: prompt.resourceId })
       case 'research':

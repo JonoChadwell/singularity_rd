@@ -3,7 +3,18 @@ import { CachedJudge, type Questions } from '@/ai/jev'
 import * as B from '../balance'
 import { assign, assignRest, createUnits, doResearch, dropResearch, researchBlocker } from '../actions'
 import { alertsFor } from '../alerts'
-import { acceptCreate, judgeCreate, optionBlocker, precheckCreate, type CreateSpec } from '../createProposal'
+import {
+  acceptCreate,
+  iqTag,
+  isContract,
+  judgeCreate,
+  optionBlocker,
+  precheckCreate,
+  type ContractOption,
+  type CreateSpec,
+  type CreateVerdict,
+  type PayoutOption
+} from '../createProposal'
 import { runWeek } from '../cycle'
 import { previewWeek } from '../economy'
 import { createInitialState, newMind, newResource, newUnit, SERVER_ID } from '../initialState'
@@ -37,17 +48,16 @@ import {
   resolveResources,
   RESOURCE_PRESETS,
   runnerFor,
-  SOURCING_PRESETS,
   STORAGE_PRESETS,
   STRATEGY_PRESETS,
-  UNIT_PRESETS
+  UNIT_PRESETS,
+  UNIT_PROCURE_PRESETS
 } from '../presets'
 import { acceptResource, floorIQ, judgeResource } from '../proposals'
 import { acceptStrategy, judgeStrategy, precheckStrategy } from '../strategyProposal'
 import { applyVerdict, bankVerdict } from '../banking'
 import { priceCost } from '../research'
 import type { Delivery, GameState, Research, Sourcing, Strategy } from '../types'
-import { acceptSourcing, iqTag, judgeSourcing } from '../sourcingProposal'
 import { acceptStorage, judgeStorage } from '../storageProposal'
 import { acceptUnit, judgeUnit, type UnitSpec } from '../unitProposal'
 import { acceptUpgrade, changeKey, describeChanges, judgeUpgrade, mindUpgradeBlocker, softwareSteps, upgradeCandidates, upgradeTier } from '../upgrade'
@@ -140,6 +150,10 @@ const createSpec = (fields: Partial<CreateSpec> = {}): CreateSpec => ({
   ...fields
 })
 
+/** A Procurement of a resource: every offer pays out. */
+const judgePay = async (...args: Parameters<typeof judgeCreate>) =>
+  (await judgeCreate(...args)) as Omit<CreateVerdict, 'options'> & { options: PayoutOption[] }
+
 /** A research added by hand. */
 function research(fields: Partial<Research> = {}): Research {
   return {
@@ -190,7 +204,7 @@ describe('formatting', () => {
 describe('the start', () => {
   it('has only the Starting Server, and waits for a Phase 1 plan', () => {
     const s = createInitialState()
-    expect(s.version).toBe(16)
+    expect(s.version).toBe(17)
     expect(s.phase).toMatchObject({ n: 1, status: 'planning', deadline: null, goalId: null })
     expect(s.resources).toEqual([])
     expect(s.minds).toHaveLength(1)
@@ -223,7 +237,7 @@ describe('create', () => {
 
   it('offers three ways, each a different payout, with the four factors on show', async () => {
     const s = moneyWorld()
-    const v = await judgeCreate(s, new FakeJudge({ efficiency: score(2) }), createSpec())
+    const v = await judgePay(s, new FakeJudge({ efficiency: score(2) }), createSpec())
     expect(v.rejected).toBeNull()
     expect(v.options).toHaveLength(3)
     expect(new Set(v.options.map((o) => o.timing)).size).toBe(3)
@@ -239,7 +253,7 @@ describe('create', () => {
   it('pays now, later, spread over weeks, or every week for 20 weeks, and uses the week’s action', async () => {
     const pick = async (timing: string) => {
       const s = moneyWorld()
-      const v = await judgeCreate(s, new FakeJudge({ timing: choice(timing) }), createSpec())
+      const v = await judgePay(s, new FakeJudge({ timing: choice(timing) }), createSpec())
       v.choice = v.options.findIndex((o) => o.timing === timing)
       expect(v.choice).toBeGreaterThanOrEqual(0)
       const after = acceptCreate(s, v).state
@@ -342,7 +356,7 @@ describe('create', () => {
       newResource({ id: 'lemons', name: 'Lemons', value: 1, amount: 1000, cap: ROOMY }),
       newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY })
     )
-    const v = await judgeCreate(s, new FakeJudge({ inputs: choice('steel', { steel: 0.6, lemons: 0.4 }), timing: choice('now') }), createSpec())
+    const v = await judgePay(s, new FakeJudge({ inputs: choice('steel', { steel: 0.6, lemons: 0.4 }), timing: choice('now') }), createSpec())
     const used = v.options.map((o) => o.inputs.map((f) => f.resourceId).join('+'))
     expect(used.slice(0, 2)).toEqual(['steel', 'lemons'])
     // Inputs worth the base come back ×1.2, on top of the base.
@@ -358,7 +372,7 @@ describe('create', () => {
     s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY }))
     // One resource to use, so every option asks Jev's ranking for it in turn; force each timing in.
     const inputFor = async (timing: string, answers = {}) => {
-      const v = await judgeCreate(s, new FakeJudge({ timing: choice(timing), ...answers }), createSpec())
+      const v = await judgePay(s, new FakeJudge({ timing: choice(timing), ...answers }), createSpec())
       return v.options.find((o) => o.timing === timing && o.inputs.length)?.inputs[0]?.amount
     }
     const now = await inputFor('now')
@@ -368,12 +382,12 @@ describe('create', () => {
     expect(await inputFor('now', { efficiency: score(0) })).toBe(now! * B.EFFICIENCY[0]![1])
     // Reaching a tier above your IQ shrinks it by the same factor as the output.
     s.resources.push(newResource({ id: 'gold', name: 'Gold', tier: 2, value: 1, cap: ROOMY }))
-    const gold = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec({ target: { kind: 'resource', id: 'gold' } }))
+    const gold = await judgePay(s, new FakeJudge({ timing: choice('now') }), createSpec({ target: { kind: 'resource', id: 'gold' } }))
     const used = gold.options.find((o) => o.inputs.length)!
     expect(used.inputs[0]!.amount).toBeCloseTo(B.nice(B.CREATE_WORTH * gold.scalars.reach))
     // With less on hand than it would take, it takes exactly what you have, so it's always affordable.
     findResource(s, 'steel')!.amount = 123.4
-    const v = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec())
+    const v = await judgePay(s, new FakeJudge({ timing: choice('now') }), createSpec())
     const all = v.options.find((o) => o.inputs.length)!
     expect(all.inputs[0]!.amount).toBe(123.4)
     expect(optionBlocker(s, all)).toBeNull()
@@ -384,7 +398,7 @@ describe('create', () => {
     s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY }))
     server(s).software = { name: 'v2', iq: 100, upgraded: true }
     // Jev would never pay out now; but Money (tier 0) is easy at IQ 200.
-    const v = await judgeCreate(s, new FakeJudge({ timing: choice('weekly', { weekly: 0.5, later: 0.3, spread: 0.2 }) }), createSpec())
+    const v = await judgePay(s, new FakeJudge({ timing: choice('weekly', { weekly: 0.5, later: 0.3, spread: 0.2 }) }), createSpec())
     expect(v.options.some((o) => o.timing === 'now' && !o.inputs.length)).toBe(true)
   })
 
@@ -407,12 +421,12 @@ describe('create', () => {
     expect((await reach(200)).industry).toBe(B.INDUSTRY_MAX)
   })
 
-  it('makes units with cap to match, at a premium over sourcing', async () => {
+  it('makes units now with cap to match, at a premium over a contract', async () => {
     const s = moneyWorld()
     s.units.push(newUnit({ id: 'bot', name: 'Bot', value: 10 }))
-    const v = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec({ target: { kind: 'unit', id: 'bot' } }))
+    const v = await judgeCreate(s, new FakeJudge({ mode: choice('now') }), createSpec({ target: { kind: 'unit', id: 'bot' } }))
     v.choice = v.options.findIndex((o) => o.timing === 'now')
-    const o = v.options[v.choice]!
+    const o = v.options[v.choice] as PayoutOption
     expect(o.amount).toBe(Math.floor(o.outputWorth / (10 * B.CREATE_UNIT_PREMIUM)))
     const after = acceptCreate(s, v).state
     expect(unit(after, 'bot').count).toBe(o.amount)
@@ -632,7 +646,7 @@ describe('proposals', () => {
     )
     return s
   }
-  const takeOf = (o: { tier: number; band: number; upkeepId: string }) => `${o.tier}|${o.band}|${o.upkeepId}`
+  const takeOf = (o: { tier: number; band: number; upkeepId: string | null }) => `${o.tier}|${o.band}|${o.upkeepId}`
 
   it('has Jev set a unit’s tier, value and upkeep: three different takes, over two tiers', async () => {
     const s = richWorld()
@@ -698,8 +712,10 @@ describe('proposals', () => {
 
   it('prices a unit’s design by its tier, not by what one is worth', async () => {
     const rich = withMoney(moneyWorld(), 1e9)
+    // Something at every tier for a unit one tier up to run on.
+    for (let tier = 1; tier <= 3; tier++) rich.resources.push(newResource({ id: `r${tier}`, name: `R${tier}`, tier }))
     const design = async (tier: number, value: number) =>
-      acceptUnit(rich, await judgeUnit(rich, new FakeJudge({ tier: score(tier), value: score(value) }), unitSpec())).state
+      acceptUnit(rich, await judgeUnit(rich, new FakeJudge({ tier: score(tier), value: score(value), pay: choice(MONEY_ID) }), unitSpec())).state
         .research[0]!
     const cheap = await design(2, 0)
     const dear = await design(2, 5)
@@ -750,7 +766,7 @@ describe('proposals', () => {
     expect(v.traitOdds.find((t) => t.trait === 'overclockable')).toBeDefined()
   })
 
-  it('has Jev choose what a unit runs on, never above its own tier', async () => {
+  it('has Jev choose what a unit runs on, always a resource one tier below; tier 0 runs on nothing', async () => {
     const s = moneyWorld()
     s.resources.push(
       newResource({ id: 'steel', name: 'Steel', tier: 1 }),
@@ -758,20 +774,41 @@ describe('proposals', () => {
       newResource({ id: 'chips', name: 'AI Chips', tier: 3 })
     )
     const judge = new FakeJudge({
-      tier: score(1, { '1': 0.6, '3': 0.4 }),
+      tier: score(2, { '2': 0.5, '0': 0.3, '4': 0.2 }),
       value: score(2),
-      // Jev would run everything on chips, but a tier 1 unit can't use them.
-      runs_t1: choice('chips'),
-      runs_t3: choice('chips')
+      runs_t2: choice('power')
     })
     const v = await judgeUnit(s, judge, unitSpec())
     const asked = Object.keys(judge.calls[0]!.questions)
-    expect(asked).toEqual(expect.arrayContaining(['runs_t0', 'runs_t1', 'runs_t3']))
-    // Tier 2 can use what tier 1 can, so it shares that question; and parts are for sourcing.
-    expect(asked).not.toContain('runs_t2')
+    // Tier 1 runs on Money, tier 2 on Steel or Power, tier 4 on chips; tier 3 has nothing at tier 2.
+    expect(asked).toEqual(expect.arrayContaining(['runs_t1', 'runs_t2', 'runs_t4']))
+    expect(asked).not.toContain('runs_t0')
+    expect(asked).not.toContain('runs_t3')
     expect(asked.some((k) => k.startsWith('parts'))).toBe(false)
-    for (const o of v.options) expect(findResource(s, o.upkeepId)!.tier).toBeLessThanOrEqual(o.tier)
-    expect(v.options.find((o) => o.tier === 3)?.upkeepId ?? 'chips').toBe('chips')
+    expect(v.options.some((o) => o.tier === 3)).toBe(false)
+    for (const o of v.options) {
+      if (o.tier === 0) expect(o.upkeepId).toBeNull()
+      else expect(findResource(s, o.upkeepId!)!.tier).toBe(o.tier - 1)
+    }
+    expect(v.options[0]).toMatchObject({ tier: 2, upkeepId: 'power' })
+    const t0 = v.options.findIndex((o) => o.tier === 0)
+    expect(t0).toBeGreaterThanOrEqual(0)
+    v.choice = t0
+    const r = acceptUnit(s, v).state.research[0]!
+    expect(r.effect.kind === 'unit' && r.effect.unit.upkeep).toEqual([])
+  })
+
+  it('settles how many can exist when the unit is designed, and not in Phase 3', async () => {
+    const s = moneyWorld()
+    s.phase = { ...newPhase(2, 1), status: 'playing' } as typeof s.phase
+    const v = await judgeUnit(s, new FakeJudge({ ceiling: score(3) }), unitSpec())
+    const r = acceptUnit(s, v).state.research[0]!
+    expect(r.effect.kind === 'unit' && r.effect.unit.ceiling).toBe(B.UNIT_CEILINGS[3]![1])
+    const judge = new FakeJudge()
+    const free = await judgeUnit(moneyWorld(), judge, unitSpec())
+    expect(Object.keys(judge.calls[0]!.questions)).not.toContain('ceiling')
+    const r3 = acceptUnit(moneyWorld(), free).state.research[0]!
+    expect(r3.effect.kind === 'unit' && r3.effect.unit.ceiling).toBeNull()
   })
 
   it('needs a resource to run on', async () => {
@@ -843,52 +880,84 @@ describe('creating units', () => {
   })
 })
 
-describe('sourcing', () => {
+describe('procuring units', () => {
   const world = () => {
     const s = moneyWorld(1e6)
     s.resources.push(newResource({ id: 'steel', name: 'Steel', tier: 1, value: 1, amount: 1e6, cap: ROOMY }))
     s.units.push(newUnit({ id: 'bot', name: 'Bot', value: 200, tier: 1 }))
     return s
   }
-  const spec = { unitId: 'bot', name: 'Buy off the shelf', description: '' }
+  const spec = createSpec({ target: { kind: 'unit', id: 'bot' }, name: 'Buy off the shelf', description: '' })
+  /** Jev reads the way as a supply. */
+  const supply = choice('supply', { supply: 0.9, now: 0.1 })
+  const contracts = (v: CreateVerdict) => v.options.filter(isContract)
+  /** Seeds in turn until the offers are all contracts. */
+  async function allContracts(s: GameState, answers = {}) {
+    for (let i = 0; i < 50; i++) {
+      s.runId = `run-${i}`
+      const v = await judgeCreate(s, new FakeJudge({ mode: supply, ...answers }), spec)
+      if (v.options.every(isContract)) return v as Omit<CreateVerdict, 'options'> & { options: ContractOption[] }
+    }
+    throw new Error('No seed gave three contracts.')
+  }
 
-  it('offers three contracts: quiet, Jev’s own, and a risky one for ten times as many', async () => {
+  it('leads with what Jev thinks the way is most like: units now, or a contract', async () => {
     const s = world()
-    const v = await judgeSourcing(s, new FakeJudge({ limit: score(2), efficiency: score(2) }), spec)
-    expect(v.rejected).toBeNull()
-    expect(v.options.map((o) => o.total)).toEqual([
-      B.SOURCING_LIMITS[1]![1],
-      B.SOURCING_LIMITS[2]![1],
-      B.SOURCING_LIMITS[2]![1] * B.RISK_SOURCING
-    ])
-    expect(v.options.map((o) => o.risky)).toEqual([false, false, true])
+    const asSupply = await judgeCreate(s, new FakeJudge({ mode: supply }), spec)
+    expect(asSupply.rejected).toBeNull()
+    expect(asSupply.options).toHaveLength(3)
+    expect(asSupply.options[0]).toMatchObject({ timing: 'contract', label: 'Jev’s take' })
+    const asBatch = await judgeCreate(s, new FakeJudge({ mode: choice('now', { now: 0.9, supply: 0.1 }) }), spec)
+    expect(asBatch.options[0]!.timing).toBe('now')
+    // Units have no spread-out, later or every-week payouts any more.
+    for (const v of [asSupply, asBatch]) expect(v.options.every((o) => o.timing === 'now' || o.timing === 'contract')).toBe(true)
+  })
+
+  it('mixes the other offers by seed: the same on every reload, different across runs', async () => {
+    const s = world()
+    const kinds = async (runId: string) => {
+      s.runId = runId
+      return (await judgeCreate(s, new FakeJudge({ mode: choice('now', { now: 0.5, supply: 0.5 }) }), spec)).options.map((o) => o.timing).join(',')
+    }
+    expect(await kinds('a')).toBe(await kinds('a'))
+    const seen = new Set<string>()
+    for (let i = 0; i < 30; i++) seen.add(await kinds(`run-${i}`))
+    expect(seen.size).toBeGreaterThan(1)
+  })
+
+  it('offers contracts as Jev’s own, a quiet one, and a risky one for ten times as many', async () => {
+    const s = world()
+    const v = await allContracts(s, { limit: score(2), efficiency: score(2) })
+    const by = (label: string) => v.options.find((o) => o.label === label)!
+    expect(by('Jev’s take').total).toBe(B.SOURCING_LIMITS[2]![1])
+    expect(by('Quiet').total).toBe(B.SOURCING_LIMITS[1]![1])
+    expect(by('Cut corners')).toMatchObject({ total: B.SOURCING_LIMITS[2]![1] * B.RISK_SOURCING, risky: true })
     // No fee: each one costs about what the unit is worth.
-    const worth = (o: (typeof v.options)[number]) => o.parts.reduce((n, p) => n + p.amount * findResource(s, p.resourceId)!.value, 0)
-    expect(worth(v.options[0]!)).toBeCloseTo(200 * v.options[0]!.iqEfficiency, -1)
+    const worth = (o: ContractOption) => o.parts.reduce((n, p) => n + p.amount * findResource(s, p.resourceId)!.value, 0)
+    expect(worth(by('Jev’s take'))).toBeCloseTo(200 * by('Jev’s take').iqEfficiency, -1)
     // The risky one cuts corners on parts too.
-    expect(worth(v.options[2]!)).toBeLessThan(worth(v.options[1]!))
+    expect(worth(by('Cut corners'))).toBeLessThan(worth(by('Jev’s take')))
   })
 
   it('adds a contract at once, and several can be open for one unit', async () => {
     let s = world()
-    const v = await judgeSourcing(s, new FakeJudge({ limit: score(1) }), spec)
-    s = acceptSourcing(s, v).state
+    const v = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(1) }), spec)
+    s = acceptCreate(s, v).state
     expect(s.proposedThisWeek).toBe(true)
     expect(s.research).toEqual([])
-    expect(unitCap(s, 'bot')).toBe(B.SOURCING_LIMITS[0]![1])
+    expect(unitCap(s, 'bot')).toBe(B.SOURCING_LIMITS[1]![1])
     s = runWeek(s)
-    const again = await judgeSourcing(s, new FakeJudge({ limit: score(1) }), { ...spec, name: 'Contract a factory' })
-    again.choice = 1
-    s = acceptSourcing(s, again).state
+    const again = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(1) }), { ...spec, name: 'Contract a factory' })
+    s = acceptCreate(s, again).state
     expect(s.sourcing).toHaveLength(2)
-    expect(unitCap(s, 'bot')).toBe(B.SOURCING_LIMITS[0]![1] + B.SOURCING_LIMITS[1]![1])
+    expect(unitCap(s, 'bot')).toBe(2 * B.SOURCING_LIMITS[1]![1])
   })
 
   it('is cheaper for a mind well above the unit’s tier, and says so', async () => {
     const s = world()
-    const plain = (await judgeSourcing(s, new FakeJudge(), spec)).options[0]!
+    const plain = contracts(await judgeCreate(s, new FakeJudge({ mode: supply }), spec))[0]!
     server(s).hardware.iq = 500
-    const smart = (await judgeSourcing(s, new FakeJudge(), spec)).options[0]!
+    const smart = contracts(await judgeCreate(s, new FakeJudge({ mode: supply }), spec))[0]!
     expect(plain.iqEfficiency).toBe(1)
     expect(smart.iqEfficiency).toBe(0.5)
     expect(iqTag(smart.iqEfficiency)).toBe('IQ: efficient −50%')
@@ -902,10 +971,35 @@ describe('sourcing', () => {
     const counts: number[] = []
     for (let tier = 0; tier <= 4; tier++) {
       s.units = [newUnit({ id: 'u', name: 'U', value: 200, tier })]
-      const v = await judgeSourcing(s, new FakeJudge(), { unitId: 'u', name: 'Buy', description: '' })
-      counts.push(v.options[0]!.parts.length)
+      const v = await judgeCreate(s, new FakeJudge({ mode: supply }), createSpec({ target: { kind: 'unit', id: 'u' }, name: 'Buy' }))
+      counts.push(contracts(v)[0]!.parts.length)
     }
     expect(counts).toEqual([1, 1, 2, 2, 3])
+  })
+
+  it('never goes past how many can exist, and refuses once there’s room for that many', async () => {
+    const s = world()
+    unit(s, 'bot').ceiling = 1000
+    s.sourcing.push(contract('bot', { total: 900 }))
+    const v = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(3) }), spec)
+    for (const o of v.options) {
+      const size = isContract(o) ? o.total : o.amount
+      expect(size).toBeLessThanOrEqual(100)
+    }
+    expect(contracts(v)[0]).toMatchObject({ total: 100, limitedBy: 'ceiling' })
+    s.sourcing[0]!.total = 1000
+    expect(precheckCreate(s, spec)).toMatch(/can exist/)
+    // Phase 3 has no ceilings.
+    unit(s, 'bot').ceiling = null
+    expect(precheckCreate(s, spec)).toBeNull()
+  })
+
+  it('offers only units now when there’s nothing to make the unit from', async () => {
+    const s = moneyWorld(1e6)
+    s.units.push(newUnit({ id: 'bot', name: 'Bot', value: 200, tier: 0 }))
+    findResource(s, MONEY_ID)!.tier = 1
+    const v = await judgeCreate(s, new FakeJudge({ mode: supply }), spec)
+    expect(v.options.every((o) => o.timing === 'now')).toBe(true)
   })
 })
 
@@ -940,7 +1034,9 @@ describe('storage', () => {
     const v = await judgeStorage(s, judge, spec)
     expect(judge.calls).toHaveLength(1)
     expect(v.rejected).toBeNull()
-    expect(v.scalars).toMatchObject({ reach: R, capture: 0.5, ceilingLabel: 'ten quintillion', neededIQ: 100 })
+    // How many can exist isn't asked again: it was settled when Steel was added (none here, in Phase 3).
+    expect(Object.keys(judge.calls[0]!.questions)).not.toContain('ceiling')
+    expect(v.scalars).toMatchObject({ reach: R, capture: 0.5, ceiling: null, ceilingLabel: 'no limit', neededIQ: 100 })
     expect(v.options.map((o) => o.added)).toEqual(sizes(R, 0.5))
     expect(v.options.map((o) => o.label)).toEqual(['Careful', 'Pushed', 'All in'])
     expect(v.options.map((o) => o.risky)).toEqual([false, false, true])
@@ -956,15 +1052,26 @@ describe('storage', () => {
   it('cuts options to what can exist, and refuses at the ceiling', async () => {
     const s = world()
     // A hundred thousand can exist; Steel already holds W.
-    const v = await judgeStorage(s, new FakeJudge({ efficiency: score(4), reach: score(4), ceiling: score(1) }), spec)
+    findResource(s, 'steel')!.ceiling = 1e5
+    const v = await judgeStorage(s, new FakeJudge({ efficiency: score(4), reach: score(4) }), spec)
     const room = 1e5 - W
     expect(v.options.map((o) => o.added)).toEqual([B.nice(4 * R * 0.25), room, room])
     expect(v.options.map((o) => o.limitedBy)).toEqual([null, 'ceiling', 'ceiling'])
     // Cut to the same size, All in costs no more than Pushed.
     expect(v.options[2]!.label).toMatch(/at the ceiling/)
     expect(v.options[2]!.cost).toEqual(v.options[1]!.cost)
-    const full = await judgeStorage(s, new FakeJudge({ ceiling: score(0) }), spec)
+    findResource(s, 'steel')!.ceiling = 1e3
+    const full = await judgeStorage(s, new FakeJudge(), spec)
     expect(full.rejected).toMatch(/Only about a thousand Steel can exist/)
+  })
+
+  it('settles how many can exist when a resource is added, outside Phase 3', async () => {
+    const s = moneyWorld()
+    s.phase = { ...newPhase(2, 1), status: 'playing' } as typeof s.phase
+    const v = await judgeResource(s, new FakeJudge({ ceiling: score(2) }), { name: 'Lemons', description: '' })
+    expect(findResource(acceptResource(s, v).state, 'lemons')!.ceiling).toBe(B.STORAGE_CEILINGS[2]![1])
+    const free = await judgeResource(moneyWorld(), new FakeJudge(), { name: 'Lemons', description: '' })
+    expect(findResource(acceptResource(moneyWorld(), free).state, 'lemons')!.ceiling).toBeNull()
   })
 
   it('sizes Pushed or All in for the IQ an advanced way needs, with a bonus', async () => {
@@ -1556,7 +1663,7 @@ describe('presets', () => {
       expect(new Set(list.map((p) => p.name)).size).toBe(list.length)
     }
     // Ways to source and store are generic: a few are enough.
-    for (const list of [SOURCING_PRESETS, STORAGE_PRESETS]) {
+    for (const list of [UNIT_PROCURE_PRESETS, STORAGE_PRESETS]) {
       expect(list.length).toBeGreaterThanOrEqual(5)
       expect(new Set(list.map((p) => p.name)).size).toBe(list.length)
     }

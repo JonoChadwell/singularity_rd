@@ -35,12 +35,12 @@ npm run play --silent -- <command> --slot <your-slot>
 - You get one action a week: a research proposal, or Procure. Proposing a resource and
   doing research already on the list are free.
 - A proposal prints Jev's verdict. Settle it with `pick` and `option <n>`, then `accept` or
-  `discard`. Procurement, sourcing and storage each offer three options; `option <n>` picks one.
+  `discard`. Procurement and storage each offer three options; `option <n>` picks one.
   Upgrades: `upgrade mind <id>`, then `choose <n> [size]`. A platform gets one software
   upgrade, ever, and a new platform (`propose mind`, with a `step` of 25 to 100 IQ) replaces
   it for good; `option <n>` picks its perk-and-drawback pair.
-- A unit design has room for none: `propose sourcing` for a contract, research it, then
-  `create <contractId> <n|max>`. Creating takes no action. `status` lists contracts under each
+- A unit design has room for none: `propose create` with a `"unit"` target offers a mix of units
+  now and sourcing contracts. Take a contract, then `create <contractId> <n|max>`. Creating takes no action. `status` lists contracts under each
   unit.
 - `research <id>` does a research now. `next [n]` plays up to n weeks, stopping early when
   something happens. Use it to skip quiet weeks, but make a real decision whenever one is

@@ -53,7 +53,7 @@ export function createUnits(current: GameState, sourcingId: string, n: number): 
   n = Math.floor(n)
   if (!c || !u || n <= 0) throw new Error('Nothing to create.')
   if (n > openSlots(c)) {
-    throw new Error(openSlots(c) ? `${c.name} only has room for ${openSlots(c)} more.` : `${c.name} is full. Find more sourcing.`)
+    throw new Error(openSlots(c) ? `${c.name} only has room for ${openSlots(c)} more.` : `${c.name} is full. Procure more.`)
   }
   const cost = createCost(partsFor(u, c), n)
   const short = costShortfall(state, cost)

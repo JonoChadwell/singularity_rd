@@ -1,8 +1,10 @@
 import { ranked, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
+import { ceilingLabel, unitRoom } from './ceilings'
 import { deliverUnits } from './economy'
-import { bestIQ, capOf, findResource, findUnit, fmt, industryScalar, iqFor, iqScalar, targetLabel, traitPriceFactor } from './model'
+import { bestIQ, capOf, findResource, findUnit, fmt, industryScalar, iqFor, iqScalar, makeId, targetLabel, traitPriceFactor } from './model'
 import { lockReason, moveClock } from './phase'
+import { seedOf } from './planPresets'
 import {
   baseVerdict,
   claimProposal,
@@ -14,6 +16,7 @@ import {
   refuseUnaccepted,
   scale,
   efficiencyLevel,
+  reader,
   recordIdea,
   repeatOf,
   repeatQuestion,
@@ -22,13 +25,15 @@ import {
 } from './proposals'
 import { spendable } from './research'
 import { createInputFactor, createOutputFactor, effectiveTier, type TierPurpose } from './resourceTraits'
-import { alarmQuestions } from './risk'
+import { alarmQuestions, expansionRisk, riskFrom } from './risk'
 import { proposalText } from './stateText'
-import type { CreateTarget, Flow, GameState } from './types'
+import type { CreateTarget, Flow, GameState, Risk, Sourcing, UnitType } from './types'
+import { partPool, priceParts, rankedIds } from './unitProposal'
 
 /**
  * Procurement: the mind gets something directly, from what you have or from nothing. It's an action,
- * not research: no IQ gate, but reaching above your IQ's tier costs output.
+ * not research: no IQ gate, but reaching above your IQ's tier costs output. For a unit, some offers
+ * are units now and some are sourcing contracts: room for more, each created later from its parts.
  */
 export interface CreateSpec {
   target: CreateTarget
@@ -47,7 +52,8 @@ export interface CreateScalars {
   short: number
 }
 
-export interface CreateOption {
+/** An offer that pays out the target: now, spread out, later or every week (resources), or now (units). */
+export interface PayoutOption {
   timing: B.CreateTiming
   /** What it uses up now. */
   inputs: Flow[]
@@ -57,7 +63,29 @@ export interface CreateOption {
   outputWorth: number
   /** Amount of the target per delivery: resources, or whole units. */
   amount: number
+  /** Units only: cut down to what can exist. */
+  limitedBy?: 'ceiling' | null
 }
+
+/** A sourcing contract for a unit: room for `total`, each created later from `parts`, at no action. */
+export interface ContractOption {
+  timing: 'contract'
+  label: string
+  /** Units the contract allows. */
+  total: number
+  /** What creating one uses. */
+  parts: Flow[]
+  risky: boolean
+  risk: Risk | null
+  /** IQ efficiency baked into its prices: below 1 is a discount. */
+  iqEfficiency: number
+  /** Cut down to what can exist. */
+  limitedBy: 'ceiling' | null
+}
+
+export type CreateOption = PayoutOption | ContractOption
+
+export const isContract = (o: CreateOption): o is ContractOption => o.timing === 'contract'
 
 export interface CreateVerdict extends VerdictBase {
   kind: 'create'
@@ -88,8 +116,12 @@ export function precheckCreate(state: GameState, spec: CreateSpec): string | nul
   const thing = spec.target.kind === 'unit' ? findUnit(state, spec.target.id) : findResource(state, spec.target.id)
   if (!thing) return state.resources.length ? 'Choose what to make.' : 'Propose a resource first: something to make.'
   if (spec.name.trim().length < 2) return 'Say what you’re doing, in a few words.'
+  if (spec.target.kind === 'unit' && unitRoom(state, thing as UnitType) <= 0) return noRoom(thing as UnitType)
   return null
 }
+
+const noRoom = (u: UnitType) =>
+  `Only about ${ceilingLabel('unit', u.ceiling)} ${u.name} can exist in this phase, and you already have room for that many.`
 
 /** The reach penalty for a target of this tier, at your IQ: continuous, not banded. */
 export function reachOf(state: GameState, tier: number): { reach: number; short: number } {
@@ -101,12 +133,23 @@ export function reachOf(state: GameState, tier: number): { reach: number; short:
 const inputPool = (state: GameState, t: CreateTarget) =>
   spendable(state, (r) => r.amount > 0 && !(t.kind === 'resource' && r.id === t.id))
 
+/** What a unit's contracts may be made from: its own tier and below. */
+const contractParts = (state: GameState, u: UnitType) => partPool(state, u.tier)
+
+/** Jev's two readings of a way of getting units: a one-off, or a supply to draw on. */
+const MODES = {
+  now: 'Getting them in one go, right now: buying, building or taking a batch',
+  supply: 'Setting up a supply to draw on over time: a deal, a source or a production line'
+}
+
 export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpec): Promise<CreateVerdict> {
   const spec = { ...raw, ...cleanText(raw.name, raw.description) }
   const refusal = precheckCreate(state, spec)
   if (refusal) throw new Error(refusal)
   const what = targetLabel(state, spec.target)
   const pool = inputPool(state, spec.target)
+  const unit = spec.target.kind === 'unit' ? findUnit(state, spec.target.id)! : null
+  const parts = unit ? contractParts(state, unit) : []
   const questions: Record<string, JevQuestion> = {
     plausible: {
       type: 'noul',
@@ -117,11 +160,35 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
       instructions: `How effective is this as a way to get ${what}?`,
       criteria: scale(B.EFFICIENCY)
     },
-    timing: {
-      type: 'choice',
-      instructions: 'How would this most naturally pay out?',
-      criteria: Object.fromEntries(B.CREATE_TIMINGS.map(([id, label]) => [id, label]))
-    },
+    ...(unit
+      ? {
+          mode: {
+            type: 'choice',
+            instructions: `Is this way of getting ${unit.name} more like getting them in one go, or setting up a supply to draw on over time?`,
+            criteria: MODES
+          } satisfies JevQuestion,
+          limit: {
+            type: 'score',
+            instructions: `As a supply, realistically how many ${unit.name} could the AI get this way, before it runs out of suppliers, sites, buyers or patience?`,
+            criteria: scale(B.SOURCING_LIMITS)
+          } satisfies JevQuestion,
+          ...(parts.length
+            ? {
+                parts: {
+                  type: 'choice',
+                  instructions: `Got this way, which resource would each ${unit.name} most naturally take to make or buy? Advanced things take several kinds, so how likely each is matters too.`,
+                  criteria: options(parts)
+                } satisfies JevQuestion
+              }
+            : {})
+        }
+      : {
+          timing: {
+            type: 'choice',
+            instructions: 'How would this most naturally pay out?',
+            criteria: Object.fromEntries(B.CREATE_TIMINGS.map(([id, label]) => [id, label]))
+          } satisfies JevQuestion
+        }),
     ...(pool.length
       ? {
           inputs: {
@@ -136,7 +203,7 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
   }
   const answers = await judge.ask(
     proposalText(state, [
-      `The player has the AI make ${what} directly, this once.`,
+      unit ? `The player has the AI get more ${unit.name}: ${unit.description}` : `The player has the AI make ${what} directly, this once.`,
       `Name: "${spec.name}"`,
       `How: "${spec.description || '(not said)'}"`
     ]),
@@ -158,29 +225,104 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
   return v
 }
 
+type OptionsOf = Pick<CreateVerdict, 'answers' | 'picks' | 'spec' | 'scalars' | 'risk' | 'plausibility' | 'bar' | 'repeatOf'>
+
 /**
- * Three offers, each using a different resource (or nothing) and paying out a different way, in
- * Jev's order. When the target is easy for your IQ, one is always free and immediate.
+ * Three offers in Jev's order. A resource's each use a different resource (or nothing) and pay
+ * out a different way. A unit's are a mix of units now and sourcing contracts. When the target is
+ * easy for your IQ, a payout now is free.
  */
-export function createOptions(state: GameState, v: Pick<CreateVerdict, 'answers' | 'spec' | 'scalars' | 'risk'>): CreateOption[] {
+export function createOptions(state: GameState, v: OptionsOf): CreateOption[] {
+  if (v.spec.target.kind === 'unit') return unitOptions(state, v)
+  const timingOrder = [...new Set([...(v.answers.timing ? ranked(v.answers.timing).map(([id]) => id) : []), ...B.CREATE_TIMINGS.map(([id]) => id)])] as B.CreateTiming[]
+  return payouts(state, v, timingOrder.slice(0, B.CREATE_OPTIONS))
+}
+
+/** Payout offers at these timings, each using a different input (or nothing), one free when easy. */
+function payouts(state: GameState, v: OptionsOf, timings: B.CreateTiming[]): PayoutOption[] {
   const pool = inputPool(state, v.spec.target)
   const named = v.answers.inputs ? ranked(v.answers.inputs).map(([id]) => id) : []
   const inputIds: (string | null)[] = [...new Set([...named, ...pool.map((r) => r.id)])].filter((id) => pool.some((r) => r.id === id))
-  const ids = Array.from({ length: B.CREATE_OPTIONS }, (_, i) => inputIds[i] ?? null)
-  const timingOrder = [...new Set([...(v.answers.timing ? ranked(v.answers.timing).map(([id]) => id) : []), ...B.CREATE_TIMINGS.map(([id]) => id)])] as B.CreateTiming[]
-  const picks = ids.map((id, i) => ({ id, timing: timingOrder[i % timingOrder.length]! }))
+  const picks = timings.map((timing, i) => ({ id: inputIds[i] ?? null, timing }))
   const tier = targetTier(state, v.spec.target, 'reach')
   const easy = B.techIQ(tier) <= bestIQ(state) * B.CREATE_EASY
-  if (easy && !picks.some((p) => p.id === null && p.timing === 'now')) picks[picks.length - 1] = { id: null, timing: 'now' }
+  if (easy && picks.length && !picks.some((p) => p.id === null && p.timing === 'now')) picks[picks.length - 1] = { id: null, timing: 'now' }
   return picks.map((p) => priceOption(state, v, p.id, p.timing))
 }
 
-function priceOption(
-  state: GameState,
-  v: Pick<CreateVerdict, 'spec' | 'scalars' | 'risk'>,
-  inputId: string | null,
-  timing: B.CreateTiming
-): CreateOption {
+/** A seeded draw in [0, 1), the same for the preview and every reload. */
+const draw = (state: GameState, unitId: string, what: string) => (seedOf(`${state.runId}/${state.week}/${unitId}/procure-${what}`) % 10000) / 10000
+
+/** The three takes a contract can be: quiet, Jev's own, and one that cuts corners. */
+const TAKES = [
+  { label: 'Jev’s take', step: 0, mult: 1, risky: false, quiet: false },
+  { label: 'Quiet', step: -1, mult: 1, risky: false, quiet: true },
+  { label: 'Cut corners', step: 0, mult: B.RISK_SOURCING, risky: true, quiet: false }
+] as const
+
+/**
+ * A unit's three offers. The first is what Jev thinks the way is most like: units now, or a
+ * contract. Each of the others is drawn by seed, more often the kind Jev leans to, so the offers
+ * vary. Units now each use a different input; contracts are each a different take with its own
+ * parts. A unit with nothing to be made from only gets units now.
+ */
+function unitOptions(state: GameState, v: OptionsOf): CreateOption[] {
+  const unit = findUnit(state, v.spec.target.id)!
+  const mode: Record<string, number> = v.answers.mode ? Object.fromEntries(ranked(v.answers.mode)) : {}
+  const [now, supply] = [mode.now ?? 0, mode.supply ?? 0]
+  const pNow = now + supply > 0 ? now / (now + supply) : 0.5
+  const canContract = contractParts(state, unit).length > 0
+  const [lo, hi] = B.PROCURE_NOW_ODDS
+  const odds = Math.min(hi, Math.max(lo, pNow))
+  const kinds = Array.from({ length: B.CREATE_OPTIONS }, (_, i) => {
+    if (!canContract) return 'now'
+    if (i === 0) return pNow >= 0.5 ? 'now' : 'contract'
+    return draw(state, unit.id, `kind-${i}`) < odds ? 'now' : 'contract'
+  })
+  const nows = payouts(state, v, kinds.filter((k) => k === 'now').map(() => 'now' as const))
+  // Jev's own take first, the other two in a seeded order.
+  const rest = draw(state, unit.id, 'takes') < 0.5 ? [TAKES[1], TAKES[2]] : [TAKES[2], TAKES[1]]
+  const contracts = contractOptions(state, v, unit, [TAKES[0], ...rest].slice(0, kinds.filter((k) => k === 'contract').length))
+  const room = unitRoom(state, unit)
+  return kinds.map((k) => {
+    if (k === 'contract') return contracts.shift()!
+    const o = nows.shift()!
+    return o.amount > room ? { ...o, amount: room, limitedBy: 'ceiling' } : { ...o, limitedBy: null }
+  })
+}
+
+/** Contracts for these takes, each from a different mix of parts where there's a choice, cut to what can exist. */
+function contractOptions(state: GameState, v: OptionsOf, unit: UnitType, takes: (typeof TAKES)[number][]): ContractOption[] {
+  const read = reader(v)
+  const limit = read.level('limit', B.SOURCING_LIMITS.length)
+  const efficiency = B.pick(B.EFFICIENCY, efficiencyLevel(v))[1]
+  const parts = rankedIds(v.answers, 'parts', contractParts(state, unit))
+  const count = Math.min(parts.length, B.PARTS_BY_TIER[unit.tier] ?? 1)
+  const mix = (i: number) => {
+    const swap = Math.min(i, parts.length - count)
+    return [...parts.slice(0, count - 1), parts[count - 1 + swap]!]
+  }
+  const alarm = riskFrom(v.answers)
+  const iqEfficiency = B.iqEfficiency(B.techIQ(unit.tier), iqFor(state, 'unit'))
+  const room = unitRoom(state, unit)
+  return takes.map((t, i) => {
+    const wanted = B.pick(B.SOURCING_LIMITS, Math.max(0, limit + t.step))[1] * t.mult
+    const total = Math.min(wanted, room)
+    const each = (unit.value * traitPriceFactor(unit.traits) * iqEfficiency * (t.risky ? B.RISK_PARTS : 1)) / efficiency
+    return {
+      timing: 'contract',
+      label: t.label,
+      total,
+      parts: priceParts(state, mix(i), each),
+      risky: t.risky,
+      risk: expansionRisk(state, t.quiet ? null : alarm, total * unit.value, t.risky),
+      iqEfficiency,
+      limitedBy: wanted > room ? 'ceiling' : null
+    }
+  })
+}
+
+function priceOption(state: GameState, v: Pick<CreateVerdict, 'spec' | 'scalars' | 'risk'>, inputId: string | null, timing: B.CreateTiming): PayoutOption {
   const { industry, iq, efficiency, reach } = v.scalars
   const base = B.CREATE_WORTH * industry * iq
   // The input is paid in full now, whatever the timing: it's worth what the mind would make
@@ -207,8 +349,9 @@ function amountOf(state: GameState, t: CreateTarget, worth: number): number {
   return Math.floor(worth / (u.value * traitPriceFactor(u.traits) * B.CREATE_UNIT_PREMIUM) + 1e-9)
 }
 
-/** An option's payout in words: "+300 💰 Money now", "+40 🤖 Robots a week for 4 weeks". */
+/** An option's payout in words: "+300 💰 Money now", "+40 🤖 Robots a week for 4 weeks", "Room for 600 🤖 Robots". */
 export function describeOption(state: GameState, v: Pick<CreateVerdict, 'spec'>, o: CreateOption): string {
+  if (isContract(o)) return `Room for ${fmt(o.total)} ${targetLabel(state, v.spec.target)}`
   const what = `+${fmt(o.amount)} ${targetLabel(state, v.spec.target)}`
   switch (o.timing) {
     case 'now':
@@ -224,7 +367,7 @@ export function describeOption(state: GameState, v: Pick<CreateVerdict, 'spec'>,
 
 /** How much of an option's first payout won't fit in storage (resources only), or 0. */
 export function overflowOf(state: GameState, v: Pick<CreateVerdict, 'spec'>, o: CreateOption): number {
-  if (v.spec.target.kind !== 'resource') return 0
+  if (v.spec.target.kind !== 'resource' || isContract(o)) return 0
   const r = findResource(state, v.spec.target.id)
   if (!r) return 0
   const used = o.inputs.find((f) => f.resourceId === r.id)?.amount ?? 0
@@ -233,12 +376,19 @@ export function overflowOf(state: GameState, v: Pick<CreateVerdict, 'spec'>, o: 
 
 /** Why an option can't be taken, or null. */
 export function optionBlocker(state: GameState, o: CreateOption): string | null {
+  if (isContract(o)) return o.total <= 0 ? 'No room for any more.' : null
   if (o.amount <= 0) return 'Too little to make even one.'
   for (const f of o.inputs) {
     const r = findResource(state, f.resourceId)
     if (!r || r.amount < f.amount - 1e-9) return `You need ${fmt(f.amount - (r?.amount ?? 0))} more ${r?.name ?? '?'}.`
   }
   return null
+}
+
+/** The IQ efficiency as a tag: "IQ: efficient −20%", or null at the usual price. */
+export function iqTag(efficiency: number): string | null {
+  const off = Math.round((1 - efficiency) * 100)
+  return off > 0 ? `IQ: efficient −${off}%` : null
 }
 
 export function acceptCreate(current: GameState, v: CreateVerdict): Accepted {
@@ -249,9 +399,31 @@ export function acceptCreate(current: GameState, v: CreateVerdict): Accepted {
   if (blocked) throw new Error(blocked)
   const state = structuredClone(current)
   claimProposal(state)
-  for (const f of option.inputs) findResource(state, f.resourceId)!.amount -= f.amount
   const t = v.spec.target
   const name = v.spec.name
+  recordIdea(state, 'create', name, `${v.spec.description} (makes ${targetLabel(state, t)})`)
+  state.decidedThisWeek = true
+  if (isContract(option)) {
+    // A contract takes effect at once: no research, and its parts are paid per unit created.
+    const unit = findUnit(state, t.id)
+    if (!unit) throw new Error('That unit is gone.')
+    const contract: Sourcing = {
+      id: makeId(state, `${unit.name} ${name}`),
+      unitId: unit.id,
+      name,
+      description: v.spec.description || name,
+      parts: option.parts,
+      total: option.total,
+      used: 0,
+      risky: option.risky
+    }
+    state.sourcing.push(contract)
+    state.inventions.push({ week: state.week, icon: unit.icon, name, kind: 'create' })
+    if (option.risk?.weeks) moveClock(state, -option.risk.weeks, `${unit.name}: ${name} brought failure closer`)
+    logProposal(state, 'good', `📦 ${name}: up to ${fmt(option.total)} more ${unit.name}. Create them on its card.`)
+    return { state, outcome: { kind: 'added', name } }
+  }
+  for (const f of option.inputs) findResource(state, f.resourceId)!.amount -= f.amount
   if (option.timing === 'now') {
     if (t.kind === 'resource') findResource(state, t.id)!.amount += option.amount
     else deliverUnits(state, findUnit(state, t.id)!, option.amount)
@@ -267,8 +439,6 @@ export function acceptCreate(current: GameState, v: CreateVerdict): Accepted {
   }
   if (v.risk) moveClock(state, -v.risk.weeks, `${name} brought failure closer`)
   state.inventions.push({ week: state.week, icon: '⚗️', name, kind: 'create' })
-  recordIdea(state, 'create', name, `${v.spec.description} (makes ${targetLabel(state, t)})`)
-  state.decidedThisWeek = true
   logProposal(state, 'good', `⚗️ ${name}: ${describeOption(state, v, option)}.`)
   return { state, outcome: { kind: 'added', name } }
 }

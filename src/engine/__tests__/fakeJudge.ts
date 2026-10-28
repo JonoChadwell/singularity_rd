@@ -36,8 +36,8 @@ export class FakeJudge implements Judge {
         answers[key] = { type: 'choice', choice: 'cryogenic' }
       } else if (q.type === 'choice') {
         answers[key] = { type: 'choice', choice: Object.keys(q.criteria)[0]! }
-      } else if (key === 'ceiling') {
-        // Storage: anything can exist, an ordinary build state, and a way any IQ could manage.
+      } else if (/(^|_)ceiling$/.test(key) || key.startsWith('ceiling_')) {
+        // Anything can exist; for storage, an ordinary build state and a way any IQ could manage.
         answers[key] = { type: 'score', score: q.criteria.length - 1 }
       } else if (key === 'reach') {
         answers[key] = { type: 'score', score: 2 }

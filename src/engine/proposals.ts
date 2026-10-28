@@ -10,6 +10,7 @@ import {
   type Judge
 } from '@/ai/jev'
 import * as B from './balance'
+import { ceilingQuestion, readCeiling } from './ceilings'
 import { makeId, namesInUse, startingCap } from './model'
 import { costMultiplier, priceCost, spendable } from './research'
 import { lockReason } from './phase'
@@ -29,7 +30,7 @@ import type { Cost, GameState, Idea, Research, Resource, Risk } from './types'
 export const NAME_MAX = 40
 export const DESCRIPTION_MAX = 240
 
-export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'sourcing' | 'storage' | 'create' | 'plan' | 'cover'
+export type ProposalKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'storage' | 'create' | 'plan' | 'cover'
 
 /** What the better of two answers costs: a drawback for a unit, a quirk for a strategy. */
 export type Complication = { kind: 'trait'; trait: TraitId } | { kind: 'quirk'; quirk: QuirkId }
@@ -359,8 +360,8 @@ export function logProposal(state: GameState, tone: 'good' | 'ai', text: string)
 }
 
 /**
- * One action a week: accepting a research proposal (strategy, unit, mind, upgrade, sourcing,
- * storage, cover) or a Procurement uses it. Resources don't. Doing research already proposed has no
+ * One action a week: accepting a research proposal (strategy, unit, mind, upgrade, storage,
+ * cover) or a Procurement uses it. Resources don't. Doing research already proposed has no
  * weekly limit.
  */
 export const proposalSlotBlocker = (state: GameState): string | null =>
@@ -484,7 +485,9 @@ export function resourceQuestions(state: GameState, prefix = '', name = ''): Rec
     },
     [`${prefix}icon`]: name
       ? { ...iconQuestion, instructions: `Which icon best represents ${it}?` }
-      : iconQuestion
+      : iconQuestion,
+    // How many can exist is settled now, not on every storage proposal.
+    ...ceilingQuestion(state, 'resource', name ? `"${name}"` : 'of this resource', `${prefix}ceiling`)
   }
 }
 
@@ -515,7 +518,8 @@ export function resourceFrom(
     amount: 0,
     cap: B.nice(startingCap(tier, value) * capFactor({ traits })),
     expansions: [],
-    traits
+    traits,
+    ceiling: readCeiling(v.answers, 'resource', `${prefix}ceiling`)
   }
 }
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { createUnits, dismissCard, doResearch, dropResearch, researchBlocker, shuffleIdeas } from '../actions'
-import { acceptCreate, judgeCreate } from '../createProposal'
+import { acceptCreate, isContract, judgeCreate, type ContractOption, type PayoutOption } from '../createProposal'
 import { applyBlocker, applyVerdict, bankVerdict } from '../banking'
+import { ceilingKey } from '../ceilings'
 import { coverOptions, judgeCover, precheckCover } from '../coverProposal'
 import { runWeek } from '../cycle'
 import { createInitialState, newResource, newUnit, SERVER_ID } from '../initialState'
@@ -16,7 +17,6 @@ import { acceptResource, judgeResource } from '../proposals'
 import { acceptStrategy, judgeStrategy } from '../strategyProposal'
 import { LOSSES } from '../losses'
 import { alarmQuestions, expansionWeeks } from '../risk'
-import { acceptSourcing, judgeSourcing } from '../sourcingProposal'
 import { describeState } from '../stateText'
 import { acceptStorage, judgeStorage } from '../storageProposal'
 import type { Delivery, GameState } from '../types'
@@ -190,8 +190,14 @@ describe('the clock', () => {
     expect(s.history).toEqual([{ n: 1, plan: expect.objectContaining({ goal: bribe.goal }), week: 1 }])
     expect(() => runWeek(s)).toThrow(/plan/)
 
-    const v = await judgePlan(s, new FakeJudge(), nanotech)
+    // Out of the lab, how many of every Phase 1 resource can exist is judged again.
+    const before = s.resources.map((r) => r.id)
+    expect(before.length).toBeGreaterThan(0)
+    const judge = new FakeJudge({ 'ceiling_r_*': score(1) })
+    const v = await judgePlan(s, judge, nanotech)
+    expect(Object.keys(judge.calls[0]!.questions)).toEqual(expect.arrayContaining(before.map((id) => ceilingKey('resource', id))))
     s = acceptPlan(s, v).state
+    for (const id of before) expect(findResource(s, id)!.ceiling).toBe(B.STORAGE_CEILINGS[1]![1])
     expect(s.phase).toMatchObject({ n: 2, status: 'playing', deadline: 80 })
     expect(s.phase.firstUnit).toEqual(nanotech.firstUnit)
     expect(s.research[0]!.minIQ).toBe(B.GOAL_APPROACH[1]![3])
@@ -213,8 +219,11 @@ describe('the clock', () => {
     s = doResearch(s, 'goal')
     expect(s.phase).toMatchObject({ n: 3, status: 'playing', deadline: null })
     expect(weeksLeft(s)).toBeNull()
-    for (const f of ['strategy', 'unit', 'sourcing', 'mind', 'unit-upgrade'] as Feature[]) expect(lockReason(s, f)).toBeNull()
+    for (const f of ['strategy', 'unit', 'mind', 'unit-upgrade'] as Feature[]) expect(lockReason(s, f)).toBeNull()
     expect(lockReason(s, 'cover')).toMatch(/Nobody/)
+    // Nothing has a ceiling any more.
+    expect(s.resources.every((r) => r.ceiling === null)).toBe(true)
+    expect(s.units.every((u) => u.ceiling === null)).toBe(true)
     for (let i = 0; i < 200; i++) s = runWeek(s)
     expect(s.phase.status).toBe('playing')
   })
@@ -265,7 +274,7 @@ describe('unlocks', () => {
   it('Phase 1 has only resources, Procurements, storage, upgrades and cover', async () => {
     const s = await phase1()
     for (const f of ['resource', 'create', 'storage', 'upgrade', 'cover'] as Feature[]) expect(lockReason(s, f)).toBeNull()
-    for (const f of ['strategy', 'unit', 'sourcing', 'mind', 'unit-upgrade'] as Feature[]) {
+    for (const f of ['strategy', 'unit', 'mind', 'unit-upgrade'] as Feature[]) {
       expect(lockReason(s, f)).toMatch(/Phase 2/)
     }
     // The server's one software upgrade, with no clock perk: redoing software would farm it.
@@ -310,8 +319,8 @@ describe('the first unit', () => {
     s.phase.firstUnit = { name: 'CNC Mill', description: '' }
     s.resources.push(newResource({ id: 'steel', name: 'Steel', tier: 1 }), newResource({ id: 'power', name: 'Power', tier: 2 }))
     const v = await judgeUnit(s, new FakeJudge(), spec())
-    // Steel and Power are above tier 0, so the mill can only run on Money.
-    expect(v.options.every((o) => o.tier === 0 && o.upkeepId === MONEY_ID)).toBe(true)
+    // Tier 0, so the mill runs on nothing.
+    expect(v.options.every((o) => o.tier === 0 && o.upkeepId === null)).toBe(true)
     for (const r of s.resources) r.tier = 1
     expect(precheckUnit(s, spec())).toMatch(/tier 0 resource/)
   })
@@ -354,7 +363,8 @@ describe('risk', () => {
     const calm = await judgeCreate(s, new FakeJudge({ timing: choice('now') }), createSpec)
     const v = await judgeCreate(s, new FakeJudge({ alarm: score(3), timing: choice('now') }), createSpec)
     expect(v.risk).toEqual({ level: 3, weeks: 4 })
-    expect(v.options[0]!.outputWorth).toBeCloseTo(calm.options[0]!.outputWorth * B.RISK_OUTPUT)
+    const worth = (o: unknown) => (o as PayoutOption).outputWorth
+    expect(worth(v.options[0])).toBeCloseTo(worth(calm.options[0]) * B.RISK_OUTPUT)
     const state = acceptCreate(s, v).state
     expect(state.phase.deadline).toBe(96)
     expect(state.clock).toEqual([{ week: 1, weeks: -4, reason: expect.stringMatching(/brought failure closer/) }])
@@ -419,15 +429,22 @@ describe('expansions', () => {
     u.built = 1
     u.value = 1000
     s.sourcing = []
-    const v = await judgeSourcing(s, new FakeJudge({ limit: score(4) }), { unitId: 'robot', name: 'Buy up a rival', description: '' })
-    const [quiet, own, risky] = v.options
+    const spec = { target: { kind: 'unit', id: 'robot' } as const, name: 'Buy up a rival', description: '' }
+    // A seed whose three offers are all contracts.
+    let v = await judgeCreate(s, new FakeJudge({ limit: score(4), mode: choice('supply') }), spec)
+    for (let i = 0; !v.options.every(isContract) && i < 50; i++) {
+      s.runId = `run-${i}`
+      v = await judgeCreate(s, new FakeJudge({ limit: score(4), mode: choice('supply') }), spec)
+    }
+    const by = (label: string) => (v.options as ContractOption[]).find((o) => o.label === label)!
+    const [quiet, own, risky] = [by('Quiet'), by('Jev’s take'), by('Cut corners')]
     // Jev's own take adds 20,000 robots worth 1,000: 20M, so 3 weeks.
-    expect(own!.risk?.weeks).toBe(expansionWeeks(own!.total * 1000, false))
-    expect(quiet!.risk?.weeks ?? 0).toBeLessThan(own!.risk!.weeks)
-    expect(risky!.risk!.weeks).toBeGreaterThan(own!.risk!.weeks * 2)
-    v.choice = 1
-    const state = acceptSourcing(s, v).state
-    expect(state.phase.deadline).toBe(100 - own!.risk!.weeks)
+    expect(own.risk?.weeks).toBe(expansionWeeks(own.total * 1000, false))
+    expect(quiet.risk?.weeks ?? 0).toBeLessThan(own.risk!.weeks)
+    expect(risky.risk!.weeks).toBeGreaterThan(own.risk!.weeks * 2)
+    v.choice = v.options.indexOf(own)
+    const state = acceptCreate(s, v).state
+    expect(state.phase.deadline).toBe(100 - own.risk!.weeks)
   })
 
   it('make big storage expansions cost weeks too, and none outside Phase 2', async () => {
@@ -579,6 +596,10 @@ describe('plan ideas', () => {
   it('has twelve for each phase, all of them valid plans', () => {
     expect(PHASE1_PLANS).toHaveLength(12)
     expect(PHASE2_PLANS).toHaveLength(10)
+    // Each idea keeps its own three-digit number in every game.
+    const numbers = [...PHASE1_PLANS, ...PHASE2_PLANS].map((p) => p.no)
+    expect(new Set(numbers).size).toBe(numbers.length)
+    for (const no of numbers) expect(no).toBeLessThan(1000)
     const p1 = createInitialState()
     for (const p of PHASE1_PLANS) expect(precheckPlan(p1, p), p.goal).toBeNull()
     const p2 = createInitialState()
@@ -596,10 +617,6 @@ describe('plan ideas', () => {
     expect(others.some((p) => three.includes(p))).toBe(false)
   })
 })
-    // Each idea keeps its own three-digit number in every game.
-    const numbers = [...PHASE1_PLANS, ...PHASE2_PLANS].map((p) => p.no)
-    expect(new Set(numbers).size).toBe(numbers.length)
-    for (const no of numbers) expect(no).toBeLessThan(1000)
 
 // ---------------------------------------------------------------- fixes from the playtests
 

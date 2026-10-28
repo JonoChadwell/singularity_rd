@@ -26,13 +26,14 @@ import {
 } from './proposals'
 import { costMultiplier, priceCost } from './research'
 import { capFactor, clockFactor, expansionFactor } from './resourceTraits'
+import { ceilingLabel, storageRoom } from './ceilings'
 import { alarmQuestions, expansionRisk, riskFrom } from './risk'
 import { proposalText } from './stateText'
 import type { Cost, Expansion, GameState, Resource, Risk } from './types'
 
-// Storage asks Jev three things in one call (see RESOURCE_DESIGN.md, Storage limits):
-// how many of the resource can exist (the ceiling), how much the AI could store with what it has
-// built (its reach), and how much of that reach the player's way captures.
+// Storage asks Jev two things in one call (see RESOURCE_DESIGN.md, Storage limits): how much the
+// AI could store with what it has built (its reach), and how much of that reach the player's way
+// captures. How many can exist (the ceiling) was settled when the resource was added.
 
 /** A way to hold more of a resource: the player says how. */
 export interface StorageSpec {
@@ -58,8 +59,8 @@ export interface StorageOption {
 
 /** Jev's three answers, read: for the chips and the options. */
 export interface StorageReadings {
-  /** How many could exist at most, and in words. */
-  ceiling: number
+  /** How many could exist at most (null: no limit, in Phase 3), and in words. */
+  ceiling: number | null
   ceilingLabel: string
   /** Units the AI could store with what it has built, at its current IQ, and Jev's band for it. */
   reach: number
@@ -105,12 +106,6 @@ function baseline(state: GameState, r: Resource, iq: number): number {
   return (worth / Math.max(1e-9, r.value)) * capFactor(r) * expansionFactor(r)
 }
 
-const ceilingText = (state: GameState, r: Resource) =>
-  `At most, how many ${r.name} could exist in the world the AI is in, made by anyone, for any use? ` +
-  (state.phase.n <= 2
-    ? 'The AI is still bound to Earth: never pick more than Earth could hold, unless the world text says it has reached beyond.'
-    : 'The AI may have reached beyond Earth, to other worlds or star systems: count only what the world text supports.')
-
 export async function judgeStorage(state: GameState, judge: Judge, raw: StorageSpec): Promise<StorageVerdict> {
   const spec = { ...raw, ...cleanText(raw.name, raw.description) }
   const refusal = precheckStorage(state, spec)
@@ -118,14 +113,9 @@ export async function judgeStorage(state: GameState, judge: Judge, raw: StorageS
   const r = findResource(state, spec.resourceId)!
   const iq = bestIQ(state)
   const guide = B.HOLDERS.map(([label, minIQ]) => `${label.toLowerCase()} (IQ ${minIQ})`).join(', ')
+  // How many can exist was settled when the resource was added (r.ceiling).
   const questions: Record<string, JevQuestion> = {
-    // 1. How many can exist.
-    ceiling: {
-      type: 'score',
-      instructions: ceilingText(state, r),
-      criteria: B.STORAGE_CEILINGS.map(([label]) => `About ${label}`)
-    },
-    // 2. What the build state allows.
+    // 1. What the build state allows.
     reach: {
       type: 'score',
       instructions:
@@ -134,7 +124,7 @@ export async function judgeStorage(state: GameState, judge: Judge, raw: StorageS
         `As a guide to scale, the most a mind can run grows with its IQ: ${guide}. At IQ ${iq}, the AI is at ${B.HOLDERS[B.holderReach(iq)]![0].toLowerCase()}.`,
       criteria: B.STORAGE_REACH.map(([label]) => label)
     },
-    // 3. The player's way.
+    // 2. The player's way.
     plausible: {
       type: 'noul',
       instructions: `Could the AI plausibly hold more ${r.name} this way?`
@@ -165,7 +155,7 @@ export async function judgeStorage(state: GameState, judge: Judge, raw: StorageS
   const v: StorageVerdict = { ...base, kind: 'storage', spec, options: [], choice: 0, scalars: storageReadings(state, base, spec) }
   gate(v, `Jev doesn’t think the AI could hold more ${r.name} this way`, null)
   if (v.rejected) return v
-  if (capOf(state, r) >= v.scalars.ceiling) {
+  if (storageRoom(state, r) <= 0) {
     v.rejected = `Only about ${v.scalars.ceilingLabel} ${r.name} can exist in this phase, and you already have room for that.`
     return v
   }
@@ -182,13 +172,12 @@ export function storageReadings(
   const r = findResource(state, spec.resourceId)!
   const read = reader(v)
   const iq = bestIQ(state)
-  const [ceilingLabel, ceiling] = B.STORAGE_CEILINGS[read.level('ceiling', B.STORAGE_CEILINGS.length)]!
   const [reachLabel, band] = B.STORAGE_REACH[read.level('reach', B.STORAGE_REACH.length)]!
   const [captureLabel, capture] = B.pick(B.STORAGE_CAPTURE, efficiencyLevel(v))
   const [techLabel, neededIQ] = B.STORAGE_TECH_LEVELS[read.level('techLevel', B.STORAGE_TECH_LEVELS.length)]!
   return {
-    ceiling,
-    ceilingLabel,
+    ceiling: r.ceiling,
+    ceilingLabel: ceilingLabel('resource', r.ceiling),
     reach: B.nice(baseline(state, r, iq) * band),
     reachLabel,
     holderLabel: B.HOLDERS[B.holderReach(iq)]![0],
@@ -247,7 +236,7 @@ export function storageOptions(
   const r = findResource(state, v.spec.resourceId)!
   const s = v.scalars
   const iq = bestIQ(state)
-  const room = Math.max(0, Math.floor(s.ceiling - capOf(state, r)))
+  const room = storageRoom(state, r)
   const band = B.STORAGE_REACH.find(([label]) => label === s.reachLabel)?.[1] ?? 1
   const alarm = riskFrom(v.answers)
   const pay = payerFor(state, r, v.answers)

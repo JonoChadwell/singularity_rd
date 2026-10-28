@@ -26,6 +26,11 @@ export interface Resource {
   expansions: Expansion[]
   /** One or two traits, each an upside with a downside. See resourceTraits.ts. */
   traits: ResourceTraitId[]
+  /**
+   * How many can exist, set by Jev when it's added and again when Phase 2 begins: storage never
+   * grows past it. null: no ceiling (Phase 3).
+   */
+  ceiling: number | null
 }
 
 /** Extra storage for one resource, from research. */
@@ -77,7 +82,7 @@ export interface Software {
 
 /**
  * An industry unit: anything you own a number of, running strategies. How many you may own is
- * set by its sourcing contracts; a new design has none.
+ * set by its sourcing contracts (from Procurements); a new design has none.
  */
 export interface UnitType {
   id: string
@@ -91,8 +96,10 @@ export interface UnitType {
   tier: number
   /** Jev's plausibility, kept for the card. */
   plausibility: number
-  /** Paid per working unit per week. */
+  /** Paid per working unit per week, in a resource one tier below its own. Tier 0 runs on nothing. */
   upkeep: Flow[]
+  /** How many can exist: its contracts never add up to more. null: no ceiling (Phase 3). */
+  ceiling: number | null
   /** Total ever created. */
   built: number
   traits: TraitId[]
@@ -177,7 +184,7 @@ export interface Delivery {
  * same idea, and a repeat is one step less effective.
  */
 export interface Idea {
-  kind: 'create' | 'strategy' | 'sourcing' | 'storage'
+  kind: 'create' | 'strategy' | 'storage'
   name: string
   description: string
   week: number
@@ -202,8 +209,6 @@ export type ResearchEffect =
   | { kind: 'mind'; mind: Mind }
   | { kind: 'strategy'; strategy: Strategy }
   | { kind: 'upgrade'; target: UpgradeTarget; changes: Change[] }
-  /** A sourcing contract: once researched, units of its type can be created from it. */
-  | { kind: 'sourcing'; sourcing: Sourcing }
   /** A storage expansion for one resource. */
   | { kind: 'storage'; resourceId: string; expansion: Expansion }
   /** A phase's goal: researching it wins the phase. */
@@ -303,7 +308,7 @@ export interface Invention {
   week: number
   icon: string
   name: string
-  kind: 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'sourcing' | 'storage' | 'create' | 'plan' | 'cover'
+  kind: 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'storage' | 'create' | 'plan' | 'cover'
 }
 
 export interface Stats {
@@ -342,7 +347,7 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 16
+  version: 17
   runId: string
   week: number
   phase: PhaseState

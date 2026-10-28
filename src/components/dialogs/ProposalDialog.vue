@@ -57,13 +57,6 @@
           </label>
         </template>
 
-        <label v-if="kind === 'sourcing'" class="field">
-          <span>Unit</span>
-          <select v-model="sourcing.unitId">
-            <option v-for="u in game.state.units" :key="u.id" :value="u.id">{{ u.icon }} {{ u.name }}</option>
-          </select>
-        </label>
-
         <label v-if="kind === 'storage'" class="field">
           <span>Store more</span>
           <select v-model="storage.resourceId">
@@ -135,13 +128,22 @@
             v-for="(o, i) in verdict.options"
             :key="i"
             :part="opt(i)"
-            :title="TIMING[o.timing]"
+            :title="isContract(o) ? `Contract: ${o.label}` : TIMING[o.timing]"
             :chosen="verdict.choice === i"
             :blocked="!!optionBlocker(game.state, o)"
             @select="verdict.choice = i"
           >
             <strong>{{ describeOption(game.state, verdict, o) }}</strong>
-            <p class="muted">uses {{ o.inputs.length ? describeFlows(game.state, o.inputs) : 'nothing' }}</p>
+            <template v-if="isContract(o)">
+              <p>
+                <span v-if="o.risky" class="chip bad">risky</span>
+                <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
+              </p>
+              <p class="muted">Create them later, each from {{ describeFlows(game.state, o.parts) }}.</p>
+              <p :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</p>
+            </template>
+            <p v-else class="muted">uses {{ o.inputs.length ? describeFlows(game.state, o.inputs) : 'nothing' }}</p>
+            <p v-if="o.limitedBy" class="warn">Capped: no more than ~{{ unitCeiling }} can exist yet.</p>
             <p v-if="optionBlocker(game.state, o)" class="bad">{{ optionBlocker(game.state, o) }}</p>
             <p v-else-if="overflowOf(game.state, verdict, o)" class="warn">{{ fmt(overflowOf(game.state, verdict, o)) }} won’t fit in storage</p>
             <template #actions>
@@ -149,32 +151,15 @@
             </template>
           </PartSheet>
         </div>
-        <p v-if="verdict.risk" class="warn">{{ riskText(verdict.risk, 'strategy') }}</p>
-      </template>
-
-      <!-- Sourcing: three contracts. -->
-      <template v-else-if="verdict.kind === 'sourcing'">
-        <p class="lbl">Contracts: pick one</p>
-        <div class="cards">
-          <PartSheet v-for="(o, i) in verdict.options" :key="i" :part="opt(i)" :title="o.label" :chosen="verdict.choice === i" @select="verdict.choice = i">
-            <p class="big num">up to {{ fmt(o.total) }}</p>
-            <p>
-              <span v-if="o.risky" class="chip bad">risky</span>
-              <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
-            </p>
-            <p class="muted">Each takes {{ describeFlows(game.state, o.parts) }}.</p>
-            <p :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</p>
-            <template #actions>
-              <ApplyButtons :blocker="blockers[i] ?? null" @apply="applyNow(i)" />
-            </template>
-          </PartSheet>
-        </div>
+        <p v-if="verdict.risk && verdict.options.some((o) => !isContract(o))" class="warn">{{ riskText(verdict.risk, 'strategy') }}</p>
       </template>
 
       <!-- Storage: three expansions. -->
       <template v-else-if="verdict.kind === 'storage'">
         <div class="scalars">
-          <span class="scalar" title="How many Jev thinks could exist in this phase"><span class="lbl">Can exist</span><b class="num">~{{ verdict.scalars.ceilingLabel }}</b></span>
+          <span class="scalar" title="How many Jev thinks could exist in this phase, judged when the resource was added">
+            <span class="lbl">Can exist</span><b class="num">{{ verdict.scalars.ceiling === null ? 'No limit' : `~${verdict.scalars.ceilingLabel}` }}</b>
+          </span>
           <span class="scalar" :title="`${verdict.scalars.reachLabel}. At your IQ: ${verdict.scalars.holderLabel.toLowerCase()}.`">
             <span class="lbl">You could build</span><b class="num">~{{ fmt(verdict.scalars.reach) }}</b>
           </span>
@@ -233,7 +218,7 @@
 
       <!-- Unit: Jev's takes. -->
       <template v-else-if="verdict.kind === 'unit' && unitDraft">
-        <p v-if="first" class="good">Your plan’s first unit: no research needed, and it doesn’t use this week’s action. Find sourcing on its chip to own some.</p>
+        <p v-if="first" class="good">Your plan’s first unit: no research needed, and it doesn’t use this week’s action. Procure some from its chip to own some.</p>
         <p class="lbl">Jev’s takes: pick one</p>
         <div class="cards">
           <PartSheet v-for="o in unitOptions" :key="o.i" :part="opt(o.i)" :title="o.tier" :chosen="unitChoice === o.i" @select="unitChoice = o.i">
@@ -296,14 +281,14 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
-import { STORAGE_ADVANCED_BONUS } from '@/engine/balance'
-import { describeOption, optionBlocker, overflowOf } from '@/engine/createProposal'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { STORAGE_ADVANCED_BONUS, type CreateTiming } from '@/engine/balance'
+import { ceilingLabel } from '@/engine/ceilings'
+import { describeOption, iqTag, isContract, optionBlocker, overflowOf } from '@/engine/createProposal'
 import { bandText, byTier, capOf, describeCost, describeFlows, efficiencyWord, findResource, findUnit, fmt, labour, tierFit, tierText } from '@/engine/model'
 import { DESCRIPTION_MAX, NAME_MAX } from '@/engine/proposals'
 import { effectiveTier } from '@/engine/resourceTraits'
 import { expansionRiskText, riskText } from '@/engine/risk'
-import { iqTag } from '@/engine/sourcingProposal'
 import { QUIRKS, TRAITS } from '@/engine/traits'
 import type { Strategy } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
@@ -330,7 +315,6 @@ const TAG: Record<ProposalKind, string> = {
   unit: 'IC',
   mind: 'CPU',
   create: 'CRE',
-  sourcing: 'SRC',
   storage: 'STO',
   cover: 'CVR'
 }
@@ -345,7 +329,6 @@ const {
   strategy,
   current,
   creation,
-  sourcing,
   storage,
   presetName,
   presetItems,
@@ -382,7 +365,14 @@ onMounted(async () => {
   nameInput.value?.focus()
 })
 
-const TIMING: Record<string, string> = { now: 'Pays now', spread: 'Over 4 weeks', later: 'In 4 weeks', weekly: 'For 20 weeks' }
+const TIMING: Record<CreateTiming, string> = { now: 'Pays now', spread: 'Over 4 weeks', later: 'In 4 weeks', weekly: 'For 20 weeks' }
+
+/** How many of the unit being Procured can exist, in words. */
+const unitCeiling = computed(() => {
+  const v = verdict.value
+  const u = v?.kind === 'create' && v.spec.target.kind === 'unit' ? findUnit(game.state, v.spec.target.id) : undefined
+  return ceilingLabel('unit', u?.ceiling ?? null)
+})
 
 /** Option part numbers: OPT-A, OPT-B, OPT-C. */
 const opt = (i: number) => `OPT-${String.fromCharCode(65 + i)}`

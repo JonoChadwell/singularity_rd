@@ -1,5 +1,6 @@
 import { ranked, type JevAnswer, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
+import { ceilingQuestion, readCeiling } from './ceilings'
 import { byTier, findResource, findUnit, makeId } from './model'
 import {
   addResearch,
@@ -47,14 +48,14 @@ export interface TraitOdds {
 
 /**
  * One way Jev could see the unit: how advanced it is, how much one is worth (a value band), and
- * what it runs on, which is never above its own tier. What it's made from is a matter for each
- * sourcing contract.
+ * what it runs on, always a resource one tier below its own. What it's made from is a matter for
+ * each sourcing contract.
  */
 export interface UnitOption {
   tier: number
   band: number
-  /** What it runs on each week. */
-  upkeepId: string
+  /** What it runs on each week: null for tier 0, which runs on nothing. */
+  upkeepId: string | null
   /** Its traits: part of the take, so a near-the-line trait is on in one take and off in another. */
   traits: TraitId[]
   /** The stock its design research uses up: one of Jev's favourites, a different one for each take when it can. */
@@ -82,8 +83,9 @@ export const guessUnitSpec = (): UnitSpec => ({ name: '', description: '' })
 export const partPool = (state: GameState, tier: number): Resource[] =>
   byTier(state.resources).filter((r) => r.tier <= tier)
 
-/** What a unit of this tier may run on: its own tier and below, lowest first. */
-export const runPool = partPool
+/** What a unit of this tier runs on: a resource exactly one tier below. Tier 0 runs on nothing. */
+export const runPool = (state: GameState, tier: number): Resource[] =>
+  tier === 0 ? [] : byTier(state.resources).filter((r) => r.tier === tier - 1)
 
 export function precheckUnit(state: GameState, spec: UnitSpec): string | null {
   const locked = lockReason(state, 'unit')
@@ -93,9 +95,10 @@ export function precheckUnit(state: GameState, spec: UnitSpec): string | null {
   if (slot) return slot
   const nameError = precheckName(state, spec.name)
   if (nameError) return nameError
-  if (!state.resources.length) return 'Propose a resource first: a unit runs on one.'
-  // The first unit is tier 0, so it needs something at tier 0 to be made from and run on.
+  if (!state.resources.length) return 'Propose a resource first: a unit is made from one.'
+  // The first unit is tier 0: it runs on nothing, but needs something at tier 0 to be made from.
   if (spec.first && !partPool(state, 0).length) return 'You need a tier 0 resource to make your first unit from.'
+  if (!unitTiers(state, false).length) return 'A unit runs on a resource one tier below its own: add a tier 0 resource first.'
   return null
 }
 
@@ -120,8 +123,10 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
       instructions: 'Is it exactly the same as a unit that already exists, just renamed?',
       criteria: { none: 'It is a different unit', ...options(state.units) }
     },
-    // Jev decides what it runs on, from nothing above its own tier.
+    // Jev decides what it runs on, from the tier below its own.
     ...pools,
+    // How many can exist is settled once, when it's designed.
+    ...ceilingQuestion(state, 'unit', spec.name),
     icon: iconQuestion,
     value: {
       type: 'score',
@@ -143,10 +148,13 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     // The plan's first unit is part of the plan, so it's never risky.
     ...(spec.first ? {} : alarmQuestions(state))
   }
-  questions.upkeep_0 = {
-    type: 'score',
-    instructions: 'How much of what it runs on does one need each week, compared with the work it does?',
-    criteria: scale(B.UPKEEP_SIZE)
+  // Only a unit above tier 0 runs on anything.
+  if (tiers.some((t) => t > 0)) {
+    questions.upkeep_0 = {
+      type: 'score',
+      instructions: 'How much of what it runs on does one need each week, compared with the work it does?',
+      criteria: scale(B.UPKEEP_SIZE)
+    }
   }
   const traitList = ALL_TRAITS.filter((t) => !t.param || Object.keys(paramOptions(state, t.param)).length)
   for (const t of traitList) {
@@ -193,7 +201,7 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
     ...base,
     kind: 'unit',
     spec,
-    options: unitOptions(state, answers, tiers, pools, !!spec.first, traitOdds),
+    options: unitOptions(state, answers, tiers, !!spec.first, traitOdds),
     choice: 0,
     traitOdds
   }
@@ -205,33 +213,26 @@ export async function judgeUnit(state: GameState, judge: Judge, raw: UnitSpec): 
 }
 
 /**
- * The tiers a unit may be. The plan's first unit is tier 0; any other can be as low as there is
- * a resource for it to run on, up to the top.
+ * The tiers a unit may be. The plan's first unit is tier 0. Tier 0 runs on nothing, but needs a
+ * tier 0 resource to be made from; any higher tier needs a resource one tier below to run on.
  */
-function unitTiers(state: GameState, first: boolean): number[] {
+export function unitTiers(state: GameState, first: boolean): number[] {
   if (first) return [0]
-  return Array.from({ length: B.MAX_UNIT_TIER + 1 }, (_, t) => t).filter((t) => runPool(state, t).length > 0)
+  return Array.from({ length: B.MAX_UNIT_TIER + 1 }, (_, t) => t).filter((t) =>
+    t === 0 ? partPool(state, 0).length > 0 : runPool(state, t).length > 0
+  )
 }
 
-/** The question that settles what a unit of this tier runs on, keyed `runs_t<tier>`. */
-const runsKey = (tier: number, questions: Record<string, JevQuestion>) => {
-  for (let t = tier; t >= 0; t--) if (questions[`runs_t${t}`]) return `runs_t${t}`
-  return `runs_t${tier}`
-}
+/** The question that settles what a unit of this tier runs on. */
+const runsKey = (tier: number) => `runs_t${tier}`
 
-/**
- * Questions asking Jev what a unit runs on, once for each distinct set of resources its tier
- * allows (nothing above its own tier), so tiers that allow the same share one.
- */
+/** Questions asking Jev what a unit runs on, one for each tier it may be above tier 0. */
 function poolQuestions(state: GameState, name: string, tiers: number[]): Record<string, JevQuestion> {
   const questions: Record<string, JevQuestion> = {}
-  const asked = new Set<string>()
   for (const tier of tiers) {
     const things = runPool(state, tier)
-    const set = things.map((r) => r.id).join(',')
-    if (asked.has(set)) continue
-    asked.add(set)
-    questions[`runs_t${tier}`] = {
+    if (!things.length) continue
+    questions[runsKey(tier)] = {
       type: 'choice',
       instructions: `Which one resource would one ${name} most naturally run on each week, to operate and maintain it?`,
       criteria: options(things)
@@ -299,23 +300,22 @@ const takeKey = (o: Pick<UnitOption, 'tier' | 'band' | 'upkeepId'>) => `${o.tier
 /**
  * Up to three takes on a unit, Jev's own first, never two alike. They are never all worth the
  * same, and when more than one tier is possible, never all in one tier. The plan's first unit is
- * always tier 0. Each take runs on a resource at or below its own tier, and carries a trait set.
+ * always tier 0. Each take runs on a resource one tier below its own (tier 0 on nothing), and
+ * carries a trait set.
  */
 export function unitOptions(
   state: GameState,
   answers: Record<string, JevAnswer>,
   tiers: number[],
-  questions: Record<string, JevQuestion>,
   first: boolean,
   traitOdds: TraitOdds[]
 ): UnitOption[] {
   const tierLevels = first ? [0] : levelsByOdds(answers.tier, B.MAX_UNIT_TIER + 1).filter((t) => tiers.includes(t))
   const bands = levelsByOdds(answers.value, first ? B.FIRST_UNIT_MAX_BAND + 1 : B.UNIT_VALUE.length)
+  const runsOn = (tier: number): (string | null)[] => (tier === 0 ? [null] : rankedIds(answers, runsKey(tier), runPool(state, tier)))
   const candidates = tierLevels
     .flatMap((tier, t) =>
-      rankedIds(answers, runsKey(tier, questions), runPool(state, tier)).flatMap((upkeepId, rank) =>
-        bands.map((band, b) => ({ tier, band, upkeepId, score: t + b + rank, t, b, rank }))
-      )
+      runsOn(tier).flatMap((upkeepId, rank) => bands.map((band, b) => ({ tier, band, upkeepId, score: t + b + rank, t, b, rank })))
     )
     .sort((x, y) => x.score - y.score || x.b - y.b || x.t - y.t || x.rank - y.rank)
   const chosen: typeof candidates = []
@@ -373,15 +373,18 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   const param = (id: TraitId) => v.traitOdds.find((t) => t.trait === id)?.param ?? null
   const value = B.pick(B.UNIT_VALUE, band)[1]
   const work = value / B.PAYBACK_WEEKS
-  const upkeep: Flow[] = [
-    {
-      resourceId: upkeepId,
-      amount: B.nice(
-        (work * B.pick(B.UPKEEP_SIZE, read.level('upkeep_0', B.UPKEEP_SIZE.length))[1]) /
-          Math.max(1e-9, findResource(state, upkeepId)!.value)
-      )
-    }
-  ]
+  // Tier 0 runs on nothing; any other tier on a resource one tier below.
+  const upkeep: Flow[] = upkeepId
+    ? [
+        {
+          resourceId: upkeepId,
+          amount: B.nice(
+            (work * B.pick(B.UPKEEP_SIZE, read.level('upkeep_0', B.UPKEEP_SIZE.length))[1]) /
+              Math.max(1e-9, findResource(state, upkeepId)!.value)
+          )
+        }
+      ]
+    : []
 
   const unit = newUnit({
     id: makeId(state, spec.name),
@@ -392,6 +395,7 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
     tier,
     plausibility: v.plausibility,
     upkeep,
+    ceiling: readCeiling(v.answers, 'unit'),
     traits: ids,
     boosts: param('boosts'),
     byproduct: param('by-product'),
@@ -425,7 +429,7 @@ export function acceptUnit(current: GameState, v: UnitVerdict): Accepted {
     logProposal(
       state,
       'good',
-      `${unit.icon} ${unit.name} is designed. Find sourcing for it on its card, then create some and give them a strategy.`
+      `${unit.icon} ${unit.name} is designed. Procure some from its card, then give them a strategy.`
     )
     return { state, outcome: { kind: 'added', name: unit.name } }
   }

@@ -11,7 +11,6 @@ import {
   type ResourceSpec,
   type ResourceVerdict
 } from './proposals'
-import { acceptSourcing, judgeSourcing, type SourcingSpec, type SourcingVerdict } from './sourcingProposal'
 import { acceptStorage, judgeStorage, type StorageSpec, type StorageVerdict } from './storageProposal'
 import { acceptStrategy, judgeStrategy, type StrategySpec, type StrategyVerdict } from './strategyProposal'
 import type { GameState } from './types'
@@ -24,7 +23,6 @@ export type ProposalInput =
   | { kind: 'strategy'; spec: StrategySpec }
   | { kind: 'unit'; spec: UnitSpec }
   | { kind: 'mind'; spec: MindSpec }
-  | { kind: 'sourcing'; spec: SourcingSpec }
   | { kind: 'storage'; spec: StorageSpec }
   | { kind: 'create'; spec: CreateSpec }
   | { kind: 'cover'; spec: CoverSpec }
@@ -35,7 +33,6 @@ export type Verdict =
   | StrategyVerdict
   | UnitVerdict
   | MindVerdict
-  | SourcingVerdict
   | StorageVerdict
   | CreateVerdict
   | CoverVerdict
@@ -52,8 +49,6 @@ export function judgeAny(s: GameState, judge: Judge, input: ProposalInput): Prom
       return judgeUnit(s, judge, input.spec)
     case 'mind':
       return judgeMind(s, judge, input.spec)
-    case 'sourcing':
-      return judgeSourcing(s, judge, input.spec)
     case 'storage':
       return judgeStorage(s, judge, input.spec)
     case 'create':
@@ -76,8 +71,6 @@ export function acceptAny(s: GameState, verdict: Verdict): Accepted {
       return acceptUnit(s, verdict)
     case 'mind':
       return acceptMind(s, verdict)
-    case 'sourcing':
-      return acceptSourcing(s, verdict)
     case 'storage':
       return acceptStorage(s, verdict)
     case 'create':
