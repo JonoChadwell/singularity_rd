@@ -6,8 +6,10 @@ import { findResource, payCost, TRAIT_GROWTH, TRAIT_LOSS } from '../model'
 import { acceptResource, autoTraits, judgeResource } from '../proposals'
 import {
   ALL_RESOURCE_TRAITS,
+  capFactor,
   costFactor,
   effectiveTier,
+  fromNothingFactor,
   makeFactor,
   speculativeFactor,
   useFactor,
@@ -90,9 +92,12 @@ describe('resource traits', () => {
     const full = world(['self-replicating'], 1000, 1050)
     simulateWeek(full)
     expect(findResource(full, 'stuff')!.amount).toBeCloseTo(1050)
-    const renew = world(['renewable'], 0, 1000)
-    simulateWeek(renew)
-    expect(findResource(renew, 'stuff')!.amount).toBeCloseTo(20)
+  })
+
+  it('Renewable: 25% more from nothing, and a 25% smaller cap', () => {
+    expect(fromNothingFactor({ traits: ['renewable'] })).toBe(1.25)
+    expect(fromNothingFactor({ traits: ['cryogenic'] })).toBe(1)
+    expect(capFactor({ traits: ['renewable'] })).toBe(0.75)
   })
 
   it('Recyclable: half of what is spent comes back next week', () => {

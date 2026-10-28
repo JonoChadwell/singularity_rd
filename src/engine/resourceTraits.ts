@@ -52,8 +52,8 @@ export interface ResourceEffects {
   clock?: number
   /** Share of the stock gained each week, up to the cap. */
   growth?: number
-  /** Share of the cap refilled free each week. */
-  refill?: number
+  /** Procurements with no resource input, and strategies with none, make this many times as much. */
+  fromNothing?: number
   /** Share of what's left lost at the end of each week. */
   loss?: number
   /** Share of what's spent on costs that comes back next week. */
@@ -158,10 +158,10 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     id: 'renewable',
     name: 'Renewable',
     icon: '🌱',
-    upside: '2% of its cap refills free each week.',
-    downside: 'Its storage cap is halved.',
-    family: 'growth',
-    effects: { refill: 0.02, cap: 0.5 }
+    upside: 'Making it from nothing, with a Procurement or a strategy that uses no resources, gives 25% more.',
+    downside: 'Its storage cap is 25% smaller.',
+    family: 'making',
+    effects: { fromNothing: 1.25, cap: 0.75 }
   }),
   perishable: t({
     id: 'perishable',
@@ -286,12 +286,13 @@ function product(
     | 'clock'
     | 'createOutput'
     | 'createInput'
+    | 'fromNothing'
 ) {
   return effectsOf(r).reduce((f, e) => f * (e[key] ?? 1), 1)
 }
 
 /** Adds one share effect across a resource's traits. */
-function total(r: HasTraits, key: 'growth' | 'refill' | 'refund') {
+function total(r: HasTraits, key: 'growth' | 'refund') {
   return effectsOf(r).reduce((n, e) => n + (e[key] ?? 0), 0)
 }
 
@@ -342,7 +343,8 @@ export const clockFactor = (r: HasTraits) => product(r, 'clock')
 export const createOutputFactor = (r: HasTraits) => product(r, 'createOutput')
 export const createInputFactor = (r: HasTraits) => product(r, 'createInput')
 export const growthOf = (r: HasTraits) => total(r, 'growth')
-export const refillOf = (r: HasTraits) => total(r, 'refill')
+/** What Renewable adds when the resource is made with no resource input (1 when none). */
+export const fromNothingFactor = (r: HasTraits) => product(r, 'fromNothing')
 export const refundOf = (r: HasTraits) => total(r, 'refund')
 
 /** Share of what's left that is lost at the end of each week. Several losses compound. */

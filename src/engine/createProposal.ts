@@ -24,7 +24,7 @@ import {
   type VerdictBase
 } from './proposals'
 import { spendable } from './research'
-import { createInputFactor, createOutputFactor, effectiveTier, type TierPurpose } from './resourceTraits'
+import { createInputFactor, createOutputFactor, effectiveTier, fromNothingFactor, type TierPurpose } from './resourceTraits'
 import { alarmQuestions, expansionRisk, riskFrom } from './risk'
 import { proposalText } from './stateText'
 import type { CreateTarget, Flow, GameState, Risk, Sourcing, UnitType } from './types'
@@ -102,10 +102,13 @@ function targetTier(state: GameState, t: CreateTarget, purpose: TierPurpose): nu
   return r ? effectiveTier(r, purpose) : 0
 }
 
-/** What Procurements of the target pay, as a factor: some resource traits make less. */
-function targetOutput(state: GameState, t: CreateTarget): number {
+/**
+ * What Procurements of the target pay, as a factor: some resource traits make less. Renewable
+ * makes more when no resource is used up.
+ */
+function targetOutput(state: GameState, t: CreateTarget, usesInput: boolean): number {
   const r = t.kind === 'resource' ? findResource(state, t.id) : undefined
-  return r ? createOutputFactor(r) : 1
+  return r ? createOutputFactor(r) * (usesInput ? 1 : fromNothingFactor(r)) : 1
 }
 
 export function precheckCreate(state: GameState, spec: CreateSpec): string | null {
@@ -336,7 +339,7 @@ function priceOption(state: GameState, v: Pick<CreateVerdict, 'spec' | 'scalars'
   const [, , mult, weeks] = B.CREATE_TIMINGS.find(([id]) => id === timing)!
   const risky = v.risk ? B.RISK_OUTPUT : 1
   const outputWorth =
-    (inputWorth * B.CREATE_INPUT_RETURN + base) * efficiency * reach * mult * risky * targetOutput(state, v.spec.target)
+    (inputWorth * B.CREATE_INPUT_RETURN + base) * efficiency * reach * mult * risky * targetOutput(state, v.spec.target, inputs.length > 0)
   const perDelivery = timing === 'spread' || timing === 'weekly' ? outputWorth / weeks : outputWorth
   return { timing, inputs, inputWorth, outputWorth, amount: amountOf(state, v.spec.target, perDelivery) }
 }

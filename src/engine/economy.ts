@@ -2,7 +2,7 @@ import * as B from './balance'
 import { drainOf } from './computeTraits'
 import { allocation, capOf, contractsFor, findResource, makeId, OVERFLOW, TRAIT_GROWTH, TRAIT_LOSS } from './model'
 import { strategyRate } from './research'
-import { growthOf, makeFactor, refillOf, useFactor, weeklyLossOf } from './resourceTraits'
+import { fromNothingFactor, growthOf, makeFactor, useFactor, weeklyLossOf } from './resourceTraits'
 import { has } from './traits'
 import type { GameState, Sourcing, Strategy, UnitType, UnitWeek, WeekReport } from './types'
 
@@ -110,7 +110,8 @@ function buildRunners(state: GameState, report: WeekReport): Runner[] {
         const warm =
           strategy.quirk === 'slow-to-start' ? Math.min(1, ((strategy.weeksRun ?? 0) + 1) / B.SLOW_WEEKS) : 1
         // The output's traits (Perishable, Seasonal...) change how much units make of it.
-        const made = out ? makeFactor(out, state.week) : 1
+        // Renewable adds to a strategy that uses no resources.
+        const made = out ? makeFactor(out, state.week) * (rate.inputs.length ? 1 : fromNothingFactor(out)) : 1
         runner.makes.set(strategy.outputId, rate.amount * factor * warm * made)
         const by = u.byproduct ? findResource(state, u.byproduct) : undefined
         if (by && out && by.id !== out.id) {
@@ -311,8 +312,8 @@ export function simulateWeek(state: GameState): WeekReport {
       note(res.id, OVERFLOW, -(res.amount - limit))
       res.amount = limit
     }
-    // Compounding, Self-replicating and Renewable grow on their own, but only into free room.
-    const grown = Math.min(Math.max(0, limit - res.amount), res.amount * growthOf(res) + cap * refillOf(res))
+    // Compounding and Self-replicating grow on their own, but only into free room.
+    const grown = Math.min(Math.max(0, limit - res.amount), res.amount * growthOf(res))
     if (grown > 1e-9) {
       res.amount += grown
       note(res.id, TRAIT_GROWTH, grown)

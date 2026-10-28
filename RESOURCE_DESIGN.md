@@ -54,7 +54,7 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
 | ❄️ Cryogenic | Storage expansions for it hold twice as much | Units making it need a tier more | making |
 | 📈 Compounding | Stock grows 3% a week, up to its cap | Research costs in it are 50% more | growth |
 | 🐇 Self-replicating | Stock grows 10% a week, up to its cap | Every use needs 25% more: costs, parts, strategies, upkeep | growth |
-| 🌱 Renewable | 2% of its cap refills free each week | Cap halved | growth |
+| 🌱 Renewable | Making it from nothing (a Procurement or a strategy with no resource inputs) gives 25% more | Cap 25% smaller | making |
 | 🍋 Perishable | Units make 50% more of it | 10% of what's left spoils each week | loss |
 | 🌋 Volatile | Units make twice as much of it | 25% of what's left is lost each week | loss |
 | 💧 Liquid | Cap ×1.5 | 5% of what's left leaks each week | loss |
@@ -76,6 +76,9 @@ Several weekly losses compound (Perishable and Liquid together lose 14.5%, not 1
   factor. Procurement inputs are left alone, as for every cost trait.
 - **Recyclable.** The refund is a one-week delivery, listed under "Still to come" on the resource.
   It covers research, unit parts and cover. It is half of what was actually paid.
+- **Renewable.** "From nothing" means a Procurement that ends up using no resource (none offered,
+  or none held), or a strategy with no resource inputs (upkeep doesn't count). A by-product is not
+  made from nothing.
 - **Cap traits** (Renewable, Liquid) scale the starting cap and every storage expansion.
   Expansion traits (Cryogenic, Contraband) scale expansions only. Neither scales the Stores unit
   trait.
