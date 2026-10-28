@@ -1,6 +1,6 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
-import { byTier, findResource, findUnit, labour, makeId, runsOn, tierFactor } from './model'
+import { byTier, findResource, findUnit, labour, labourOf, makeId, runsOn, tierFactor } from './model'
 import { lockReason, moveClock } from './phase'
 import {
   addResearch,
@@ -229,7 +229,9 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
   const spent = minIQ ? Math.max(weeks, 1) : weeks
   // The game picks who pays, going by Jev's ranking of the stocks.
   const priced = { answers: v.answers, plausibility: v.plausibility, bar: v.bar, risk: v.risk }
-  const cost = spent ? costFor(state, priced, spent * work * Math.max(unit.count, B.MIN_FLEET)) : []
+  // Priced by the fleet's worth, not its count: a unit's value is only how big one is.
+  const fleet = labourOf(Math.max(unit.count * unit.value, B.MIN_FLEET_WORTH), unit.tier)
+  const cost = spent ? costFor(state, priced, spent * fleet) : []
   return { strategy, minIQ: minIQ ? floorIQ(minIQ) : 0, cost }
 }
 

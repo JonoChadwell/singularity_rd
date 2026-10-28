@@ -33,13 +33,14 @@ import {
   MONEY_ID,
   openSlots,
   tasksFor,
+  tierFactor,
   weeklyUse
 } from '../model'
 import { coversLeft } from '../phase'
 import { goalOf } from '../projection'
 import { acceptStorage, judgeStorage } from '../storageProposal'
 import { acceptStrategy, judgeStrategy } from '../strategyProposal'
-import type { GameState, Research } from '../types'
+import type { GameState, Research, Resource } from '../types'
 import { acceptUnit, judgeUnit, runPool } from '../unitProposal'
 import { acceptUpgrade, judgeUpgrade } from '../upgrade'
 import { flat, NANOTECH, phase1, play } from './bots'
@@ -157,8 +158,9 @@ export const procure = (resourceId: string, timing: B.CreateTiming = 'now'): Mov
       v.choice = pick.i
       const o = v.options[pick.i]!
       if (!isContract(o)) ctx.spend.procure += o.inputWorth
+      const after = acceptCreate(s, v).state
       used(ctx, key)
-      return acceptCreate(s, v).state
+      return after
     })
 })
 
@@ -170,7 +172,10 @@ export const contract = (unitId: string): Move => ({
   run: (s, ctx) =>
     attempt(async () => {
       const key = `contract:${unitId}`
-      const band = Math.min(B.SOURCING_LIMITS.length - 1, 1 + (ctx.uses.get(key) ?? 0))
+      // A band bigger with each contract for the unit, and never less than about four weeks of
+      // income: a player asks for supplies on the scale of their economy.
+      const scale = B.SOURCING_LIMITS.findIndex(([, worth]) => worth >= 4 * grossIncome(s))
+      const band = Math.min(B.SOURCING_LIMITS.length - 1, Math.max(1 + (ctx.uses.get(key) ?? 0), scale < 0 ? B.SOURCING_LIMITS.length - 1 : scale))
       const v = await judgeCreate(s, judge(ctx, key, { limit: score(band) }), {
         target: { kind: 'unit', id: unitId },
         name: fresh(ctx, 'Contract'),
@@ -179,8 +184,9 @@ export const contract = (unitId: string): Move => ({
       const i = v.options.findIndex((o) => isContract(o) && !o.risky && o.total > 0)
       if (v.rejected || i < 0) return null
       v.choice = i
+      const after = acceptCreate(s, v).state
       used(ctx, key)
-      return acceptCreate(s, v).state
+      return after
     })
 })
 
@@ -194,8 +200,9 @@ export const strategy = (unitId: string, outputId: string): Move => ({
       const key = `strategy:${unitId}:${outputId}`
       const v = await judgeStrategy(s, judge(ctx, key), { name: fresh(ctx, `Make ${outputId}`), description: '', unitId, outputId })
       if (v.rejected) return null
+      const after = acceptStrategy(s, v).state
       used(ctx, key)
-      return acceptStrategy(s, v).state
+      return after
     })
 })
 
@@ -215,8 +222,9 @@ export const design = (tier: number): Move => ({
       const v = await judgeUnit(s, judge(ctx, `design:${tier}`, answers), { name: fresh(ctx, `Tier ${tier} Works`), description: '' })
       if (v.rejected || v.duplicateOf || v.options[0]?.tier !== tier) return null
       v.choice = 0
+      const after = acceptUnit(s, v).state
       used(ctx, `design:${tier}`)
-      return acceptUnit(s, v).state
+      return after
     })
 })
 
@@ -238,8 +246,9 @@ export const upgradeUnit = (unitId: string): Move => ({
       const offer = await judgeUpgrade(s, judge(ctx, `upgrade:${unitId}`, { best }), { kind: 'unit', id: unitId })
       const i = offer.options.findIndex((o) => o.changes.some((c) => c.kind === 'output'))
       if (i < 0) return null
+      const after = acceptUpgrade(s, offer, i).state
       used(ctx, `upgrade:${unitId}`)
-      return acceptUpgrade(s, offer, i).state
+      return after
     })
 })
 
@@ -289,8 +298,9 @@ export const software = (): Move => ({
       if (mind.software.upgraded || s.research.some((r) => r.effect.kind === 'upgrade' && r.effect.target.kind === 'mind')) return null
       const offer = await judgeUpgrade(s, judge(ctx, 'software', { 'd_*': score(1) }), { kind: 'mind', id: mind.id })
       const steps = offer.options.map((o) => o.step ?? 0)
+      const after = stripTraits(acceptUpgrade(s, offer, steps.indexOf(Math.max(...steps))).state)
       used(ctx, 'software')
-      return stripTraits(acceptUpgrade(s, offer, steps.indexOf(Math.max(...steps))).state)
+      return after
     })
 })
 
@@ -305,8 +315,9 @@ export const platform = (): Move => ({
       const v = await judgeMind(s, judge(ctx, 'platform'), { name: fresh(ctx, 'Platform'), description: '' })
       if (v.rejected || !v.options.length) return null
       v.choice = v.options.reduce((best, o, i) => (o.step > v.options[best]!.step ? i : best), 0)
+      const after = stripTraits(acceptMind(s, v).state)
       used(ctx, 'platform')
-      return stripTraits(acceptMind(s, v).state)
+      return after
     })
 })
 
@@ -325,8 +336,9 @@ export const storage = (resourceId: string, need = 0): Move => ({
       const pick = ok.find(({ o }) => capOf(s, r) + o.added >= need) ?? ok[ok.length - 1]
       if (!pick) return null
       v.choice = pick.i
+      const after = acceptStorage(s, v).state
       used(ctx, `storage:${resourceId}`)
-      return acceptStorage(s, v).state
+      return after
     })
 })
 
@@ -368,8 +380,11 @@ export function research(state: GameState, ctx: Ctx): GameState {
   let s = state
   const order = () => [...s.research].sort((a, b) => Number(b.effect.kind === 'goal') - Number(a.effect.kind === 'goal'))
   for (let pass = 0; pass < 2; pass++) {
+    const saving = savingFor(s)
     for (const r of order()) {
       if (s.phase.n !== state.phase.n || researchBlocker(s, r.id)) continue
+      // Nothing small spends what a platform or a design is half saved up for.
+      if (!KEY_RESEARCH.has(r.effect.kind) && r.effect.kind !== 'goal' && r.cost.some((c) => saving.has(c.resourceId))) continue
       const before = worthOf(s).stock
       s = doResearch(s, r.id)
       const kind = r.effect.kind === 'upgrade' && r.effect.target.kind === 'mind' ? 'iq' : SPEND_OF[r.effect.kind]
@@ -377,6 +392,21 @@ export function research(state: GameState, ctx: Ctx): GameState {
     }
   }
   return s
+}
+
+/** Research that moves the game on: platforms, software and designs. Other research waits for it. */
+const KEY_RESEARCH = new Set<Research['effect']['kind']>(['mind', 'unit', 'upgrade'])
+
+/** Resources a waiting key research (smart enough for it, at least half paid for) is saving up. */
+function savingFor(s: GameState): Set<string> {
+  const out = new Set<string>()
+  for (const r of s.research) {
+    if (!KEY_RESEARCH.has(r.effect.kind) || (r.effect.kind === 'upgrade' && r.effect.target.kind !== 'mind') || bestIQ(s) < r.minIQ) continue
+    const have = r.cost.reduce((n, c) => n + Math.min(c.amount, findResource(s, c.resourceId)?.amount ?? 0), 0)
+    const need = r.cost.reduce((n, c) => n + c.amount, 0)
+    if (need > 0 && have >= need / 2) for (const c of r.cost) out.add(c.resourceId)
+  }
+  return out
 }
 
 /** The goal research, while it's waiting. */
@@ -398,20 +428,27 @@ function strategyWorth(s: GameState, id: string, want: Record<string, number> = 
 
 /**
  * How much of each resource the economy wants on hand: four weeks of what running uses, the parts
- * for the next twenty units of each open contract, and what waiting research costs.
+ * for the next five units of each open contract, and what waiting research costs. With `soon`,
+ * only research worth eight weeks' income or less: what's worth working towards now.
  */
-export function demand(s: GameState): Record<string, number> {
+export function demand(s: GameState, soon = false): Record<string, number> {
   const want: Record<string, number> = {}
   const add = (id: string, n: number) => (want[id] = (want[id] ?? 0) + n)
   for (const [id, n] of Object.entries(weeklyUse(previewWeek(s)))) add(id, 4 * n)
   for (const c of s.sourcing) {
     const u = findUnit(s, c.unitId)
-    const n = Math.min(openSlots(c), 20)
+    const n = Math.min(openSlots(c), 5)
     if (!n) continue
     for (const p of c.parts) add(p.resourceId, p.amount * n)
     for (const f of u?.upkeep ?? []) add(f.resourceId, f.amount * n * 4)
   }
-  for (const r of s.research) if (bestIQ(s) >= r.minIQ) for (const c of r.cost) add(c.resourceId, c.amount)
+  const income = grossIncome(s)
+  for (const r of s.research) {
+    if (bestIQ(s) < r.minIQ) continue
+    const worth = r.cost.reduce((n, c) => n + c.amount * (findResource(s, c.resourceId)?.value ?? 0), 0)
+    if (soon && worth > 8 * income) continue
+    for (const c of r.cost) add(c.resourceId, c.amount)
+  }
   return want
 }
 
@@ -448,17 +485,35 @@ export function assignBest(state: GameState): GameState {
     }
     if (!moved) break
   }
+  // What research due soon and contracts want that nothing is making fast enough: enough units
+  // to fill the gap in about three weeks, never more than half of a type.
+  const want = demand(s, true)
+  const report = previewWeek(s)
+  for (const [resourceId, need] of Object.entries(want)) {
+    const r = findResource(s, resourceId)
+    if (!r || r.amount >= need) continue
+    const made = (report.flows[resourceId] ?? []).reduce((n, f) => n + Math.max(0, f.amount), 0)
+    const gap = (need - r.amount) / 3 - made
+    if (gap <= 0) continue
+    const maker = s.strategies.find((x) => x.kind === 'make' && x.outputId === resourceId && (findUnit(s, x.unitId)?.count ?? 0) > 1)
+    if (!maker || maker.amount <= 0) continue
+    const u = findUnit(s, maker.unitId)!
+    if (u.rest === maker.id) continue
+    const now = u.assign[maker.id] ?? 0
+    const n = Math.min(Math.floor(u.count / 2), now + Math.ceil(gap / maker.amount))
+    if (n > now) s = assign(s, u.id, maker.id, n)
+  }
   return s
 }
 
 /**
  * What waiting research will use up, per resource, kept back from new units: only research
- * within reach (what you hold and about four weeks' income), so saving for something far off
- * doesn't stop all growth.
+ * worth two weeks' income or less, so saving for something far off never stops the growth that
+ * would pay for it.
  */
 function reserved(s: GameState): Record<string, number> {
   const out: Record<string, number> = {}
-  const reach = worthOf(s).stock + 4 * Math.max(0, grossIncome(s))
+  const reach = 2 * Math.max(0, grossIncome(s))
   for (const r of s.research) {
     if (bestIQ(s) < r.minIQ) continue
     const worth = r.cost.reduce((n, c) => n + c.amount * (findResource(s, c.resourceId)?.value ?? 0), 0)
@@ -503,8 +558,16 @@ function bestOutput(s: GameState, unitId: string): string | null {
   const g = goalResource(s)
   const gr = g ? findResource(s, g) : undefined
   if (gr && gr.tier <= u.tier) return gr.id
+  // Otherwise what the economy wants and is short of, counting the tier bonus for making
+  // something below the unit's own tier; what piles up with no use counts least.
+  const want = demand(s)
+  const score = (r: Resource) => {
+    const need = want[r.id] ?? 0
+    const use = r.amount < need ? 2 : need === 0 && r.amount > capOf(s, r) * 0.5 ? 0.25 : 1
+    return tierFactor(u.tier, r.tier) * use
+  }
   const fits = s.resources.filter((r) => r.tier <= u.tier && !u.upkeep.some((f) => f.resourceId === r.id))
-  return [...fits].sort((a, b) => b.tier - a.tier || b.value - a.value)[0]?.id ?? MONEY_ID
+  return [...fits].sort((a, b) => score(b) - score(a) || b.tier - a.tier)[0]?.id ?? MONEY_ID
 }
 
 /** Resources that something uses (inputs or upkeep) but nothing makes and nothing delivers. */
@@ -547,7 +610,9 @@ function makerFor(s: GameState, resourceId: string): string | null {
 
 /**
  * A cost of waiting research bigger than its resource can hold, with no storage waiting for it.
- * The goal's counts once something makes its resource, or the goal's IQ is a step away.
+ * The goal's counts once something makes its resource, or the goal's IQ is a step away. Any other
+ * counts once it's within reach (at most four times what fits now, or eight weeks' income):
+ * before that, growing the fleet (which storage reach grows with) does more.
  */
 function tooBig(s: GameState): { resourceId: string; amount: number } | null {
   for (const r of s.research) {
@@ -559,7 +624,8 @@ function tooBig(s: GameState): { resourceId: string; amount: number } | null {
     for (const c of r.cost) {
       const res = findResource(s, c.resourceId)
       const waiting = s.research.some((x) => x.effect.kind === 'storage' && x.effect.resourceId === c.resourceId)
-      if (res && capOf(s, res) < c.amount && !waiting) return c
+      if (!res || capOf(s, res) >= c.amount || waiting) continue
+      if (r.effect.kind === 'goal' || c.amount <= 4 * capOf(s, res) || c.amount * res.value <= 8 * grossIncome(s)) return c
     }
   }
   return null
@@ -707,9 +773,16 @@ export function candidates(s: GameState, style: Style): Play[] {
     for (const [id, need] of Object.entries(want)) {
       const r = findResource(s, id)
       if (!r || r.amount >= need || id === top) continue
+      const makes = (unitId: string) =>
+        s.strategies.some((x) => x.unitId === unitId && x.outputId === id) ||
+        s.research.some((x) => x.effect.kind === 'strategy' && x.effect.strategy.unitId === unitId && x.effect.strategy.outputId === id)
       const maker = makerFor(s, id)
-      const exists = s.strategies.some((x) => x.unitId === maker && x.outputId === id) || s.research.some((x) => x.effect.kind === 'strategy' && x.effect.strategy.unitId === maker && x.effect.strategy.outputId === id)
-      if (maker && !exists) push(strategy(maker, id))
+      if (maker && !makes(maker)) push(strategy(maker, id))
+      // The makers it has aren't enough: the biggest fleet that doesn't run on it can help.
+      const helper = [...s.units]
+        .filter((u) => u.count > 0 && !makes(u.id) && !u.upkeep.some((f) => f.resourceId === id))
+        .sort((a, b) => b.count * b.value - a.count * a.value)[0]
+      if (helper && maker && makes(maker)) push(strategy(helper.id, id))
       if (capOf(s, r) < need) {
         push(storage(id, need))
         push(storage(id, need), procure(id))
@@ -725,9 +798,11 @@ export function candidates(s: GameState, style: Style): Play[] {
   }
   if (weeksLeft < 15) push(cover())
   // Something to Procure: what's short, the goal's resource, or Money.
-  // What waiting research is short of: structure, when a Procurement or two would finish it.
+  // What waiting research is short of: structure, when a Procurement or two would finish it,
+  // converting a quarter of the richest other stock.
   const short = shortOf(s)
-  structural = !!short && (shortWorth(s, short) <= 2 * B.CREATE_WORTH * industryScalar(s) * iqScalar(s))
+  const convert = Math.max(0, ...s.resources.filter((r) => r.id !== short).map((r) => r.amount * r.value * B.CREATE_CONVERT_SHARE * B.CREATE_INPUT_RETURN))
+  structural = !!short && shortWorth(s, short) <= 2 * (B.CREATE_WORTH * industryScalar(s) * iqScalar(s) + convert)
   if (short) push(procure(short))
   structural = false
   // Procure as conversion: whatever contracts, upkeep or inputs use, bought with what piles up.
@@ -1010,6 +1085,8 @@ export async function econStart(approach: number): Promise<GameState> {
   const values = Object.fromEntries(NANOTECH.resources.map((_, i) => [`r${i}_value`, score(2)]))
   const plan = await judgePlan(s, new FakeJudge({ ...values, approach: noul(B.APPROACH_AT[2][approach]!) }), NANOTECH)
   s = acceptPlan(s, plan).state
+  // Resource traits are out of scope for the balance runs (fake Jev would give them all Cryogenic).
+  for (const r of s.resources) r.traits = []
   const v = await judgeUnit(s, new FakeJudge({ ...TYPICAL }), { name: 'CNC Mill', description: '', first: true })
   return acceptUnit(s, v).state
 }

@@ -112,7 +112,7 @@ describe('App', () => {
       const gpu = await game.propose({ kind: 'unit', spec: { name: 'Rented Cloud GPU', description: '' } })
       const design = game.accept(gpu!)
       if (design?.kind !== 'research') throw new Error('expected research')
-      findResource(game.state, MONEY_ID)!.amount = 1000
+      findResource(game.state, MONEY_ID)!.amount = 1e5
       expect(game.research(design.research.id)).toBe(true)
       const unit = game.state.units.find((u) => u.name === 'Rented Cloud GPU')!
       // A new design has room for none.
@@ -124,7 +124,7 @@ describe('App', () => {
       expect(deal.options[0]!.timing).toBe('contract')
       expect(game.accept(deal)?.kind, game.lastError).toBe('added')
       expect(game.state.research).toEqual([])
-      findResource(game.state, MONEY_ID)!.amount = 1000
+      findResource(game.state, MONEY_ID)!.amount = 1e5
       expect(game.createUnits(game.state.sourcing[0]!.id, 2), game.lastError).toBe(true)
       // The contract used this week's action; the strategy waits for next week.
       expect(game.state.proposedThisWeek).toBe(true)
@@ -154,7 +154,7 @@ describe('App', () => {
 
   it('lists Procurement payouts still to come in the resource’s hover card', async () => {
     const html = await render((game) => {
-      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 19000 }))
+      game.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 199000 }))
       const pay = (name: string, amount: number, delay: number, weeks: number | null) =>
         game.state.deliveries.push({ name, target: { kind: 'resource', id: MONEY_ID }, amount, delay, weeks })
       pay('Royalties', 900, 3, 1)
@@ -183,7 +183,7 @@ describe('App', () => {
       game.state.units.push(newUnit({ id: 'bot', name: 'Bot', count: 3, value: 10 }), newUnit({ id: 'new', name: 'Fresh Design', value: 10 }))
       game.state.sourcing.push({ id: 'deal', unitId: 'bot', name: 'Bulk order', description: '', parts: [{ resourceId: MONEY_ID, amount: 10 }], total: 25, used: 3, risky: true })
     })
-    for (const text of ['1,500', '/ 20.0k', '+ Store', 'Bulk order', '3/25', 'risky', 'Procure', 'you can’t own any until you Procure some']) {
+    for (const text of ['1,500', '/ 200k', '+ Store', 'Bulk order', '3/25', 'risky', 'Procure', 'you can’t own any until you Procure some']) {
       expect(html).toContain(text)
     }
   })

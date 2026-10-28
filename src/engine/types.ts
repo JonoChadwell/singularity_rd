@@ -347,7 +347,7 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 17
+  version: 18
   runId: string
   week: number
   phase: PhaseState

@@ -23,11 +23,11 @@ You name a cover and say how it works. Jev judges two things:
 
 Jev no longer judges how convincing a cover is: the three options set its size instead.
 
-| Size | Needs IQ | Adds | Costs (worth) |
+| Size | Needs IQ | Adds | Costs (worth, in dollars) |
 | --- | --- | --- | --- |
-| Small | 125 | 6 weeks | 2,000 |
-| Medium | 250 | 12 weeks | 20,000 |
-| Large | 400 | 18 weeks | 200,000 |
+| Small | 125 | 6 weeks | $20,000 |
+| Medium | 250 | 12 weeks | $5M |
+| Large | 400 | 18 weeks | $500M |
 
 **Three options, like other research.** The options depend on your IQ for cover (`coverSize`):
 

@@ -263,8 +263,15 @@ export const researchIQ = (state: GameState, r: Research) => iqFor(state, resear
 
 // ---------------------------------------------------------------- value
 
-/** Money-equivalent worth of one week of a unit's work. */
-export const labour = (u: UnitType) => u.value / B.PAYBACK_WEEKS
+/**
+ * Worth of one week of a unit's work: its value over PAYBACK_WEEKS, times what a dollar of its
+ * tier earns. Value is how big one is; tier is how well it works.
+ */
+export const labourOf = (value: number, tier: number) =>
+  (value / B.PAYBACK_WEEKS) * (B.TIER_YIELD[Math.min(B.TIER_YIELD.length - 1, Math.max(0, tier))] ?? 1)
+
+/** Worth of one week of a unit's work. */
+export const labour = (u: UnitType) => labourOf(u.value, u.tier)
 
 /** Perks make a unit dearer to make and drawbacks cheaper. */
 export function traitPriceFactor(traits: UnitType['traits']): number {
@@ -293,6 +300,18 @@ export const openSlots = (c: Sourcing) => Math.max(0, c.total - c.used)
 
 /** Worth of every unit you own: what the Industry scalar grows with. */
 export const industryWorth = (state: GameState) => state.units.reduce((n, u) => n + owned(u) * u.value, 0)
+
+/**
+ * The highest tier of unit that makes anything: what your industry can reach without strain. At
+ * least 1, the mind itself, so a game with no units yet reaches tier 1 freely.
+ */
+export function industryTier(state: GameState): number {
+  let tier = 1
+  for (const u of state.units) {
+    if (u.count > 0 && state.strategies.some((s) => s.unitId === u.id && s.kind === 'make')) tier = Math.max(tier, u.tier)
+  }
+  return tier
+}
 
 /** The Industry scalar: 1 with no units, one step per decade of unit worth, up to INDUSTRY_MAX. */
 export function industryScalar(state: GameState): number {

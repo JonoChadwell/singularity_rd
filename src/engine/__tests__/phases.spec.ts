@@ -431,14 +431,15 @@ describe('expansions', () => {
     s.sourcing = []
     const spec = { target: { kind: 'unit', id: 'robot' } as const, name: 'Buy up a rival', description: '' }
     // A seed whose three offers are all contracts.
-    let v = await judgeCreate(s, new FakeJudge({ limit: score(4), mode: choice('supply') }), spec)
+    let v = await judgeCreate(s, new FakeJudge({ limit: score(5), mode: choice('supply') }), spec)
     for (let i = 0; !v.options.every(isContract) && i < 50; i++) {
       s.runId = `run-${i}`
-      v = await judgeCreate(s, new FakeJudge({ limit: score(4), mode: choice('supply') }), spec)
+      v = await judgeCreate(s, new FakeJudge({ limit: score(5), mode: choice('supply') }), spec)
     }
     const by = (label: string) => (v.options as ContractOption[]).find((o) => o.label === label)!
     const [quiet, own, risky] = [by('Quiet'), by('Jev’s take'), by('Cut corners')]
-    // Jev's own take adds 20,000 robots worth 1,000: 20M, so 3 weeks.
+    // Jev's own take is the global band: $5B of robots worth 1,000 each, so 1 week; the quiet one a
+    // band smaller ($400M) goes unnoticed, and the risky one is ten times the size, at double.
     expect(own.risk?.weeks).toBe(expansionWeeks(own.total * 1000, false))
     expect(quiet.risk?.weeks ?? 0).toBeLessThan(own.risk!.weeks)
     expect(risky.risk!.weeks).toBeGreaterThan(own.risk!.weeks * 2)

@@ -2,7 +2,7 @@ import { ranked, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
 import { ceilingLabel, unitRoom } from './ceilings'
 import { deliverUnits } from './economy'
-import { bestIQ, capOf, findResource, findUnit, fmt, industryScalar, iqFor, iqScalar, makeId, targetLabel, traitPriceFactor } from './model'
+import { bestIQ, capOf, findResource, findUnit, fmt, industryScalar, industryTier, iqFor, iqScalar, makeId, targetLabel, traitPriceFactor } from './model'
 import { lockReason, moveClock } from './phase'
 import { seedOf } from './planPresets'
 import {
@@ -126,9 +126,13 @@ export function precheckCreate(state: GameState, spec: CreateSpec): string | nul
 const noRoom = (u: UnitType) =>
   `Only about ${ceilingLabel(u.ceiling)} ${u.name} can exist in this phase, and you already have room for that many.`
 
-/** The reach penalty for a target of this tier, at your IQ: continuous, not banded. */
+/**
+ * The reach penalty for a target of this tier: continuous, not banded. Reaching above your IQ's
+ * tier costs output, and so does reaching above your industry's (the highest tier of unit that
+ * makes anything, at least 1): the stricter of the two applies.
+ */
 export function reachOf(state: GameState, tier: number): { reach: number; short: number } {
-  const short = Math.max(0, tier - B.iqTier(iqFor(state, 'create')))
+  const short = Math.max(0, tier - B.iqTier(iqFor(state, 'create')), tier - industryTier(state))
   return { reach: B.reachFactor(short), short }
 }
 
@@ -172,7 +176,7 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
           } satisfies JevQuestion,
           limit: {
             type: 'score',
-            instructions: `As a supply, realistically how many ${unit.name} could the AI get this way, before it runs out of suppliers, sites, buyers or patience?`,
+            instructions: `As a supply, realistically how much ${unit.name} could the AI get this way, in dollars, before it runs out of suppliers, sites, buyers or patience? One is worth about ${fmt(unit.value)}.`,
             criteria: scale(B.SOURCING_LIMITS)
           } satisfies JevQuestion,
           ...(parts.length
@@ -309,7 +313,8 @@ function contractOptions(state: GameState, v: OptionsOf, unit: UnitType, takes: 
   const iqEfficiency = B.iqEfficiency(B.techIQ(unit.tier), iqFor(state, 'unit'))
   const room = unitRoom(state, unit)
   return takes.map((t, i) => {
-    const wanted = B.pick(B.SOURCING_LIMITS, Math.max(0, limit + t.step))[1] * t.mult
+    // Sized in dollars, so a contract of dear units has fewer of them: never less than one.
+    const wanted = Math.max(1, Math.floor((B.pick(B.SOURCING_LIMITS, Math.max(0, limit + t.step))[1] * t.mult) / unit.value))
     const total = Math.min(wanted, room)
     const each = (unit.value * traitPriceFactor(unit.traits) * iqEfficiency * (t.risky ? B.RISK_PARTS : 1)) / efficiency
     return {
@@ -331,8 +336,10 @@ function priceOption(state: GameState, v: Pick<CreateVerdict, 'spec' | 'scalars'
   // The input is paid in full now, whatever the timing: it's worth what the mind would make
   // (before timing), so Efficiency and Reach shrink it too. Never more than you hold.
   const input = inputId ? findResource(state, inputId) : undefined
-  const wanted = input ? B.nice((base * B.CREATE_INPUT_SHARE * efficiency * reach) / input.value) : 0
-  const amount = input ? Math.min(wanted, input.amount) : 0
+  const usual = input ? B.nice((base * B.CREATE_INPUT_SHARE * efficiency * reach) / input.value) : 0
+  // Paid now, it can convert a share of a big stock instead: a surplus turned into what you need.
+  const convert = input && timing === 'now' ? B.nice(input.amount * B.CREATE_CONVERT_SHARE) : 0
+  const amount = input ? Math.min(Math.max(usual, convert), input.amount) : 0
   // Hazardous inputs count for more than their worth.
   const inputWorth = input ? amount * input.value * createInputFactor(input) : 0
   const inputs = input && amount > 0 ? [{ resourceId: input.id, amount }] : []

@@ -209,7 +209,7 @@ export function coverTiers(fresh: Resource[], top: Resource): void {
 
 /**
  * The batch's resources, with the one the goal is built from at the phase's top tier, and the
- * goal: its IQ bar, and a cost in that resource of GOAL_CAPS times its starting storage, times
+ * goal: its IQ bar, and a cost in that resource of GOAL_WORTH (by phase) ÷ its value, times
  * the approach's multiplier. Above one cap, you'll need to expand its storage to hold enough.
  */
 export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {

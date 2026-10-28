@@ -205,7 +205,7 @@ describe('formatting', () => {
 describe('the start', () => {
   it('has only the Starting Server, and waits for a Phase 1 plan', () => {
     const s = createInitialState()
-    expect(s.version).toBe(17)
+    expect(s.version).toBe(18)
     expect(s.phase).toMatchObject({ n: 1, status: 'planning', deadline: null, goalId: null })
     expect(s.resources).toEqual([])
     expect(s.minds).toHaveLength(1)
@@ -354,8 +354,8 @@ describe('create', () => {
   it('uses up a different resource on each option, and returns its worth with interest', async () => {
     const s = moneyWorld()
     s.resources.push(
-      newResource({ id: 'lemons', name: 'Lemons', value: 1, amount: 1000, cap: ROOMY }),
-      newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY })
+      newResource({ id: 'lemons', name: 'Lemons', value: 1, amount: 5000, cap: ROOMY }),
+      newResource({ id: 'steel', name: 'Steel', value: 1, amount: 5000, cap: ROOMY })
     )
     const v = await judgePay(s, new FakeJudge({ inputs: choice('steel', { steel: 0.6, lemons: 0.4 }), timing: choice('now') }), createSpec())
     const used = v.options.map((o) => o.inputs.map((f) => f.resourceId).join('+'))
@@ -365,12 +365,12 @@ describe('create', () => {
     expect(o.inputWorth).toBe(B.CREATE_WORTH * B.CREATE_INPUT_SHARE)
     expect(o.outputWorth).toBeCloseTo(o.inputWorth * B.CREATE_INPUT_RETURN + B.CREATE_WORTH)
     const after = acceptCreate(s, v).state
-    expect(findResource(after, 'steel')!.amount).toBe(1000 - o.inputs[0]!.amount)
+    expect(findResource(after, 'steel')!.amount).toBe(5000 - o.inputs[0]!.amount)
   })
 
   it('takes the same input now whatever the timing, shrunk by Efficiency and Reach, never more than you hold', async () => {
     const s = moneyWorld()
-    s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1000, cap: ROOMY }))
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 5000, cap: ROOMY }))
     // One resource to use, so every option asks Jev's ranking for it in turn; force each timing in.
     const inputFor = async (timing: string, answers = {}) => {
       const v = await judgePay(s, new FakeJudge({ timing: choice(timing), ...answers }), createSpec())
@@ -382,6 +382,8 @@ describe('create', () => {
     // Wasteful halves what the mind makes, and so the input.
     expect(await inputFor('now', { efficiency: score(0) })).toBe(now! * B.EFFICIENCY[0]![1])
     // Reaching a tier above your IQ shrinks it by the same factor as the output.
+    // (With less on hand, so a quarter of the stock is less than the usual input.)
+    findResource(s, 'steel')!.amount = 3000
     s.resources.push(newResource({ id: 'gold', name: 'Gold', tier: 2, value: 1, cap: ROOMY }))
     const gold = await judgePay(s, new FakeJudge({ timing: choice('now') }), createSpec({ target: { kind: 'resource', id: 'gold' } }))
     const used = gold.options.find((o) => o.inputs.length)!
@@ -392,6 +394,20 @@ describe('create', () => {
     const all = v.options.find((o) => o.inputs.length)!
     expect(all.inputs[0]!.amount).toBe(123.4)
     expect(optionBlocker(s, all)).toBeNull()
+  })
+
+  it('converts up to a quarter of a big stock when paid now, but only the usual input when paid later', async () => {
+    const s = moneyWorld()
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 1, amount: 1e6, cap: ROOMY }))
+    const inputFor = async (timing: string) => {
+      const v = await judgePay(s, new FakeJudge({ timing: choice(timing) }), createSpec())
+      return v.options.find((o) => o.timing === timing && o.inputs.length)!
+    }
+    const now = await inputFor('now')
+    expect(now.inputs[0]!.amount).toBe(1e6 * B.CREATE_CONVERT_SHARE)
+    // It comes back with interest: the conversion is worth taking.
+    expect(now.outputWorth).toBeCloseTo(now.inputWorth * B.CREATE_INPUT_RETURN + B.CREATE_WORTH)
+    expect((await inputFor('weekly')).inputs[0]!.amount).toBe(B.CREATE_WORTH * B.CREATE_INPUT_SHARE)
   })
 
   it('guarantees a free, immediate option when the target is easy for your IQ', async () => {
@@ -415,10 +431,15 @@ describe('create', () => {
     const far = await reach(100)
     expect(near.reach).toBeLessThan(1)
     expect(far.reach).toBeLessThan(near.reach)
+    // Smart enough, but no tier 2 industry yet: still a tier short.
+    expect((await reach(150)).reach).toBe(B.TIER_PENALTY[1])
+    // A tier 2 unit that makes something brings the industry up to it.
+    s.units.push(newUnit({ id: 'lab', name: 'Lab', tier: 2, value: 4000, count: 1 }))
+    s.strategies.push({ id: 'run-lab', name: 'Run the lab', description: '', unitId: 'lab', kind: 'make', inputs: [], outputId: MONEY_ID, amount: 1 })
     expect((await reach(150)).reach).toBe(1)
     expect((await reach(200)).iq).toBe(4)
     // Industry grows with the worth of the units you own, up to ×10.
-    s.units.push(newUnit({ id: 'big', name: 'Big', value: 4000, count: 1e6 }))
+    s.units.push(newUnit({ id: 'big', name: 'Big', value: 4000, count: 1e7 }))
     expect((await reach(200)).industry).toBe(B.INDUSTRY_MAX)
   })
 
@@ -556,8 +577,8 @@ describe('proposals', () => {
     expect(outcome.kind).toBe('research')
     const r = state.research.find((x) => x.name === 'Quant trading')!
     expect(r.minIQ).toBe(175)
-    // Six weeks of ten GPU Servers' work (667 each), in Steel worth 1 each.
-    expect(r.cost).toEqual([{ resourceId: 'steel', amount: 40000 }])
+    // Six weeks of the work of a fleet worth at least MIN_FLEET_WORTH (20k ÷ 1.5 a week), in Steel worth 1 each.
+    expect(r.cost).toEqual([{ resourceId: 'steel', amount: 80000 }])
     expect(state.strategies.some((x) => x.name === 'Quant trading')).toBe(false)
   })
 
@@ -569,8 +590,8 @@ describe('proposals', () => {
       { name: 'Quant trading', description: '', unitId: 'gpu', outputId: MONEY_ID }
     )
     expect(acceptStrategy(s0, v).state.research[0]!.cost).toEqual([
-      { resourceId: 'steel', amount: 20000 },
-      { resourceId: MONEY_ID, amount: 20000 }
+      { resourceId: 'steel', amount: 40000 },
+      { resourceId: MONEY_ID, amount: 40000 }
     ])
   })
 
@@ -892,6 +913,8 @@ describe('procuring units', () => {
   /** Jev reads the way as a supply. */
   const supply = choice('supply', { supply: 0.9, now: 0.1 })
   const contracts = (v: CreateVerdict) => v.options.filter(isContract)
+  /** A contract band's units: its worth in dollars, of Bots worth 200 each. */
+  const units = (band: number) => Math.floor(B.SOURCING_LIMITS[band]![1] / 200)
   /** Seeds in turn until the offers are all contracts. */
   async function allContracts(s: GameState, answers = {}) {
     for (let i = 0; i < 50; i++) {
@@ -930,9 +953,10 @@ describe('procuring units', () => {
     const s = world()
     const v = await allContracts(s, { limit: score(2), efficiency: score(2) })
     const by = (label: string) => v.options.find((o) => o.label === label)!
-    expect(by('Jev’s take').total).toBe(B.SOURCING_LIMITS[2]![1])
-    expect(by('Quiet').total).toBe(B.SOURCING_LIMITS[1]![1])
-    expect(by('Cut corners')).toMatchObject({ total: B.SOURCING_LIMITS[2]![1] * B.RISK_SOURCING, risky: true })
+    // Sized in dollars: the band's worth, in units worth 200 each.
+    expect(by('Jev’s take').total).toBe(units(2))
+    expect(by('Quiet').total).toBe(units(1))
+    expect(by('Cut corners')).toMatchObject({ total: units(2) * B.RISK_SOURCING, risky: true })
     // No fee: each one costs about what the unit is worth.
     const worth = (o: ContractOption) => o.parts.reduce((n, p) => n + p.amount * findResource(s, p.resourceId)!.value, 0)
     expect(worth(by('Jev’s take'))).toBeCloseTo(200 * by('Jev’s take').iqEfficiency, -1)
@@ -946,12 +970,12 @@ describe('procuring units', () => {
     s = acceptCreate(s, v).state
     expect(s.proposedThisWeek).toBe(true)
     expect(s.research).toEqual([])
-    expect(unitCap(s, 'bot')).toBe(B.SOURCING_LIMITS[1]![1])
+    expect(unitCap(s, 'bot')).toBe(units(1))
     s = runWeek(s)
     const again = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(1) }), { ...spec, name: 'Contract a factory' })
     s = acceptCreate(s, again).state
     expect(s.sourcing).toHaveLength(2)
-    expect(unitCap(s, 'bot')).toBe(2 * B.SOURCING_LIMITS[1]![1])
+    expect(unitCap(s, 'bot')).toBe(2 * units(1))
   })
 
   it('is cheaper for a mind well above the unit’s tier, and says so', async () => {
@@ -1052,10 +1076,10 @@ describe('storage', () => {
 
   it('cuts options to what can exist, and refuses at the ceiling', async () => {
     const s = world()
-    // A hundred thousand can exist; Steel already holds W.
-    findResource(s, 'steel')!.ceiling = 1e5
+    // A million can exist; Steel already holds W.
+    findResource(s, 'steel')!.ceiling = 1e6
     const v = await judgeStorage(s, new FakeJudge({ efficiency: score(4), reach: score(4) }), spec)
-    const room = 1e5 - W
+    const room = 1e6 - W
     expect(v.options.map((o) => o.added)).toEqual([B.nice(4 * R * 0.25), room, room])
     expect(v.options.map((o) => o.limitedBy)).toEqual([null, 'ceiling', 'ceiling'])
     // Cut to the same size, All in costs no more than Pushed.
@@ -1085,7 +1109,7 @@ describe('storage', () => {
     expect(ceilingLabel(r.ceiling)).toBe('5 billion')
   })
 
-  it('asks how many the AI could have in the lab, worth at most 10M and with room to grow', async () => {
+  it('asks how many the AI could have in the lab, worth at most 100M and with room to grow', async () => {
     const s = moneyWorld()
     s.phase = { ...newPhase(1, 1), status: 'playing' } as typeof s.phase
     const judge = new FakeJudge({ value: score(3) })
@@ -1093,8 +1117,8 @@ describe('storage', () => {
     const q = judge.calls[0]!.questions.ceiling as { instructions: string; criteria: string[] }
     expect(q.instructions).toMatch(/stuck in a supervised research lab/)
     expect(q.criteria).toHaveLength(B.LAB_CEILINGS.length)
-    // The top rung is a hundred million, but at 5 each only 2 million fit under the worth cap.
-    expect(findResource(acceptResource(s, v).state, 'drug-designs')!.ceiling).toBe(2e6)
+    // The top rung is a hundred million, but at 700 each only about a hundred thousand fit under the worth cap.
+    expect(findResource(acceptResource(s, v).state, 'drug-designs')!.ceiling).toBe(1e5)
     // A low rung still leaves the starting storage room to double.
     const low = await judgeResource(s, new FakeJudge({ value: score(0), ceiling: score(0) }), { name: 'Favours', description: '' })
     const r = findResource(acceptResource(s, low).state, 'favours')!

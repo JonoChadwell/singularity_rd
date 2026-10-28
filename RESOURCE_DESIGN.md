@@ -34,7 +34,7 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
   real tier everywhere else. The purposes are:
   - **units making it:** a unit making something above its own tier is penalised, and below its
     tier gets a bonus.
-  - **Procurement reach:** a target above your IQ's tier is penalised.
+  - **Procurement reach:** a target above your IQ's tier, or your industry's, is penalised.
   - **platform payment:** the smartest platforms must be paid in a resource of a high enough tier.
 - **Weekly effects** happen at the end of the week, in this order: losses, then overflow past the
   cap, then growth into the room that's left. Each has its own row in the resource's breakdown
@@ -112,7 +112,7 @@ It is not a world total. The question depends on the phase:
 
 - **Phase 1:** how many the AI could have while still stuck in a supervised research lab,
   without its overseers noticing. Resources pick from `LAB_CEILINGS`, one rung per power of ten
-  from ten to a hundred million. The ceiling is then held to at most `LAB_CEILING_WORTH` (10
+  from ten to a hundred million. The ceiling is then held to at most `LAB_CEILING_WORTH` ($100
   million worth) ÷ the resource's value, but never below `LAB_CEILING_ROOM` (2) × its starting
   storage, rounded up, so storage can always grow.
 - **Phase 2:** how many it could have while humans are still dominant over AI, through fronts,
@@ -147,7 +147,8 @@ other's answer. How many can exist is the resource's stored ceiling, above.
 
 1. **How much could the AI build now?** (`reach`) This is judged from its holdings, units,
    platforms and industry, not from the proposal. The baseline is the old formula:
-   `STORAGE_WORTH[tier]` × `STORAGE_REACH_SIZE` (10) × Industry × (IQ/100)² ÷ value × the
+   (`STORAGE_WORTH[tier]` × `STORAGE_REACH_SIZE` (10) × Industry + `STORAGE_PER_FLEET` (1) × the
+   worth of the units you own) × (IQ/100)² ÷ value × the
    resource's cap and expansion traits. Jev's band on `STORAGE_REACH` scales it by ×0.25 to ×8.
    The old ownership ladder (`HOLDERS`: an individual at IQ 100 up to the whole Earth at 500) is
    now only a guide in this prompt. Nothing is gated on it.

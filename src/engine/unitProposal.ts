@@ -1,7 +1,7 @@
 import { ranked, type JevAnswer, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
 import { ceilingQuestion, readCeiling } from './ceilings'
-import { byTier, findResource, findUnit, makeId } from './model'
+import { byTier, findResource, findUnit, labourOf, makeId } from './model'
 import {
   addResearch,
   baseVerdict,
@@ -372,7 +372,7 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
   const { tier, band, upkeepId, traits: ids, pay } = v.options[v.choice] ?? v.options[0]!
   const param = (id: TraitId) => v.traitOdds.find((t) => t.trait === id)?.param ?? null
   const value = B.pick(B.UNIT_VALUE, band)[1]
-  const work = value / B.PAYBACK_WEEKS
+  const work = labourOf(value, tier)
   // Tier 0 runs on nothing; any other tier on a resource one tier below.
   const upkeep: Flow[] = upkeepId
     ? [

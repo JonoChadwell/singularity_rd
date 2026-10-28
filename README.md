@@ -66,7 +66,9 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
 - **Procure** is the mind getting something directly: say what and how. For a resource, Jev
   offers three ways, each using a different resource (or nothing) and paying out now, spread
   out, later, or every week for 20 weeks. It grows with your industry and IQ², and reaching above
-  your IQ's tier costs output, a little for a little. For a unit, the three offers mix **units
+  your IQ's tier, or your industry's (the highest tier of unit that makes anything), costs output,
+  a little for a little. Paid now, it can convert up to a quarter of a big stock into what you
+  need, at ×1.2. For a unit, the three offers mix **units
   now** and **sourcing contracts**: Jev judges whether your way is more like getting a batch now
   or setting up a supply, the first offer follows that, and the other two are drawn by seed.
 - **Intelligence** is one machine at a time: a hardware platform with an IQ, running software. A
@@ -79,9 +81,11 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
   counted for one type of research. The smartest platforms (IQ 300 and up) must be paid for in a
   resource your units make, of a high enough tier.
 - **Industry units** are anything you own many of. A new design has room for none: Procure it
-  for units now (with room to match) or a **sourcing contract** (Jev says how many and from what:
+  for units now (with room to match) or a **sourcing contract** (Jev says how big a supply, in dollars, and from what:
   its own take, a quiet one or a risky one; it applies at once, with no research), which sets how
-  many more you may own. You **create** them from a contract's parts at no action. Each has upkeep and up to three **traits** from a fixed list of 14. Split a type across
+  many more you may own. You **create** them from a contract's parts at no action. A unit's value
+  is only how big one is (ten mills or one workshop); its **tier** sets how much a dollar of it
+  earns. Each has upkeep and up to three **traits** from a fixed list of 14. Split a type across
   its strategies by count; the strategy marked **rest** takes every unit not counted elsewhere.
 - **Upgrade** a unit or your platform: Jev offers its three most natural improvements, and the
   pick becomes research. A platform gets **one** software upgrade, ever (each of the three options
@@ -90,7 +94,7 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
 - **Resources** keep from week to week, up to a **storage cap**; what's made past it is lost.
   Storage research raises it: Jev judges how much your holdings let you build and how much of
   that your way captures, never past how many the AI could plausibly have in its phase (in the
-  lab: at most a hundred million, and 10M worth). That **ceiling** is set once, when a
+  lab: at most a hundred million, and $100M worth). That **ceiling** is set once, when a
   resource or unit is added, judged again when Phase 2 begins, and gone in Phase 3. You pick Careful, Pushed or
   All in, all paid once, with no weekly upkeep. An idea ahead of your IQ is sized for the IQ it
   needs, with a bonus, and waits for it. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
@@ -125,7 +129,7 @@ Their games use your Jev key and each browser keeps its own save.
 Optional settings in `.env.local`: `JEV_BASE_URL` (default `https://openrouter.ai/api`) and
 `JEV_MODEL` (default `jev-latest`).
 
-The game saves to your browser's local storage (`singularity-rd/save/v17`) after every change,
+The game saves to your browser's local storage (`singularity-rd/save/v18`) after every change,
 including Jev's answers, so the same proposal always gets the same verdict. Old save versions
 are dropped.
 
@@ -158,7 +162,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | Path | What |
 | --- | --- |
 | `src/ai/jev.ts` | Jev client, `Judge` interface, typed readers, torn-answer detection, `CachedJudge` |
-| `src/engine/types.ts` | `GameState` (v17) and everything in it |
+| `src/engine/types.ts` | `GameState` (v18) and everything in it |
 | `src/engine/balance.ts` | Every tuning number, in one place |
 | `src/engine/phase.ts`, `planProposal.ts`, `planPresets.ts` | Phases, clocks, unlocks; plan proposals and their ready-made ideas |
 | `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Procurement deliveries, storage caps, trait rules |
@@ -167,6 +171,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/research.ts`, `upgrade.ts`, `banking.ts` | Research costs and completion; upgrades; saving options for later or applying one now |
 | `src/engine/proposals.ts`, `strategyProposal.ts`, `unitProposal.ts`, `storageProposal.ts`, `createProposal.ts` (Procure, sourcing contracts included), `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |
+| `src/engine/actionValue.ts` | What an action is worth, from the state: worth now and the change each week after |
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |
 | `src/stores/ui.ts` | UI state: open dialog, tab, datasheets, board zoom and hover |
 | `src/components/` | UI: `shell/` (top bar, side panel), `board/` (the circuit board; `layout.ts` places buses, chips and traces), `sheets/` (datasheets), `views/` (Research, Manual, Log, game over), `screens/` (the title screen and the full-page plan briefing), `dialogs/` (proposals, upgrades), `kit/` (LEDs, gauges, readouts) |
@@ -179,5 +184,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 `npm run dev` · `npm run build` · `npm run preview` · `npm run test:unit` · `npm run type-check` · `npm run lint`
 
 Tests use a fake `Judge`, so they don't need a key. Balance specs play scripted bots through
-both phases. Phase 2's targets, including that it's winnable, are skipped until a retune for
+both phases. `ECON_REPORT=1 npx vitest run econreport` plays the Phase 2 balance bots and writes
+`logs/econ/latest.json`; `node scripts/econCharts.mjs` charts it in `logs/econ/charts.html` (see
+"Balance bots" in [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md)). Phase 2's targets, including that it's winnable, are skipped until a retune for
 its 80-week clock (see [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md)). Weeks never call Jev; only proposals and upgrades do.
