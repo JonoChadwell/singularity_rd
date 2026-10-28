@@ -327,10 +327,28 @@ function accept() {
   text-shadow: 0 1px 0 rgb(255 255 255 / 0.25);
 }
 
+/* Cut from the plate itself: its chrome, with dark lettering like the PH tag beside it. */
 .jev {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  color: #1a1912;
+  background: linear-gradient(180deg, var(--chrome-4), var(--chrome-3));
+  border-color: #1a1912;
+  box-shadow:
+    inset 1px 1px 0 rgb(255 255 255 / 0.2),
+    inset -1px -1px 0 rgb(0 0 0 / 0.3);
+}
+
+.jev:hover:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--chrome-4), var(--chrome-5) 30%), var(--chrome-4));
+}
+
+.jev:active:not(:disabled) {
+  background: linear-gradient(180deg, var(--chrome-3), var(--chrome-4));
+  box-shadow:
+    inset 1px 1px 0 rgb(0 0 0 / 0.3),
+    inset -1px -1px 0 rgb(255 255 255 / 0.2);
 }
 
 @media (max-width: 1250px) {
