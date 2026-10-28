@@ -265,7 +265,7 @@ function accept() {
   min-height: 100vh;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   padding: 32px 16px;
   background: radial-gradient(ellipse at center, var(--pcb-2), var(--pcb-1) 55%, var(--pcb-0));
 }
