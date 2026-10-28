@@ -686,7 +686,8 @@ Replaces the "Goal uses up" ticks in §D2 and the free first income in §D3.
   if Jev is torn). That one is the plan's top tier (Phase 1: tier 1, Phase 2: tier 3), is
   always a stock, and is the goal's whole cost. Phase 1's other resources are tier 0; Phase 2's
   others are tiered 0–3 by Jev.
-- **Phase 1 resources are cheap:** value bands 0–2 only (up to "like a meal").
+- **Phase 1 resources are cheap:** value bands 0–3 only (up to "like a phone"; raised from
+  "like a meal" on 2026-10-28).
 - **Outside a plan**, new resources are tier 0 in Phase 1 and 0–3 in Phase 2 (Jev decides).
 - **The first income for a resource is paid only in lower tiers**, so the first for any tier-0
   resource is free. "First" means no income for it is done or waiting as research. Later

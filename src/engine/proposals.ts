@@ -10,7 +10,7 @@ import {
   type Judge
 } from '@/ai/jev'
 import * as B from './balance'
-import { ceilingQuestion, readCeiling } from './ceilings'
+import { boundLabCeiling, ceilingQuestion, readCeiling } from './ceilings'
 import { makeId, namesInUse, startingCap } from './model'
 import { costMultiplier, priceCost, spendable } from './research'
 import { lockReason } from './phase'
@@ -518,7 +518,7 @@ export function resourceFrom(
   const band = read.level(`${prefix}value`, maxBand(state) + 1)
   const tier = top ?? (read.has(`${prefix}tier`) ? read.level(`${prefix}tier`, maxTier(state) + 1) : 0)
   const value = B.pick(B.RESOURCE_VALUE, band)[1]
-  return {
+  const r: Resource = {
     id: makeId(state, spec.name),
     name: spec.name,
     description: spec.description || spec.name,
@@ -530,8 +530,10 @@ export function resourceFrom(
     cap: B.nice(startingCap(tier, value) * capFactor({ traits })),
     expansions: [],
     traits,
-    ceiling: readCeiling(v.answers, 'resource', `${prefix}ceiling`)
+    ceiling: readCeiling(state, v.answers, 'resource', `${prefix}ceiling`)
   }
+  boundLabCeiling(state, r)
+  return r
 }
 
 /** Retiers a resource, keeping its storage in step: a plan may move one into an empty tier. */

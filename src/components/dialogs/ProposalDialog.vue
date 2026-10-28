@@ -371,7 +371,7 @@ const TIMING: Record<CreateTiming, string> = { now: 'Pays now', spread: 'Over 4 
 const unitCeiling = computed(() => {
   const v = verdict.value
   const u = v?.kind === 'create' && v.spec.target.kind === 'unit' ? findUnit(game.state, v.spec.target.id) : undefined
-  return ceilingLabel('unit', u?.ceiling ?? null)
+  return ceilingLabel(u?.ceiling ?? null)
 })
 
 /** Option part numbers: OPT-A, OPT-B, OPT-C. */

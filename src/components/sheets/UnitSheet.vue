@@ -46,7 +46,7 @@
         </tbody>
       </table>
       <p v-else class="note warn">None yet: you can’t own any until you Procure some.</p>
-      <p class="note">Can exist: {{ ceilingLabel('unit', u.ceiling) }}</p>
+      <p class="note">Can exist: {{ ceilingLabel(u.ceiling) }}</p>
     </section>
 
     <template #foot>

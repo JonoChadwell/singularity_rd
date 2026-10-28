@@ -57,8 +57,8 @@ export const PHASE_WEEKS: Record<1 | 2, number> = { 1: 6, 2: 80 }
 export const PLAN_RESOURCES: Record<1 | 2, number> = { 1: 3, 2: 5 }
 /** The tier of the plan's top resource, which the goal uses up. The rest of a Phase 1 plan is tier 0. */
 export const GOAL_TIER: Record<1 | 2, number> = { 1: 1, 2: 3 }
-/** The highest value band a resource can have, by the phase it arrives in: Phase 1 things are cheap. */
-export const PHASE_MAX_BAND: Record<1 | 2 | 3, number> = { 1: 2, 2: 5, 3: 5 }
+/** The highest value band a resource can have, by the phase it arrives in: Phase 1 things stop at "like a phone". */
+export const PHASE_MAX_BAND: Record<1 | 2 | 3, number> = { 1: 3, 2: 5, 3: 5 }
 /** The highest tier a resource can have, by phase. Phase 2's plan and resources stop at Beyond today. */
 export const PHASE_MAX_TIER: Record<1 | 2 | 3, number> = { 1: 0, 2: 3, 3: 4 }
 /**
@@ -258,7 +258,7 @@ export const STORAGE_SIZES: [string, number, number, 'none' | 'half' | 'full'][]
 ]
 /** An expansion costs this share of its base worth (STORAGE_WORTH × reach size × share, before the scalars). */
 export const STORAGE_COST_SHARE = 0.2
-/** How many of a resource could exist at most: [label, units]. One rung per power of ten. */
+/** How many of a resource the AI could have in Phase 2: [label, units]. One rung per two powers of ten. */
 export const STORAGE_CEILINGS: [string, number][] = [
   'a thousand',
   'a hundred thousand',
@@ -270,7 +270,22 @@ export const STORAGE_CEILINGS: [string, number][] = [
   'a hundred quadrillion',
   'ten quintillion'
 ].map((label, i) => [label, 10 ** (2 * i + 3)])
-/** How many of a unit could exist at most: [label, units]. One rung per power of ten. */
+/** How many of a resource the AI could have while stuck in the lab (Phase 1): [label, units]. One rung per power of ten. */
+export const LAB_CEILINGS: [string, number][] = [
+  'ten',
+  'a hundred',
+  'a thousand',
+  'ten thousand',
+  'a hundred thousand',
+  'a million',
+  'ten million',
+  'a hundred million'
+].map((label, i) => [label, 10 ** (i + 1)])
+/** In the lab, no resource's ceiling is worth more than this. */
+export const LAB_CEILING_WORTH = 1e7
+/** In the lab, a resource's ceiling is at least this many times its storage, so it can always grow. */
+export const LAB_CEILING_ROOM = 2
+/** How many of a unit the AI could have at most: [label, units]. One rung per power of ten. */
 export const UNIT_CEILINGS: [string, number][] = [
   'ten',
   'a hundred',

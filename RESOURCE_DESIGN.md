@@ -101,19 +101,33 @@ Caps are there for realism and storytelling. They stop paths that pass realistic
 billion hired humans in Phase 2), and they push the player toward a blend of resources instead of
 one or two.
 
-## Ceilings: how many can exist
+## Ceilings: how many the AI could have
 
-Status: **built** (2026-10-27, save version 17). Code: [src/engine/ceilings.ts](src/engine/ceilings.ts).
+Status: **built** (2026-10-27, save version 17; made phase-specific 2026-10-28). Code:
+[src/engine/ceilings.ts](src/engine/ceilings.ts).
 
-Every resource and unit has a `ceiling`: how many could exist in the AI's world, made or owned
-by anyone. It is not asked on every proposal. It is settled at three points:
+Every resource and unit has a `ceiling`: how many the AI could reasonably have in its phase.
+Storage expansions let the player grow towards it, and the ceiling keeps that growth plausible.
+It is not a world total. The question depends on the phase:
+
+- **Phase 1:** how many the AI could have while still stuck in a supervised research lab,
+  without its overseers noticing. Resources pick from `LAB_CEILINGS`, one rung per power of ten
+  from ten to a hundred million. The ceiling is then held to at most `LAB_CEILING_WORTH` (10
+  million worth) ÷ the resource's value, but never below `LAB_CEILING_ROOM` (2) × its starting
+  storage, rounded up, so storage can always grow.
+- **Phase 2:** how many it could have while humans are still dominant over AI, through fronts,
+  companies and people, bound to Earth unless the world text says otherwise. Resources pick from
+  `STORAGE_CEILINGS`, one rung per two powers of ten from a thousand to ten quintillion (nine
+  rungs; the Jev API allows at most 10 criteria). Units (which only arrive in Phase 2) pick from
+  `UNIT_CEILINGS`, one per power of ten from ten to ten billion **(Claude's default)**.
+
+Jev's answer isn't one rung. Its top two rungs are blended, weighted by how likely each is, in
+powers of ten, and rounded to one significant figure (a billion and a hundred billion at 2:1 give
+5 billion). So there is no sharp step between rungs. Labels are spelled out ("5 billion"). The
+ceiling is settled at three points:
 
 - **When the thing is added.** A resource (from the + Resource dialog or a plan) and a unit (when
-  it's designed) are asked in their own Jev call. Resources pick a rung on `STORAGE_CEILINGS`,
-  one per two powers of ten from a thousand to ten quintillion (nine rungs; the Jev API allows at
-  most 10 criteria). Units pick a rung on `UNIT_CEILINGS`, one per power of ten from ten to ten
-  billion **(Claude's default)**. Phases 1 and 2 are bound to Earth unless the world text says
-  otherwise.
+  it's designed) are asked in their own Jev call.
 - **When Phase 2 begins.** The Phase 2 plan's Jev call asks again for every resource and unit
   already in the game (`ceiling_r_<id>`, `ceiling_u_<id>`), and accepting the plan writes the
   answers **(Claude's default: folded into the plan call, so no extra call)**. A cap already past

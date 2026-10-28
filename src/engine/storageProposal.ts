@@ -177,7 +177,7 @@ export function storageReadings(
   const [techLabel, neededIQ] = B.STORAGE_TECH_LEVELS[read.level('techLevel', B.STORAGE_TECH_LEVELS.length)]!
   return {
     ceiling: r.ceiling,
-    ceilingLabel: ceilingLabel('resource', r.ceiling),
+    ceilingLabel: ceilingLabel(r.ceiling),
     reach: B.nice(baseline(state, r, iq) * band),
     reachLabel,
     holderLabel: B.HOLDERS[B.holderReach(iq)]![0],

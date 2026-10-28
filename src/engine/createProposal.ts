@@ -124,7 +124,7 @@ export function precheckCreate(state: GameState, spec: CreateSpec): string | nul
 }
 
 const noRoom = (u: UnitType) =>
-  `Only about ${ceilingLabel('unit', u.ceiling)} ${u.name} can exist in this phase, and you already have room for that many.`
+  `Only about ${ceilingLabel(u.ceiling)} ${u.name} can exist in this phase, and you already have room for that many.`
 
 /** The reach penalty for a target of this tier, at your IQ: continuous, not banded. */
 export function reachOf(state: GameState, tier: number): { reach: number; short: number } {

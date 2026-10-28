@@ -24,7 +24,7 @@
           { k: 'To start', v: fmt(r.cap), num: true },
           ...r.expansions.map((e) => ({ k: e.name, v: `+${fmt(e.added)}`, num: true })),
           { k: 'Storage', v: fmt(cap), num: true },
-          { k: 'Can exist', v: ceilingLabel('resource', r.ceiling) }
+          { k: 'Can exist', v: ceilingLabel(r.ceiling) }
         ]"
       />
     </section>

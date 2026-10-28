@@ -19,6 +19,7 @@ import { runWeek } from '../cycle'
 import { previewWeek } from '../economy'
 import { createInitialState, newMind, newResource, newUnit, SERVER_ID } from '../initialState'
 import { newPhase } from '../phase'
+import { ceilingLabel } from '../ceilings'
 import { acceptMind, DEFAULT_SOFTWARE, judgeMind, precheckMind, type MindSpec } from '../mindProposal'
 import {
   affordable,
@@ -1072,6 +1073,46 @@ describe('storage', () => {
     expect(findResource(acceptResource(s, v).state, 'lemons')!.ceiling).toBe(B.STORAGE_CEILINGS[2]![1])
     const free = await judgeResource(moneyWorld(), new FakeJudge(), { name: 'Lemons', description: '' })
     expect(findResource(acceptResource(moneyWorld(), free).state, 'lemons')!.ceiling).toBeNull()
+  })
+
+  it('blends Jev’s top two rungs into a nice ceiling', async () => {
+    const s = moneyWorld()
+    s.phase = { ...newPhase(2, 1), status: 'playing' } as typeof s.phase
+    // A billion and a hundred billion, two to one: 10^(29/3) ≈ 4.6 billion, so 5 billion.
+    const v = await judgeResource(s, new FakeJudge({ ceiling: score(3, { '3': 0.6, '4': 0.3, '1': 0.1 }) }), { name: 'Lemons', description: '' })
+    const r = findResource(acceptResource(s, v).state, 'lemons')!
+    expect(r.ceiling).toBe(5e9)
+    expect(ceilingLabel(r.ceiling)).toBe('5 billion')
+  })
+
+  it('asks how many the AI could have in the lab, worth at most 10M and with room to grow', async () => {
+    const s = moneyWorld()
+    s.phase = { ...newPhase(1, 1), status: 'playing' } as typeof s.phase
+    const judge = new FakeJudge({ value: score(3) })
+    const v = await judgeResource(s, judge, { name: 'Drug Designs', description: '' })
+    const q = judge.calls[0]!.questions.ceiling as { instructions: string; criteria: string[] }
+    expect(q.instructions).toMatch(/stuck in a supervised research lab/)
+    expect(q.criteria).toHaveLength(B.LAB_CEILINGS.length)
+    // The top rung is a hundred million, but at 5 each only 2 million fit under the worth cap.
+    expect(findResource(acceptResource(s, v).state, 'drug-designs')!.ceiling).toBe(2e6)
+    // A low rung still leaves the starting storage room to double.
+    const low = await judgeResource(s, new FakeJudge({ value: score(0), ceiling: score(0) }), { name: 'Favours', description: '' })
+    const r = findResource(acceptResource(s, low).state, 'favours')!
+    expect(r.ceiling).toBeGreaterThanOrEqual(2 * r.cap)
+    expect(r.ceiling).toBeLessThan(10 * r.cap)
+  })
+
+  it('spells ceilings in words', () => {
+    expect([10, 500, 1e5, 2.5e3, 3e7, 1e9, 1e19, null].map(ceilingLabel)).toEqual([
+      'ten',
+      '500',
+      'a hundred thousand',
+      '2.5 thousand',
+      '30 million',
+      'a billion',
+      'ten quintillion',
+      'no limit'
+    ])
   })
 
   it('sizes Pushed or All in for the IQ an advanced way needs, with a bonus', async () => {

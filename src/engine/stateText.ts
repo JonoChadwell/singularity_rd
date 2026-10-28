@@ -13,7 +13,7 @@ export function describeState(state: GameState): string {
   const unitLine = (u: GameState['units'][number]) => {
     const bits: string[] = []
     if (u.upkeep.length) bits.push(`runs on ${describeFlows(state, u.upkeep)} a week`)
-    if (u.ceiling !== null) bits.push(`about ${ceilingLabel('unit', u.ceiling)} can exist`)
+    if (u.ceiling !== null) bits.push(`the AI could have about ${ceilingLabel(u.ceiling)} at most`)
     if (u.traits.length) bits.push(u.traits.map((t) => TRAITS[t].name).join(', '))
     return `- ${u.name}${bits.length ? ` (${bits.join('; ')})` : ''}: ${u.description}`
   }
@@ -34,7 +34,7 @@ export function describeState(state: GameState): string {
     ...state.resources.map(
       (r) =>
         `- ${r.name} (tier ${r.tier}${r.traits.length ? `; ${r.traits.map((t) => RESOURCE_TRAITS[t].name).join(', ')}` : ''}${
-          r.ceiling !== null ? `; about ${ceilingLabel('resource', r.ceiling)} can exist` : ''
+          r.ceiling !== null ? `; the AI could have about ${ceilingLabel(r.ceiling)} at most` : ''
         }): ${r.description}`
     ),
     '',

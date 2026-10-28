@@ -89,7 +89,8 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
   a perk or remove a drawback). After that, only a new platform goes further.
 - **Resources** keep from week to week, up to a **storage cap**; what's made past it is lost.
   Storage research raises it: Jev judges how much your holdings let you build and how much of
-  that your way captures, never past how many can exist. That **ceiling** is set once, when a
+  that your way captures, never past how many the AI could plausibly have in its phase (in the
+  lab: at most a hundred million, and 10M worth). That **ceiling** is set once, when a
   resource or unit is added, judged again when Phase 2 begins, and gone in Phase 3. You pick Careful, Pushed or
   All in, all paid once, with no weekly upkeep. An idea ahead of your IQ is sized for the IQ it
   needs, with a bonus, and waits for it. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
