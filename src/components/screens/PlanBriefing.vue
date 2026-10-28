@@ -107,7 +107,7 @@
             </DataSheet>
             <table class="added">
               <thead>
-                <tr><th /><th>Resource</th><th>Tier</th><th>Worth</th><th class="num">Holds</th></tr>
+                <tr><th /><th>Resource</th><th>Tier</th><th>Value</th><th class="num">Storage</th></tr>
               </thead>
               <tbody>
                 <tr v-for="r in draft.added" :key="r.id" :title="r.description" :class="{ top: r.id === draft.top.id }">
