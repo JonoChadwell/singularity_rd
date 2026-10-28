@@ -57,10 +57,6 @@
                 <input v-model="r.description" class="grow" :maxlength="DESCRIPTION_MAX" placeholder="What is it? (optional)" />
                 <span v-if="have(r.name)" class="chip good">have</span>
               </div>
-              <p class="silk-note">
-                One becomes the goal’s: tier {{ GOAL_TIER[phase] }}, used up by the goal ·
-                {{ phase === 1 ? 'The rest are tier 0' : 'The rest are lower tiers' }}
-              </p>
             </section>
 
             <div v-if="phase === 2" class="spec">
@@ -132,7 +128,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, toRaw, watch } from 'vue'
-import { APPROACH_BOUNDS, GOAL_APPROACH, GOAL_TIER, PHASE_WEEKS, PLAN_RESOURCES } from '@/engine/balance'
+import { APPROACH_BOUNDS, GOAL_APPROACH, PHASE_WEEKS, PLAN_RESOURCES } from '@/engine/balance'
 import type { Verdict } from '@/engine/dispatch'
 import { bandText, describeCost, fmt } from '@/engine/model'
 import { PHASE_NAMES } from '@/engine/phase'
