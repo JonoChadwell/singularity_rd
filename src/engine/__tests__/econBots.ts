@@ -28,6 +28,8 @@ import {
   creatable,
   findResource,
   findUnit,
+  industryScalar,
+  iqScalar,
   MONEY_ID,
   openSlots,
   tasksFor,
@@ -40,7 +42,8 @@ import { acceptStrategy, judgeStrategy } from '../strategyProposal'
 import type { GameState, Research } from '../types'
 import { acceptUnit, judgeUnit, runPool } from '../unitProposal'
 import { acceptUpgrade, judgeUpgrade } from '../upgrade'
-import { phase2 } from './bots'
+import { flat, NANOTECH, phase1, play } from './bots'
+import { acceptPlan, judgePlan } from '../planProposal'
 import { choice, FakeJudge, noul, score, type Overrides } from './fakeJudge'
 
 // The balance roster: simple scripted players for Phase 2, played through the real engine with
@@ -111,6 +114,9 @@ const fresh = (ctx: Ctx, base: string) => `${base} ${++ctx.names}`
 
 // ---------------------------------------------------------------- moves
 
+/** One or more moves over the coming weeks. Structural plays build the ladder, IQ and supply; the rest grow. */
+export type Play = Move[] & { structural?: boolean }
+
 /** One week's action. `run` returns the new state, or null when it can't be done now. */
 export interface Move {
   kind: ActionKind
@@ -141,7 +147,11 @@ export const procure = (resourceId: string, timing: B.CreateTiming = 'now'): Mov
         description: ''
       })
       if (v.rejected) return null
-      const ok = v.options.map((o, i) => ({ o, i })).filter(({ o }) => !optionBlocker(s, o))
+      // Never pay with what waiting research is saving up.
+      const saving = reserved(s)
+      const ok = v.options
+        .map((o, i) => ({ o, i }))
+        .filter(({ o }) => !optionBlocker(s, o) && !('inputs' in o && o.inputs.some((f) => saving[f.resourceId])))
       const pick = ok.find(({ o }) => o.timing === timing) ?? ok[0]
       if (!pick) return null
       v.choice = pick.i
@@ -476,8 +486,9 @@ function bestOutput(s: GameState, unitId: string): string | null {
 
 /** Resources that something uses (inputs or upkeep) but nothing makes and nothing delivers. */
 function unsupplied(s: GameState): string[] {
+  // Made only if some unit is actually there to make it.
   const made = new Set([
-    ...s.strategies.filter((x) => x.kind === 'make').map((x) => x.outputId),
+    ...s.strategies.filter((x) => x.kind === 'make' && findUnit(s, x.unitId)?.count).map((x) => x.outputId),
     ...s.deliveries.flatMap((d) => (d.target.kind === 'resource' ? [d.target.id] : []))
   ])
   const needed = new Set<string>()
@@ -489,6 +500,15 @@ function unsupplied(s: GameState): string[] {
     if (u?.count && tasksFor(s, u).includes(x.id)) for (const f of x.inputs) needed.add(f.resourceId)
   }
   return [...needed].filter((id) => !made.has(id))
+}
+
+/** Resources that open contracts' parts, upkeep or running strategies use up. */
+function inUse(s: GameState): string[] {
+  const ids = new Set<string>()
+  for (const c of s.sourcing) if (openSlots(c)) for (const p of c.parts) ids.add(p.resourceId)
+  for (const u of s.units) if (u.count) for (const f of u.upkeep) ids.add(f.resourceId)
+  for (const x of s.strategies) if (findUnit(s, x.unitId)?.count) for (const f of x.inputs) ids.add(f.resourceId)
+  return [...ids]
 }
 
 /** The unit best placed to make a resource: the lowest tier that's at least the resource's, else the highest. */
@@ -536,6 +556,14 @@ function shortOf(s: GameState): string | null {
   return null
 }
 
+/** Worth a waiting research (not the goal) still needs of a resource. */
+function shortWorth(s: GameState, resourceId: string): number {
+  const r = findResource(s, resourceId)
+  if (!r) return 0
+  const need = s.research.filter((x) => x.effect.kind !== 'goal').flatMap((x) => x.cost).filter((c) => c.resourceId === resourceId)
+  return Math.max(0, ...need.map((c) => (c.amount - r.amount) * r.value))
+}
+
 const waitingKind = (s: GameState, kind: Research['effect']['kind']) => s.research.some((r) => r.effect.kind === kind)
 const waitingIQ = (s: GameState) => waitingKind(s, 'mind') || s.research.some((r) => r.effect.kind === 'upgrade' && r.effect.target.kind === 'mind')
 
@@ -546,7 +574,10 @@ const iqMove = (s: GameState): Move | null => (waitingIQ(s) ? null : s.minds[0]!
 function platformGate(s: GameState): number | null {
   const tier = B.platformGateTier(bestIQ(s) + B.MAX_IQ_STEP)
   if (tier === null) return null
-  const made = s.strategies.some((x) => x.kind === 'make' && (findResource(s, x.outputId)?.tier ?? -1) >= tier)
+  const tierOf = (id: string) => findResource(s, id)?.tier ?? -1
+  const made =
+    s.strategies.some((x) => x.kind === 'make' && tierOf(x.outputId) >= tier) ||
+    s.research.some((r) => r.effect.kind === 'strategy' && tierOf(r.effect.strategy.outputId) >= tier)
   return made ? null : tier
 }
 
@@ -561,6 +592,9 @@ export interface Style {
   procureOnly?: boolean
 }
 
+/** Weeks of slack past the expected IQ climb at which the goal's IQ becomes the priority. */
+const IQ_SLACK = 30
+
 /** The weeks a full IQ climb to the goal is likely to take: about four weeks a step. */
 const weeksToGoalIQ = (s: GameState) => Math.ceil(Math.max(0, (goal(s)?.minIQ ?? 0) - bestIQ(s)) / B.MAX_IQ_STEP) * 4
 
@@ -568,8 +602,8 @@ const weeksToGoalIQ = (s: GameState) => Math.ceil(Math.max(0, (goal(s)?.minIQ ??
  * What a bot could do this week, in its order of priority. Each item is a play: one move, or
  * several over the coming weeks (a new tier: design, strategy, contract).
  */
-export function candidates(s: GameState, style: Style): Move[][] {
-  const out: Move[][] = []
+export function candidates(s: GameState, style: Style): Play[] {
+  const out: Play[] = []
   const g = goal(s)
   const top = goalResource(s)
   const weeksLeft = (s.phase.deadline ?? 0) - s.week + 1
@@ -582,15 +616,22 @@ export function candidates(s: GameState, style: Style): Move[][] {
     const maker = target && makerFor(s, target.id)
     return target && maker ? [strategy(maker, target.id), iqMove(s)] : [null]
   }
+  // Steps that build the economy's structure (the ladder, IQ, supply) rather than grow it.
+  let structural = true
   const push = (...moves: (Move | null)[]) => {
     const real = moves.filter((m): m is Move => !!m)
-    if (real.length === moves.length) out.push(real)
+    if (real.length === moves.length) out.push(Object.assign(real, { structural }))
+  }
+  const grows = () => {
+    structural = false
+    growth(s, style, push)
+    structural = true
   }
 
   // The goal's own needs come first when time is short.
   const big = tooBig(s)
   if (big) push(storage(big.resourceId, big.amount))
-  if (g && needIQ(g.minIQ) && weeksLeft <= weeksToGoalIQ(s) + 12) push(...iqPlay())
+  if (g && needIQ(g.minIQ) && weeksLeft <= weeksToGoalIQ(s) + IQ_SLACK) push(...iqPlay())
   if (style.lean === 'brain' && g && needIQ(g.minIQ)) push(...iqPlay())
 
   if (!style.procureOnly) {
@@ -620,20 +661,21 @@ export function candidates(s: GameState, style: Style): Move[][] {
       const maker = target && makerFor(s, target.id)
       if (target && maker) push(strategy(maker, target.id))
     }
-    if (style.lean === 'scale') growth(s, style, push)
+    if (style.lean === 'scale') grows()
     // The next tier.
     const next = highestTier(s) + 1
     if (next <= style.maxTier && next <= B.MAX_UNIT_TIER && !waitingKind(s, 'unit')) {
       const [, iq] = B.TIERS[next]!
       if (bestIQ(s) >= iq && (next === 0 || runPool(s, next).length)) {
-        out.push([design(next), workTier(next), contractTier(next)])
+        push(design(next), workTier(next), contractTier(next))
       } else if (needIQ(iq)) push(...iqPlay(), design(next), workTier(next), contractTier(next))
     }
-    if (style.lean !== 'scale') growth(s, style, push)
+    if (style.lean !== 'scale') grows()
   }
 
   // IQ toward the goal.
   if (g && needIQ(g.minIQ) && (style.lean !== 'scale' || highestTier(s) >= Math.min(style.maxTier, 3))) push(...iqPlay())
+  structural = false
   // Storage for what overflows.
   const report = previewWeek(s)
   const income = Math.max(1, grossIncome(s, report))
@@ -643,9 +685,16 @@ export function candidates(s: GameState, style: Style): Move[][] {
   }
   if (weeksLeft < 15) push(cover())
   // Something to Procure: what's short, the goal's resource, or Money.
+  // What waiting research is short of: structure, when a Procurement or two would finish it.
   const short = shortOf(s)
+  structural = !!short && (shortWorth(s, short) <= 2 * B.CREATE_WORTH * industryScalar(s) * iqScalar(s))
   if (short) push(procure(short))
-  if (top) push(procure(top))
+  structural = false
+  // Procure as conversion: whatever contracts, upkeep or inputs use, bought with what piles up.
+  for (const id of inUse(s)) if (id !== short) push(procure(id))
+  // The goal's resource only once there's room for it: before that, it all overflows.
+  const topRes = top ? findResource(s, top) : undefined
+  if (topRes && capOf(s, topRes) > topRes.amount) push(procure(topRes.id))
   push(procure(MONEY_ID))
   return out
 }
@@ -808,11 +857,21 @@ export function greedy(style: Style = CLIMBER, weighed?: (w: Weighed[]) => void)
     // The goal's needs are first in the list when they're pressing: take them as they are.
     const g = goal(s)
     const urgent = plays.find(
-      (p) => (p[0]!.kind === 'storage' && tooBig(s)?.resourceId === p[0]!.key.split(':')[1]) || (p.some((m) => m.kind === 'software' || m.kind === 'platform') && g && bestIQ(s) < g.minIQ && weeksLeft <= weeksToGoalIQ(s) + 12)
+      (p) => (p[0]!.kind === 'storage' && tooBig(s)?.resourceId === p[0]!.key.split(':')[1]) || (p.some((m) => m.kind === 'software' || m.kind === 'platform') && g && bestIQ(s) < g.minIQ && weeksLeft <= weeksToGoalIQ(s) + IQ_SLACK)
     )
     let best: { play: Move[]; score: number } | null = null
     const seen: Weighed[] = []
-    for (const play of urgent ? [urgent] : plays) {
+    // The structure it builds as the climber would; only how it grows is chosen by value.
+    if (!urgent && !weighed) {
+      for (const play of plays.filter((p) => p.structural)) {
+        const next = await play[0]!.run(s, ctx)
+        if (!next) continue
+        took(ctx, play[0]!)
+        ctx.queue.push(...play.slice(1))
+        return next
+      }
+    }
+    for (const play of urgent ? [urgent] : weighed ? plays : plays.filter((p) => !p.structural)) {
       const valued = await valuePlay(s, ctx, play)
       if (!valued) continue
       // Value per week of action: a play of three steps uses three weeks.
@@ -899,9 +958,18 @@ export interface RunRecord {
 /** Weeks into Phase 2 at which greedy's options are recorded. */
 export const CHECKPOINTS = [1, 9, 20, 45, 70]
 
-/** A Phase 2 start: the plan for this approach, with its first unit designed (free, no action). */
+/**
+ * A Phase 2 start as a real game reaches it: the Phase 1 bot plays the balanced bribe plan to a
+ * win, keeping its three resources and anything still paying out; then the nanotech plan for
+ * this approach brings five more, and its first unit is designed (free, no action).
+ */
 export async function econStart(approach: number): Promise<GameState> {
-  const s = await phase2(approach)
+  const p1 = await play(await phase1(1), flat, 12)
+  let s = p1.state
+  if (s.phase.n !== 2) throw new Error('The Phase 1 bot never escaped the lab.')
+  const values = Object.fromEntries(NANOTECH.resources.map((_, i) => [`r${i}_value`, score(2)]))
+  const plan = await judgePlan(s, new FakeJudge({ ...values, approach: noul(B.APPROACH_AT[2][approach]!) }), NANOTECH)
+  s = acceptPlan(s, plan).state
   const v = await judgeUnit(s, new FakeJudge({ ...TYPICAL }), { name: 'CNC Mill', description: '', first: true })
   return acceptUnit(s, v).state
 }
