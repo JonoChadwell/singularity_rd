@@ -115,9 +115,16 @@
                   <td>{{ r.icon }} {{ r.name }}</td>
                   <td class="num">T{{ r.tier }}</td>
                   <td>
-                    <span v-for="t in r.traits" :key="t" class="trait" :title="`▲ ${resourceTrait(t).upside}\n▼ ${resourceTrait(t).downside}`">
+                    <button
+                      v-for="t in r.traits"
+                      :key="t"
+                      type="button"
+                      class="trait"
+                      :title="`▲ ${resourceTrait(t).upside}\n▼ ${resourceTrait(t).downside}`"
+                      @click="ui.openSheet({ kind: 'rtrait', id: t })"
+                    >
                       {{ resourceTrait(t).icon }} {{ resourceTrait(t).name }}
-                    </span>
+                    </button>
                   </td>
                   <td>{{ bandText(r) }}</td>
                   <td class="num">{{ fmt(r.cap) }}</td>
@@ -559,8 +566,19 @@ function accept() {
 }
 
 .added .trait {
-  margin-right: 8px;
+  margin: 0 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
   white-space: nowrap;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.added .trait:hover {
+  color: var(--led-a);
 }
 
 .added tr.top td {
