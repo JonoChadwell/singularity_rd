@@ -99,7 +99,7 @@
                   { k: 'Requires', v: `${draft.goal.minIQ} IQ`, num: true },
                   { k: 'Uses up', v: draft.goal.cost.length ? describeCost(draft.state, draft.goal.cost) : 'nothing' },
                   { k: 'Approach', v: `Takes ${GOAL_APPROACH[approachLevel(verdict)]![0].toLowerCase()}` },
-                  { k: 'Clock', v: `${PHASE_WEEKS[phase]} weeks${phase === 2 ? ', moved by your actions' : ', +6 with cover'}` },
+                  { k: 'Clock', v: `${PHASE_WEEKS[phase]} weeks${phase === 2 ? ', moved by your actions' : ''}` },
                   { k: 'Fails by', v: `${verdict.loss.name}: ${verdict.loss.threat}`, tone: 'bad' }
                 ]"
               />
