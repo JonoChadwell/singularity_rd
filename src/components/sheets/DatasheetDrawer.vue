@@ -6,7 +6,7 @@
       <button type="button" class="small close" aria-label="Close datasheet" @click="ui.closeSheets()">✕</button>
     </div>
     <div class="paper">
-      <ResourceSheet v-if="top.kind === 'resource'" :id="top.id" :key="`r-${top.id}`" />
+      <ResourceSheet v-if="top.kind === 'resource'" :id="top.id" :draft="top.draft" :key="`r-${top.id}`" />
       <UnitSheet v-else-if="top.kind === 'unit'" :id="top.id" :key="`u-${top.id}`" />
       <MindSheet v-else-if="top.kind === 'mind'" :id="top.id" :key="`m-${top.id}`" />
       <StrategySheet v-else-if="top.kind === 'strategy'" :id="top.id" :key="`s-${top.id}`" />

@@ -112,7 +112,17 @@
               <tbody>
                 <tr v-for="r in draft.added" :key="r.id" :title="r.description" :class="{ top: r.id === draft.top.id }">
                   <td>{{ r.id === draft.top.id ? '🎯' : '' }}</td>
-                  <td>{{ r.icon }} {{ r.name }}</td>
+                  <td>
+                    <span
+                      role="link"
+                      tabindex="0"
+                      class="trait"
+                      @click="ui.openSheet({ kind: 'resource', id: r.id, draft: r })"
+                      @keydown.enter="ui.openSheet({ kind: 'resource', id: r.id, draft: r })"
+                    >
+                      {{ r.icon }} {{ r.name }}
+                    </span>
+                  </td>
                   <td class="num">T{{ r.tier }}</td>
                   <td>
                     <span

@@ -58,7 +58,7 @@
       </table>
     </section>
 
-    <template #foot>
+    <template v-if="!draft" #foot>
       <button class="small" :disabled="!!lockReason(game.state, 'create')" @click="ui.openInvent({ kind: 'create', outputId: r.id })">+ Procure</button>
       <button class="small" :disabled="!!lockReason(game.state, 'storage')" @click="ui.openInvent({ kind: 'storage', resourceId: r.id })">+ Store</button>
       <button v-if="!lockReason(game.state, 'strategy')" class="small" @click="ui.openInvent({ kind: 'strategy', outputId: r.id })">+ Strategy</button>
@@ -68,6 +68,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { Resource } from '@/engine/types'
 import { ceilingLabel } from '@/engine/ceilings'
 import { netFlow } from '@/engine/economy'
 import { bandText, capOf, deliveryTiming, findResource, fmt, tierText } from '@/engine/model'
@@ -79,10 +80,10 @@ import DataSheet from '../kit/DataSheet.vue'
 import SpecTable, { type SpecRow } from '../kit/SpecTable.vue'
 import { partNo } from './text'
 
-const props = defineProps<{ id: string }>()
+const props = defineProps<{ id: string; draft?: Resource }>()
 const game = useGameStore()
 const ui = useUiStore()
-const r = computed(() => findResource(game.state, props.id))
+const r = computed(() => findResource(game.state, props.id) ?? props.draft)
 const cap = computed(() => (r.value ? capOf(game.state, r.value) : 0))
 const flows = computed(() => game.preview.flows[props.id] ?? [])
 const pending = computed(() =>

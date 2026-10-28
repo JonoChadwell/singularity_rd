@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Prompt } from '@/engine/alerts'
 import { lockReason } from '@/engine/phase'
-import type { UpgradeTarget } from '@/engine/types'
+import type { Resource, UpgradeTarget } from '@/engine/types'
 import { useGameStore } from './game'
 
 export type InventKind = 'resource' | 'strategy' | 'unit' | 'mind' | 'upgrade' | 'create' | 'storage' | 'cover'
@@ -32,7 +32,7 @@ export type Tab = 'board' | 'research' | 'manual' | 'log'
 
 /** A datasheet: everything about one thing, on paper, in the drawer. */
 export type SheetRef =
-  | { kind: 'resource' | 'unit' | 'mind' | 'strategy' | 'research'; id: string }
+  | { kind: 'resource' | 'unit' | 'mind' | 'strategy' | 'research'; id: string; draft?: Resource }
   | { kind: 'trait' | 'rtrait' | 'ctrait'; id: string }
   | { kind: 'jev' }
 
