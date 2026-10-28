@@ -187,7 +187,8 @@ what it does for Procurements.
 typical values (plausibility 0.7; an action is Reasonable its first three times and Wasteful
 after; contracts a band bigger each time and at least four weeks' income, then one band more,
 on the assumption that real Jev sizes them that much larger, still to check; alarm "a little
-closer"). Resource, unit and compute traits are out of scope. The roster:
+closer"). They take IQ steps nearest +50 (`IQ_STEP`) and take cover before anything else with
+three weeks or fewer left (`COVER_AT`). Resource, unit and compute traits are out of scope. The roster:
 
 | Bot | Plays |
 | --- | --- |
@@ -204,12 +205,11 @@ closer"). Resource, unit and compute traits are out of scope. The roster:
 seconds); chart it with `node scripts/econCharts.mjs` (`logs/econ/charts.html`: income, worth,
 fleet by tier, IQ, clock, goal progress, spend and action mix per bot, by approach).
 
-**Status (2026-10-28): Phase 2 is not balanced yet.** No bot wins. The bots take IQ steps
-nearest +50 (`IQ_STEP`). The climbing bots now beat the income anchors ($0.4–4.8B a week by week
-45, $5–15B by 60) and reach IQ 425–475, but run out of clock around weeks 60–73: the 350→425 stretch
-of `HARDWARE_COSTS` holds most of the hardware cost, and storing the goal resource takes many
-expansions. The tier 0 bot still snowballs fastest early ($21B a week by week 30) and loses to
-the clock.
+**Status (2026-10-28): Phase 2 is not tuned yet.** With cover, greedy wins every approach
+(weeks 78–90 of the phase), and the climber, brain, scale and no-upgrades bots win some; the tier 0
+bot loses every one. The climbing economies beat the income anchors by a wide margin ($0.4–4.8B a
+week by week 45), wins need all or most of the three covers, and the 350→425 stretch of
+`HARDWARE_COSTS` and storing the goal resource still take most of the time.
 
 ## Costs and values
 

@@ -704,6 +704,9 @@ export interface Style {
   procureOnly?: boolean
 }
 
+/** Weeks left on the clock at which the bots take cover before anything else. */
+export const COVER_AT = 3
+
 /** Weeks of slack past the expected IQ climb at which the goal's IQ becomes the priority. */
 const IQ_SLACK = 30
 
@@ -740,6 +743,8 @@ export function candidates(s: GameState, style: Style): Play[] {
     structural = true
   }
 
+  // With the clock nearly out, cover comes before anything else.
+  if (weeksLeft <= COVER_AT && coversLeft(s) > 0) push(cover())
   // The goal's own needs come first when time is short.
   const big = tooBig(s)
   if (big) push(storage(big.resourceId, big.amount))
@@ -1003,7 +1008,9 @@ export function greedy(style: Style = CLIMBER, weighed?: (w: Weighed[]) => void)
     // The goal's needs are first in the list when they're pressing: take them as they are.
     const g = goal(s)
     const urgent = plays.find(
-      (p) => (p[0]!.kind === 'storage' && tooBig(s)?.resourceId === p[0]!.key.split(':')[1]) || (p.some((m) => m.kind === 'software' || m.kind === 'platform') && g && bestIQ(s) < g.minIQ && weeksLeft <= weeksToGoalIQ(s) + IQ_SLACK)
+      (p) =>
+        (p[0]!.kind === 'cover' && weeksLeft <= COVER_AT) ||
+        (p[0]!.kind === 'storage' && tooBig(s)?.resourceId === p[0]!.key.split(':')[1]) || (p.some((m) => m.kind === 'software' || m.kind === 'platform') && g && bestIQ(s) < g.minIQ && weeksLeft <= weeksToGoalIQ(s) + IQ_SLACK)
     )
     let best: { play: Move[]; score: number } | null = null
     const seen: Weighed[] = []
