@@ -385,12 +385,34 @@ const goal = (s: GameState) => goalOf(s)
 export const goalResource = (s: GameState) => goal(s)?.cost[0]?.resourceId ?? null
 
 /** Worth a strategy makes per unit, less its inputs. The goal's resource counts thrice: it's what the phase is for. */
-function strategyWorth(s: GameState, id: string): number {
+function strategyWorth(s: GameState, id: string, want: Record<string, number> = demand(s)): number {
   const x = s.strategies.find((y) => y.id === id)
   const out = x && findResource(s, x.outputId)
   if (!x || !out) return 0
   const inputs = x.inputs.reduce((n, f) => n + f.amount * (findResource(s, f.resourceId)?.value ?? 0), 0)
-  return x.amount * out.value * (out.id === goalResource(s) ? 3 : 1) - inputs
+  // What's wanted and short counts double; what piles up with no use, a quarter.
+  const need = want[out.id] ?? 0
+  const use = out.amount < need ? 2 : need === 0 && out.amount > capOf(s, out) * 0.5 ? 0.25 : 1
+  return x.amount * out.value * (out.id === goalResource(s) ? 3 : 1) * use - inputs
+}
+
+/**
+ * How much of each resource the economy wants on hand: four weeks of what running uses, the parts
+ * for the next twenty units of each open contract, and what waiting research costs.
+ */
+export function demand(s: GameState): Record<string, number> {
+  const want: Record<string, number> = {}
+  const add = (id: string, n: number) => (want[id] = (want[id] ?? 0) + n)
+  for (const [id, n] of Object.entries(weeklyUse(previewWeek(s)))) add(id, 4 * n)
+  for (const c of s.sourcing) {
+    const u = findUnit(s, c.unitId)
+    const n = Math.min(openSlots(c), 20)
+    if (!n) continue
+    for (const p of c.parts) add(p.resourceId, p.amount * n)
+    for (const f of u?.upkeep ?? []) add(f.resourceId, f.amount * n * 4)
+  }
+  for (const r of s.research) if (bestIQ(s) >= r.minIQ) for (const c of r.cost) add(c.resourceId, c.amount)
+  return want
 }
 
 /**
@@ -402,7 +424,8 @@ export function assignBest(state: GameState): GameState {
   for (const u of s.units) {
     const tasks = tasksFor(s, u)
     if (!tasks.length || !u.count) continue
-    const best = [...tasks].sort((a, b) => strategyWorth(s, b) - strategyWorth(s, a))[0]!
+    const want = demand(s)
+    const best = [...tasks].sort((a, b) => strategyWorth(s, b, want) - strategyWorth(s, a, want))[0]!
     s = assignAll(s, u.id, best)
   }
   for (let pass = 0; pass < 3; pass++) {
@@ -492,12 +515,14 @@ function unsupplied(s: GameState): string[] {
     ...s.deliveries.flatMap((d) => (d.target.kind === 'resource' ? [d.target.id] : []))
   ])
   const needed = new Set<string>()
-  for (const u of s.units) if (u.count) for (const f of u.upkeep) needed.add(f.resourceId)
+  // Upkeep of units owned or about to be: a contract with room can't fill without it.
+  const coming = (unitId: string) => (findUnit(s, unitId)?.count ?? 0) > 0 || contractsFor(s, unitId).some((c) => openSlots(c) > 0)
+  for (const u of s.units) if (coming(u.id)) for (const f of u.upkeep) needed.add(f.resourceId)
   // Parts of contracts with room left: units can't be made without them.
   for (const c of s.sourcing) if (openSlots(c)) for (const p of c.parts) needed.add(p.resourceId)
   for (const x of s.strategies) {
     const u = findUnit(s, x.unitId)
-    if (u?.count && tasksFor(s, u).includes(x.id)) for (const f of x.inputs) needed.add(f.resourceId)
+    if (u && coming(u.id) && tasksFor(s, u).includes(x.id)) for (const f of x.inputs) needed.add(f.resourceId)
   }
   return [...needed].filter((id) => !made.has(id))
 }
@@ -676,6 +701,21 @@ export function candidates(s: GameState, style: Style): Play[] {
   // IQ toward the goal.
   if (g && needIQ(g.minIQ) && (style.lean !== 'scale' || highestTier(s) >= Math.min(style.maxTier, 3))) push(...iqPlay())
   structural = false
+  // What the economy wants more of than it holds: make it, store room for it, and buy it in.
+  if (!style.procureOnly) {
+    const want = demand(s)
+    for (const [id, need] of Object.entries(want)) {
+      const r = findResource(s, id)
+      if (!r || r.amount >= need || id === top) continue
+      const maker = makerFor(s, id)
+      const exists = s.strategies.some((x) => x.unitId === maker && x.outputId === id) || s.research.some((x) => x.effect.kind === 'strategy' && x.effect.strategy.unitId === maker && x.effect.strategy.outputId === id)
+      if (maker && !exists) push(strategy(maker, id))
+      if (capOf(s, r) < need) {
+        push(storage(id, need))
+        push(storage(id, need), procure(id))
+      }
+    }
+  }
   // Storage for what overflows.
   const report = previewWeek(s)
   const income = Math.max(1, grossIncome(s, report))
