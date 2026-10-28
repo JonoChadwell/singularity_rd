@@ -259,7 +259,9 @@ export const useGameStore = defineStore('game', () => {
 
   function newGame() {
     log('game_abandoned', { stats: state.value.stats })
-    state.value = createInitialState()
+    const next = createInitialState()
+    next.stats.jevCalls = state.value.stats.jevCalls
+    state.value = next
     lastError.value = ''
     log('game_start', { state: snapshot(state.value) })
   }

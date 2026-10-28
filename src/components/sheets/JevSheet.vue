@@ -1,5 +1,5 @@
 <template>
-  <DataSheet part="JEV-001" title="Jev" subtitle="The judge every proposal goes to.">
+  <DataSheet part="JEV-001" title="Jev" subtitle="An AI decision engine that judges your proposals.">
     <section>
       <h4>Status</h4>
       <SpecTable :rows="rows" />
@@ -17,9 +17,9 @@
     <section>
       <h4>Notes</h4>
       <p class="note">
-        Jev is an AI model that judges instead of writing. It reads the state of your game and what you propose, and answers set
-        questions with numbers: how likely something is, which of a few options fits best, or where it sits on a scale. It never
-        writes text of its own, so every name in the game comes from you or from a fixed list.
+        Jev is an AI model that gives numeric answers to written questions. Jev takes your written content and answers a set of
+        questions to decide how to translate the proposal into game mechanics. It never writes text of its own, so every name
+        in the game comes from you or from a fixed list.
       </p>
     </section>
     <template #foot>
