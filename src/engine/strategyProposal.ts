@@ -1,6 +1,6 @@
 import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
-import { byTier, findResource, findUnit, labour, labourOf, makeId, runsOn, tierFactor } from './model'
+import { baseLabour, byTier, findResource, findUnit, labour, labourOf, makeId, runsOn, tierFactor } from './model'
 import { lockReason, moveClock } from './phase'
 import {
   addResearch,
@@ -196,10 +196,11 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
   const unit = findUnit(state, v.spec.unitId)!
   const output = findResource(state, v.spec.outputId)!
   const work = labour(unit)
+  // Inputs are sized by the work before the tier's yield: a higher tier makes more from the same.
   let inputValue = 0
   const inputs = (v.options[v.choice] ?? v.options[0]!).inputIds.map((id) => {
     const r = findResource(state, id)!
-    const value = work * B.pick(B.INPUT_SIZE, read.level('input_size', B.INPUT_SIZE.length))[1]
+    const value = baseLabour(unit.value) * B.pick(B.INPUT_SIZE, read.level('input_size', B.INPUT_SIZE.length))[1]
     inputValue += value
     return { resourceId: id, amount: B.nice(value / r.value) }
   })

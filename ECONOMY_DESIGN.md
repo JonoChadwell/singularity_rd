@@ -98,7 +98,12 @@ The mind gets something directly: a resource, or units of a designed type.
 - **Output:** `(inputs × 1.2 + CREATE_WORTH × Industry × IQ) × Efficiency × payout ×
   Reach`. Over its lifetime, an input therefore comes back as at least 1.2 × its worth × payout,
   so a Procurement paid now never returns less than it uses up.
-  - **Industry:** 1 to 10, one step per decade of the worth of the units you own.
+  - **Industry:** (1 + worth of the units you own ÷ `INDUSTRY_FROM` ($5,000)) ^ `INDUSTRY_POWER`
+    (0.7), with no cap. It counts units only, so it is 1 all through Phase 1 (balanced by its base
+    values) and at the start of Phase 2: Procure is weak there next to the first unit designs. It
+    climbs fast with the first units (about 1.4 weeks of income once the fleet is $280k), then ever
+    more slowly (about a third of a week of income by week 45, a seventh by week 70), so it falls
+    off as the player pushes tier 2 and 3 industry for the goal.
   - **IQ:** (IQ counted for Procurements / 100)².
   - **Reach:** no IQ gate, but a target above your IQ's tier is penalised smoothly. Your IQ is
     read as a fractional tier between the tiers' IQs, and the penalty is log-interpolated, so 25
@@ -158,8 +163,11 @@ station ($1.5B). The rule the numbers follow:
 A unit's **value is how big one is**, nothing more: ten mills and one workshop are the same
 fleet. Everything per unit (parts, labour, upkeep, contracts, strategy research) scales with value,
 so it cancels out. A unit's **tier** is how far technology has come, and it sets how well a
-dollar of fleet works: weekly labour = value ÷ `PAYBACK_WEEKS` × `TIER_YIELD[tier]` (1, 1.3,
-1.7, 2.2, 3). Climbing the ladder is how an economy compounds faster. A tier 0 economy can grow
+dollar of fleet works: weekly labour = value ÷ `PAYBACK_WEEKS` × `TIER_YIELD[tier]` (1, 1.6,
+2.5, 4, 6). A unit's upkeep and its strategies' inputs are sized by its **base labour** (value ÷
+`PAYBACK_WEEKS`, before the yield), so the yield of a higher tier is pure gain: a tier 3 unit makes
+four times a tier 0's from the same upkeep and inputs. Climbing the ladder is how an economy
+compounds faster. A tier 0 economy can grow
 large, but it earns less per dollar and can't make or Procure the tier 3 goal resource at a
 useful rate (×0.07).
 
@@ -177,7 +185,8 @@ what it does for Procurements.
 `src/engine/__tests__/econBots.ts` plays Phase 2 through the real engine from a real Phase 1 win
 (the bribe plan's three resources and the nanotech plan's five). Jev's answers are held at their
 typical values (plausibility 0.7; an action is Reasonable its first three times and Wasteful
-after; contracts a band bigger each time and at least four weeks' income; alarm "a little
+after; contracts a band bigger each time and at least four weeks' income, then one band more,
+on the assumption that real Jev sizes them that much larger, still to check; alarm "a little
 closer"). Resource, unit and compute traits are out of scope. The roster:
 
 | Bot | Plays |
@@ -195,10 +204,12 @@ closer"). Resource, unit and compute traits are out of scope. The roster:
 seconds); chart it with `node scripts/econCharts.mjs` (`logs/econ/charts.html`: income, worth,
 fleet by tier, IQ, clock, goal progress, spend and action mix per bot, by approach).
 
-**Status (2026-10-28): Phase 2 is not balanced yet.** On the dollar scale no bot wins. The tier 0
-bot snowballs (a unit that makes its own parts replicates every 1.5 weeks) to tens of billions a
-week by week 45–60 and loses only to the clock; the climbing bots grow 10–100× slower and stall
-at IQ 300, where the next platform costs about $17B.
+**Status (2026-10-28): Phase 2 is not balanced yet.** No bot wins. With the steeper yields,
+lighter upkeep and the new Industry curve, the best climbing economies reach the anchors (scale
+$311M a week by week 45 and $1.9B by 60; greedy $2.1B by 70), but every one stalls at IQ 300:
+the next platform costs about $28B (with Jev's typical plausibility), paid in a tier 1 resource
+units make. The tier 0 bot still snowballs fastest (a unit that makes its own parts replicates
+every 1.5 weeks; $10.7B a week by week 45) and loses only to the clock.
 
 ## Costs and values
 

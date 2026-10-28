@@ -438,9 +438,14 @@ describe('create', () => {
     s.strategies.push({ id: 'run-lab', name: 'Run the lab', description: '', unitId: 'lab', kind: 'make', inputs: [], outputId: MONEY_ID, amount: 1 })
     expect((await reach(150)).reach).toBe(1)
     expect((await reach(200)).iq).toBe(4)
-    // Industry grows with the worth of the units you own, up to ×10.
-    s.units.push(newUnit({ id: 'big', name: 'Big', value: 4000, count: 1e7 }))
-    expect((await reach(200)).industry).toBe(B.INDUSTRY_MAX)
+    // Industry grows with the worth of the units you own: fast at first, then ever more slowly.
+    const industry = async () => (await reach(200)).industry
+    expect(await industry()).toBeCloseTo((1 + 4000 / B.INDUSTRY_FROM) ** B.INDUSTRY_POWER)
+    s.units.push(newUnit({ id: 'big', name: 'Big', value: 4000, count: 1e6 }))
+    const big = await industry()
+    s.units.find((u) => u.id === 'big')!.count = 1e7
+    // Ten times the fleet is 10^0.7 ≈ 5 times the Industry, not ten.
+    expect((await industry()) / big).toBeCloseTo(10 ** B.INDUSTRY_POWER, 1)
   })
 
   it('makes units now with cap to match, at a premium over a contract', async () => {

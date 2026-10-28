@@ -173,9 +173,12 @@ export const contract = (unitId: string): Move => ({
     attempt(async () => {
       const key = `contract:${unitId}`
       // A band bigger with each contract for the unit, and never less than about four weeks of
-      // income: a player asks for supplies on the scale of their economy.
+      // income: a player asks for supplies on the scale of their economy. Then one band more: the
+      // assumption is that real Jev sizes contracts a band larger than this (to check with the
+      // contract limits).
       const scale = B.SOURCING_LIMITS.findIndex(([, worth]) => worth >= 4 * grossIncome(s))
-      const band = Math.min(B.SOURCING_LIMITS.length - 1, Math.max(1 + (ctx.uses.get(key) ?? 0), scale < 0 ? B.SOURCING_LIMITS.length - 1 : scale))
+      const asked = Math.max(1 + (ctx.uses.get(key) ?? 0), scale < 0 ? B.SOURCING_LIMITS.length - 1 : scale)
+      const band = Math.min(B.SOURCING_LIMITS.length - 1, asked + 1)
       const v = await judgeCreate(s, judge(ctx, key, { limit: score(band) }), {
         target: { kind: 'unit', id: unitId },
         name: fresh(ctx, 'Contract'),

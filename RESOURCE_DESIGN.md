@@ -147,8 +147,8 @@ other's answer. How many can exist is the resource's stored ceiling, above.
 
 1. **How much could the AI build now?** (`reach`) This is judged from its holdings, units,
    platforms and industry, not from the proposal. The baseline is the old formula:
-   (`STORAGE_WORTH[tier]` × `STORAGE_REACH_SIZE` (10) × Industry + `STORAGE_PER_FLEET` (1) × the
-   worth of the units you own) × (IQ/100)² ÷ value × the
+   (`STORAGE_WORTH[tier]` × `STORAGE_REACH_SIZE` (10) + `STORAGE_PER_FLEET` (1) × the worth of
+   the units you own) × (IQ/100)² ÷ value × the
    resource's cap and expansion traits. Jev's band on `STORAGE_REACH` scales it by ×0.25 to ×8.
    The old ownership ladder (`HOLDERS`: an individual at IQ 100 up to the whole Earth at 500) is
    now only a guide in this prompt. Nothing is gated on it.

@@ -268,7 +268,13 @@ export const researchIQ = (state: GameState, r: Research) => iqFor(state, resear
  * tier earns. Value is how big one is; tier is how well it works.
  */
 export const labourOf = (value: number, tier: number) =>
-  (value / B.PAYBACK_WEEKS) * (B.TIER_YIELD[Math.min(B.TIER_YIELD.length - 1, Math.max(0, tier))] ?? 1)
+  baseLabour(value) * (B.TIER_YIELD[Math.min(B.TIER_YIELD.length - 1, Math.max(0, tier))] ?? 1)
+
+/**
+ * A unit's work before its tier's yield: what its upkeep and its strategies' inputs are sized
+ * by, so the yield of a higher tier is pure gain.
+ */
+export const baseLabour = (value: number) => value / B.PAYBACK_WEEKS
 
 /** Worth of one week of a unit's work. */
 export const labour = (u: UnitType) => labourOf(u.value, u.tier)
@@ -313,10 +319,9 @@ export function industryTier(state: GameState): number {
   return tier
 }
 
-/** The Industry scalar: 1 with no units, one step per decade of unit worth, up to INDUSTRY_MAX. */
+/** The Industry scalar: 1 with no units, then (1 + unit worth ÷ INDUSTRY_FROM) ^ INDUSTRY_POWER, with no cap. */
 export function industryScalar(state: GameState): number {
-  const decades = Math.log10(1 + industryWorth(state) / B.INDUSTRY_FROM)
-  return 1 + (B.INDUSTRY_MAX - 1) * Math.min(1, decades / B.INDUSTRY_DECADES)
+  return (1 + industryWorth(state) / B.INDUSTRY_FROM) ** B.INDUSTRY_POWER
 }
 
 /** The IQ scalar: (IQ / 100)², with the IQ counted for Procurements. */

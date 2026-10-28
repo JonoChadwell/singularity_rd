@@ -1,6 +1,6 @@
 import type { JevAnswer, JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
-import { bestIQ, capOf, findResource, fmt, industryScalar, industryWorth } from './model'
+import { bestIQ, capOf, findResource, fmt, industryWorth } from './model'
 import { lockReason } from './phase'
 import { seedOf } from './planPresets'
 import {
@@ -98,11 +98,11 @@ const storable = (state: GameState) => (x: Resource) => capOf(state, x) > 0
 
 /**
  * Units a mind this smart could store with an ordinary build state, before Jev's reach band:
- * STORAGE_REACH_SIZE expansions of the tier's worth times Industry, plus a share of the fleet's
- * worth, all times IQ², and the resource's cap traits.
+ * STORAGE_REACH_SIZE expansions of the tier's worth, plus a share of the fleet's worth, all times
+ * IQ², and the resource's cap traits.
  */
 function baseline(state: GameState, r: Resource, iq: number): number {
-  const base = (B.STORAGE_WORTH[r.tier] ?? 0) * B.STORAGE_REACH_SIZE * industryScalar(state) + B.STORAGE_PER_FLEET * industryWorth(state)
+  const base = (B.STORAGE_WORTH[r.tier] ?? 0) * B.STORAGE_REACH_SIZE + B.STORAGE_PER_FLEET * industryWorth(state)
   const worth = base * (iq / 100) ** 2
   return (worth / Math.max(1e-9, r.value)) * capFactor(r) * expansionFactor(r)
 }

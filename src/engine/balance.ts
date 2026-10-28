@@ -186,7 +186,7 @@ export const UNIT_TIERS: string[] = [
  * PAYBACK_WEEKS × this. Higher technology turns the same dollars into more, so a fleet that climbs
  * the ladder compounds faster than one that stays put. A unit's value is only how big one is.
  */
-export const TIER_YIELD = [1, 1.3, 1.7, 2.2, 3]
+export const TIER_YIELD = [1, 1.6, 2.5, 4, 6]
 /**
  * A unit working below the tier of what it makes is out of its depth: its output is multiplied
  * by this, by how many tiers below. Large and progressive.
@@ -374,10 +374,14 @@ export const CREATE_CONVERT_SHARE = 0.25
 export const CREATE_INPUT_SHARE = 1
 /** Units Procured now cost this many times what a sourcing contract would charge. */
 export const CREATE_UNIT_PREMIUM = 2
-/** Industry scalar: 1 at no units, up to INDUSTRY_MAX, one step per decade of unit worth from INDUSTRY_FROM. */
-export const INDUSTRY_FROM = 1e4
-export const INDUSTRY_DECADES = 6
-export const INDUSTRY_MAX = 10
+/**
+ * Industry scalar: (1 + worth of the units you own ÷ INDUSTRY_FROM) ^ INDUSTRY_POWER. It counts units
+ * only, so it's 1 all through Phase 1 (balanced by its base values) and at the start of Phase 2.
+ * It climbs fast with the first units, then ever more slowly: a Procurement is strong while the
+ * fleet is small and falls behind the income of a big one.
+ */
+export const INDUSTRY_FROM = 5000
+export const INDUSTRY_POWER = 0.7
 /** A target this far below your IQ (tier min IQ ≤ best IQ × this) guarantees a free, immediate option. */
 export const CREATE_EASY = 0.6
 /** Payout timings: [id, label, multiplier on total output, weeks]. */
@@ -519,13 +523,13 @@ export const EFFICIENCY: [string, number][] = [
   ['Clever', 1.3],
   ['Brilliant', 1.7]
 ]
-/** Strategy input size, as a multiple of the unit's labour: [label, multiple]. */
+/** Strategy input size, as a multiple of the unit's base labour (before its tier's yield): [label, multiple]. */
 export const INPUT_SIZE: [string, number][] = [
   ['A little', 0.5],
   ['A fair amount', 1],
   ['A lot', 2]
 ]
-/** Upkeep per week, as a multiple of the unit's labour: [label, multiple]. */
+/** Upkeep per week, as a multiple of the unit's base labour (before its tier's yield): [label, multiple]. */
 export const UPKEEP_SIZE: [string, number][] = [
   ['A little', 0.1],
   ['A fair amount', 0.25],

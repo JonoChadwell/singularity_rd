@@ -5,7 +5,7 @@ import { deliveryStream, fillStream, HORIZON, paybackWeeks, runningNet, valueAt,
 import { acceptCreate, judgeCreate } from '../createProposal'
 import { runWeek } from '../cycle'
 import { createInitialState, newResource, newUnit } from '../initialState'
-import { findResource, MONEY_ID } from '../model'
+import { baseLabour, findResource, labourOf, MONEY_ID } from '../model'
 import { newPhase } from '../phase'
 import { applyUnitChanges } from '../research'
 import type { GameState } from '../types'
@@ -101,6 +101,12 @@ describe('action values', () => {
     expect(stream[0]).toBeCloseTo(5 * 250)
     expect(stream[1]).toBeCloseTo(10 * 250)
     expect(stream[HORIZON - 1]).toBeCloseTo(90 * 250)
+  })
+
+  it('sizes upkeep and inputs by the work before the tier’s yield, so a higher tier earns more from the same', () => {
+    expect(labourOf(35000, 0)).toBeCloseTo(baseLabour(35000))
+    expect(labourOf(35000, 2)).toBeCloseTo(baseLabour(35000) * B.TIER_YIELD[2]!)
+    for (let t = 1; t < B.TIER_YIELD.length; t++) expect(B.TIER_YIELD[t]!).toBeGreaterThan(B.TIER_YIELD[t - 1]!)
   })
 
   it('counts a unit’s worth by its count, so ten small units are worth one ten times dearer', () => {

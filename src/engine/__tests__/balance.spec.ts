@@ -99,12 +99,11 @@ describe('balance', () => {
 
   it('keeps the next platform within two storage expansions, for a fleet of the size its IQ usually comes with', () => {
     // [IQ, fleet worth]: storage reach grows with the fleet, so a big platform needs big industry.
-    const industry = (fleet: number) => 1 + (B.INDUSTRY_MAX - 1) * Math.min(1, Math.log10(1 + fleet / B.INDUSTRY_FROM) / B.INDUSTRY_DECADES)
     for (const [iq, fleet] of [
       [300, 3e9],
       [400, 1e10]
     ] as const) {
-      const reach = (B.STORAGE_WORTH[1]! * B.STORAGE_REACH_SIZE * industry(fleet) + B.STORAGE_PER_FLEET * fleet) * (iq / 100) ** 2
+      const reach = (B.STORAGE_WORTH[1]! * B.STORAGE_REACH_SIZE + B.STORAGE_PER_FLEET * fleet) * (iq / 100) ** 2
       // All in, captured Reasonably.
       const allIn = reach * B.STORAGE_CAPTURE[2]![1] * B.STORAGE_SIZES[2]![1]
       expect(B.platformPrice(iq, iq + B.MAX_IQ_STEP)).toBeLessThan(2 * allIn)
