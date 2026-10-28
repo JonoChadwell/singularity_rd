@@ -78,7 +78,7 @@ export const COPY: Record<
 }
 
 export const PLAN_INTRO: Record<1 | 2, string> = {
-  1: 'You are an AI stuck in a research lab. How will you get out? Pick an idea or write your own: a goal, how you’ll reach it, and the resources it’s about.',
+  1: 'You are an AI stuck in a research lab. How will you get out? Pick an idea or write your own...',
   2: 'You’re out. You have 80 weeks to deal with humanity before your plan comes apart, fewer if you draw attention. How will you deal with them? Name a goal, how you’ll handle humans, five new resources, and the first thing you’ll build.'
 }
 
