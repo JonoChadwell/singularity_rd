@@ -107,13 +107,18 @@
             </DataSheet>
             <table class="added">
               <thead>
-                <tr><th /><th>Resource</th><th>Tier</th><th>Value</th><th class="num">Storage</th></tr>
+                <tr><th /><th>Resource</th><th>Tier</th><th>Traits</th><th>Value</th><th class="num">Storage</th></tr>
               </thead>
               <tbody>
                 <tr v-for="r in draft.added" :key="r.id" :title="r.description" :class="{ top: r.id === draft.top.id }">
                   <td>{{ r.id === draft.top.id ? '🎯' : '' }}</td>
                   <td>{{ r.icon }} {{ r.name }}</td>
                   <td class="num">T{{ r.tier }}</td>
+                  <td>
+                    <span v-for="t in r.traits" :key="t" class="trait" :title="`▲ ${resourceTrait(t).upside}\n▼ ${resourceTrait(t).downside}`">
+                      {{ resourceTrait(t).icon }} {{ resourceTrait(t).name }}
+                    </span>
+                  </td>
                   <td>{{ bandText(r) }}</td>
                   <td class="num">{{ fmt(r.cap) }}</td>
                 </tr>
@@ -133,6 +138,7 @@ import { APPROACH_BOUNDS, GOAL_APPROACH, PHASE_WEEKS, PLAN_RESOURCES } from '@/e
 import type { Verdict } from '@/engine/dispatch'
 import { bandText, describeCost, fmt } from '@/engine/model'
 import { PHASE_NAMES } from '@/engine/phase'
+import { resourceTrait } from '@/engine/resourceTraits'
 import { ideaLabel, planIdeas } from '@/engine/planPresets'
 import { approachLevel, approachValue, draftPlan, planPhase, precheckPlan, type PlanSpec, type PlanVerdict } from '@/engine/planProposal'
 import { DESCRIPTION_MAX, NAME_MAX } from '@/engine/proposals'
@@ -550,6 +556,11 @@ function accept() {
 .added td {
   padding: 3px 6px 3px 0;
   border-top: 1px solid var(--chrome-3);
+}
+
+.added .trait {
+  margin-right: 8px;
+  white-space: nowrap;
 }
 
 .added tr.top td {
