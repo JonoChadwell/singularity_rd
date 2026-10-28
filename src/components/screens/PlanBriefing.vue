@@ -6,10 +6,10 @@
         <span class="screws" aria-hidden="true" />
         <HelpTip :text="PLAN_HELP[phase]" />
         <h2 id="plan-title">Plan Phase {{ phase }}: {{ PHASE_NAMES[phase] }}</h2>
-        <span class="jev" :title="jev.title.value">
+        <button type="button" class="small jev" :title="jev.title.value" @click="ui.openSheet({ kind: 'jev' })">
           <Led :tone="jev.tone.value" :blink="jev.blink.value" />
           <span>Jev</span>
-        </span>
+        </button>
         <span class="tag num">PH-{{ phase }}</span>
       </header>
 
@@ -123,6 +123,7 @@
         </VerdictView>
       </div>
     </section>
+    <DatasheetDrawer class="drawer" />
   </main>
 </template>
 
@@ -144,6 +145,7 @@ import VerdictView from '../dialogs/VerdictView.vue'
 import DataSheet from '../kit/DataSheet.vue'
 import SpecTable from '../kit/SpecTable.vue'
 import Led from '../kit/StatusLed.vue'
+import DatasheetDrawer from '../sheets/DatasheetDrawer.vue'
 import { useJevStatus } from '../shell/jevStatus'
 import BoardBackdrop from './BoardBackdrop.vue'
 
@@ -241,6 +243,7 @@ function accept() {
     verdict.value = null
     return
   }
+  ui.closeSheets()
   ui.notice = { tone: 'good', text: `Phase ${phase} begins: ${verdict.value.spec.goal}.` }
   if (phase === 2) ui.openFirstUnit()
 }
@@ -255,8 +258,16 @@ function accept() {
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 12px;
   padding: 32px 16px;
   background: radial-gradient(ellipse at center, var(--pcb-2), var(--pcb-1) 55%, var(--pcb-0));
+}
+
+/* A datasheet opened from the briefing sits beside it, as on the bench. */
+.drawer {
+  position: relative;
+  flex: none;
+  width: 380px;
 }
 
 .console {
@@ -320,10 +331,16 @@ function accept() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-label);
-  font-weight: 600;
-  font-size: 13px;
-  color: #1a1912;
+}
+
+@media (max-width: 1250px) {
+  .drawer {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    width: min(400px, calc(100vw - 16px));
+    z-index: 40;
+  }
 }
 
 .tag {
