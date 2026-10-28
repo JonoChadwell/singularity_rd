@@ -26,7 +26,6 @@
       <span class="pins bottom" aria-hidden="true" />
       <span class="dot" aria-hidden="true" />
       <h1>Singularity <span>R&amp;D</span></h1>
-      <p class="tag">One AI. One lab. Six weeks to get out.</p>
       <div class="buttons">
         <template v-if="fresh">
           <button type="button" class="primary" @click="ui.leaveTitle('start')">▶ Start</button>
@@ -36,13 +35,8 @@
           <button type="button" @click="startOver">New game</button>
         </template>
       </div>
-      <p class="saved num">{{ fresh ? 'SR-100 · Starting server' : `Saved game · Phase ${game.state.phase.n} · Week ${game.state.week}` }}</p>
+      <p v-if="!fresh" class="saved num">Saved game · Phase {{ game.state.phase.n }} · Week {{ game.state.week }}</p>
     </div>
-
-    <p class="jev">
-      <Led :tone="jev.tone.value" :blink="jev.blink.value" />
-      <span>{{ jev.title.value }}</span>
-    </p>
   </main>
 </template>
 
@@ -50,12 +44,9 @@
 import { computed } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
-import Led from '../kit/StatusLed.vue'
-import { useJevStatus } from '../shell/jevStatus'
 
 const game = useGameStore()
 const ui = useUiStore()
-const jev = useJevStatus()
 
 /** Nothing to continue: the first week, still planning Phase 1. */
 const fresh = computed(() => {
@@ -159,12 +150,6 @@ h1 span {
   color: var(--copper-hi);
 }
 
-.tag {
-  margin: 0;
-  font-size: 15px;
-  color: var(--silk-dim);
-}
-
 .buttons {
   display: flex;
   gap: 10px;
@@ -182,20 +167,6 @@ h1 span {
   color: var(--silk-dim);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-}
-
-.jev {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 4px 10px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--lcd-fg);
-  background: var(--lcd-bg);
-  border: 1px solid #000;
 }
 
 @keyframes rise {
