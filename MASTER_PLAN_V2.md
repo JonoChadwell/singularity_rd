@@ -114,9 +114,9 @@ can't be closed: the phase hasn't started until it has a plan.
     resources? The bar is 0.25: generous, as with resources.
   - for each new resource, the usual resource questions: is it a thing, stock or flow,
     value, icon. A resource below the resource bar rejects the plan and names that resource.
-  - `approach` (score): what would reaching this goal take more of, brilliance or resources
-    and scale? This sets the goal's IQ bar and the size of its cost (§D11). If Jev is torn,
-    the player picks between its top two, as for any torn answer.
+  - `approach` (noul): one number from 0 (all intelligence) to 1 (all resources and scale),
+    read in three bands set per phase (`APPROACH_BOUNDS`). This sets the goal's IQ bar and the
+    size of its cost (§D11). Being a single number, it is never torn.
 - **The verdict** shows the goal research (minimum IQ and cost), each resource as stock or
   flow, and any torn picks. Accepting adds the resources and the goal research, and starts
   the phase's clock.

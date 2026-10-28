@@ -1,30 +1,22 @@
 <template>
-  <figure class="analog" role="meter" :aria-valuenow="Math.round(value * 100)" aria-valuemin="0" aria-valuemax="100" :aria-label="label">
-    <svg viewBox="0 0 160 92" aria-hidden="true">
-      <path class="face" d="M8 84 A72 72 0 0 1 152 84 Z" />
-      <path v-for="z in bands" :key="`${z.from}-${z.tone}`" class="zone" :class="z.tone" :d="arc(z.from, z.to)" />
-      <line v-for="t in ticks" :key="t" class="tick" :class="{ major: t % 0.5 === 0 }" v-bind="tick(t)" />
-      <line v-if="bar !== undefined" class="mark" v-bind="tick(bar, 58, 76)" />
-      <template v-if="ends">
-        <text class="end" x="25" y="79">{{ ends[0] }}</text>
-        <text class="end" x="135" y="79" text-anchor="end">{{ ends[1] }}</text>
-      </template>
-      <g :style="{ transform: `rotate(${angle(shown) - 90}deg)` }" class="needle">
-        <line x1="80" y1="84" x2="80" y2="22" />
-      </g>
-      <circle class="hub" cx="80" cy="84" r="5" />
-    </svg>
-    <figcaption>
-      <slot>
-        <span class="num" :class="value >= (bar ?? 0) ? 'good' : 'bad'">{{ Math.round(value * 100) }}%</span>
-        <span class="lbl">{{ label }} · bar {{ Math.round((bar ?? 0) * 100) }}%</span>
-      </slot>
-    </figcaption>
-  </figure>
+  <svg class="analog" viewBox="0 0 160 92" role="meter" :aria-valuenow="Math.round(value * 100)" aria-valuemin="0" aria-valuemax="100" :aria-label="label">
+    <path class="face" d="M8 84 A72 72 0 0 1 152 84 Z" />
+    <path v-for="z in zones" :key="`${z.from}-${z.tone}`" class="zone" :class="z.tone" :d="arc(z.from, z.to)" />
+    <line v-for="t in ticks" :key="t" class="tick" :class="{ major: t % 0.5 === 0 }" v-bind="tick(t)" />
+    <line v-for="m in marks ?? []" :key="m" class="mark" v-bind="tick(m, 58, 76)" />
+    <template v-if="ends">
+      <text class="end" x="25" y="79">{{ ends[0] }}</text>
+      <text class="end" x="135" y="79" text-anchor="end">{{ ends[1] }}</text>
+    </template>
+    <g :style="{ transform: `rotate(${angle(shown) - 90}deg)` }" class="needle">
+      <line x1="80" y1="84" x2="80" y2="22" />
+    </g>
+    <circle class="hub" cx="80" cy="84" r="5" />
+  </svg>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 
 export interface GaugeZone {
   from: number
@@ -34,17 +26,10 @@ export interface GaugeZone {
 }
 
 /**
- * A needle from 0 to 1. With a bar, the face is red below it and green above; with zones, it
- * shows those instead, and `ends` labels the two ends.
+ * A needle from 0 to 1 over coloured zones, with heavy marks (a pass bar, say) and the two ends
+ * labelled. Only the face: the numbers around it are the caller's.
  */
-const props = defineProps<{ value: number; bar?: number; label: string; zones?: GaugeZone[]; ends?: [string, string] }>()
-const bands = computed<GaugeZone[]>(
-  () =>
-    props.zones ?? [
-      { from: 0, to: props.bar ?? 0, tone: 'bad' },
-      { from: props.bar ?? 0, to: 1, tone: 'good' }
-    ]
-)
+const props = defineProps<{ value: number; label: string; zones: GaugeZone[]; marks?: number[]; ends?: [string, string] }>()
 const ticks = Array.from({ length: 11 }, (_, i) => i / 10)
 /** The needle swings up from zero when shown. */
 const shown = ref(props.value)
@@ -76,14 +61,7 @@ function tick(p: number, r1 = 60, r2 = 68) {
 
 <style scoped>
 .analog {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 170px;
-}
-
-svg {
+  display: block;
   width: 160px;
   height: 92px;
   overflow: visible;
@@ -156,17 +134,5 @@ svg {
 
 .hub {
   fill: #1a1912;
-}
-
-figcaption {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1.15;
-}
-
-figcaption .num {
-  font-size: 20px;
-  font-weight: 600;
 }
 </style>

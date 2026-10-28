@@ -1,13 +1,8 @@
 <template>
   <div class="verdict">
     <div class="readout">
-      <AnalogGauge :value="verdict.plausibility" :bar="verdict.bar" label="plausible" />
-      <slot v-if="!verdict.rejected && !verdict.duplicateOf" name="gauges" />
+      <VerdictDial v-for="d in shownDials" :key="d.key" :dial="d" />
       <div class="lines">
-        <span class="lbl">Jev’s verdict</span>
-        <p v-if="verdict.rejected" class="stamp bad">Rejected</p>
-        <p v-else-if="verdict.duplicateOf" class="stamp ai">Duplicate</p>
-        <p v-else class="stamp good">Accepted</p>
         <p v-if="verdict.rejected" class="bad">{{ verdict.rejected }} Reword it, or try another angle.</p>
         <p v-else-if="verdict.duplicateOf" class="ai">Jev thinks that’s the same as {{ verdict.duplicateOf }}.</p>
         <template v-else>
@@ -75,9 +70,11 @@ import { computed } from 'vue'
 import { complicationName } from '@/engine/proposals'
 import { RISK_BONUS, riskText } from '@/engine/risk'
 import { useGameStore, type Verdict } from '@/stores/game'
-import AnalogGauge from '../kit/AnalogGauge.vue'
+import VerdictDial, { type Dial } from '../kit/VerdictDial.vue'
+import { plausibleDial } from './dials'
 
-const props = defineProps<{ verdict: Verdict; acceptLabel?: string | null; saveLabel?: string }>()
+/** `dials`: more of Jev's answers to show beside plausibility (see dials.ts), hidden on a rejection. */
+const props = defineProps<{ verdict: Verdict; acceptLabel?: string | null; saveLabel?: string; dials?: Dial[] }>()
 const emit = defineEmits<{
   pick: [key: string, value: string]
   accept: []
@@ -85,6 +82,11 @@ const emit = defineEmits<{
   edit: []
 }>()
 const game = useGameStore()
+
+const shownDials = computed(() => {
+  const v = props.verdict
+  return [plausibleDial(v), ...(v.rejected || v.duplicateOf ? [] : (props.dials ?? []))]
+})
 
 const riskLine = computed(() => {
   const v = props.verdict
@@ -106,7 +108,8 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$
 
 .readout {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
   align-items: center;
   padding: 10px 14px;
   background: var(--lcd-bg);
@@ -114,14 +117,8 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$
   box-shadow: inset 0 0 20px rgb(0 0 0 / 0.6);
 }
 
-.readout :deep(.analog) {
-  padding: 6px 4px 2px;
-  background: linear-gradient(180deg, var(--chrome-3), var(--chrome-2));
-  border: 1px solid #000;
-  box-shadow: inset 1px 1px 0 var(--bevel-hi);
-}
-
 .lines {
+  min-width: 180px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -129,22 +126,6 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$
   font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--lcd-fg);
-}
-
-.lines .lbl {
-  color: var(--lcd-dim);
-}
-
-.stamp {
-  align-self: flex-start;
-  padding: 0 10px;
-  border: 2px solid currentColor;
-  font-family: var(--font-label);
-  font-weight: 700;
-  font-size: 18px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  transform: rotate(-2deg);
 }
 
 .risk {
@@ -184,10 +165,4 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$
   border-top: 1px solid var(--chrome-3);
 }
 
-@media (max-width: 560px) {
-  .readout {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
 </style>

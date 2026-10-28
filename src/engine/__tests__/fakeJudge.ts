@@ -4,7 +4,7 @@ export type Overrides = Record<string, JevAnswer | ((questions: Questions) => Je
 
 /**
  * Answers every question with a neutral default unless overridden by question name:
- * - nouls: yes (0.9), except traits, which default to no (0.1);
+ * - nouls: yes (0.9), except traits, which default to no (0.1), and a plan's approach (0.5);
  * - choices: the first option, except a resource's trait, which defaults to Cryogenic;
  * - scores: the middle of the scale, except alarm, which defaults to quiet.
  * An override key ending in `*` matches every question starting with it.
@@ -29,6 +29,9 @@ export class FakeJudge implements Judge {
       const override = this.override(key)
       if (override) {
         answers[key] = typeof override === 'function' ? override(questions) : override
+      } else if (key === 'approach') {
+        // A plan's approach: right between intelligence and scale.
+        answers[key] = { type: 'noul', noul: 0.5 }
       } else if (q.type === 'noul') {
         answers[key] = { type: 'noul', noul: key.startsWith('trait_') ? 0.1 : 0.9 }
       } else if (q.type === 'choice' && /(^|_)trait$/.test(key)) {

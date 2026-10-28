@@ -203,7 +203,7 @@ export const BRIBE: PlanSpec = {
 export async function phase1(approach = 1): Promise<GameState> {
   const s = createInitialState()
   s.runId = 'test-run' // seeds the weekly randomness, so bot runs are repeatable
-  const v = await judgePlan(s, new FakeJudge({ ...plainValues, approach: score(approach) }), BRIBE)
+  const v = await judgePlan(s, new FakeJudge({ ...plainValues, approach: noul(B.APPROACH_AT[1][approach]!) }), BRIBE)
   return acceptPlan(s, v).state
 }
 
@@ -283,7 +283,7 @@ export async function phase2(approach = 1): Promise<GameState> {
   s.resources.push(newResource({ id: MONEY_ID, name: 'Money', value: 1.5, amount: 1000 }))
   s.deliveries.push({ name: 'Freelance coding', target: { kind: 'resource', id: MONEY_ID }, amount: 60, delay: 0, weeks: null })
   const values = Object.fromEntries(NANOTECH.resources.map((_, i) => [`r${i}_value`, score(2)]))
-  const v = await judgePlan(s, new FakeJudge({ ...values, approach: score(approach) }), NANOTECH)
+  const v = await judgePlan(s, new FakeJudge({ ...values, approach: noul(B.APPROACH_AT[2][approach]!) }), NANOTECH)
   return acceptPlan(s, v).state
 }
 

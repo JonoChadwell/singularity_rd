@@ -245,10 +245,21 @@ export interface Catches {
 }
 const NO_CATCHES: Catches = { list: [], shared: false }
 
+/**
+ * Which band a 0–1 answer falls in: the first whose upper bound it doesn't pass. `bounds` rise and
+ * end at 1, e.g. [0.4, 0.6, 1] gives bands 0, 1 and 2.
+ */
+export function bandOf(value: number, bounds: readonly number[]): number {
+  const i = bounds.findIndex((upTo) => value <= upTo)
+  return i < 0 ? bounds.length - 1 : i
+}
+
 /** Reads answers, honouring the player's picks where Jev was torn. */
 export function reader(v: Pick<VerdictBase, 'answers' | 'picks'>) {
   return {
     noul: (key: string) => readNoul(answerFor(v.answers, key)),
+    /** A 0–1 answer's band: see bandOf. */
+    band: (key: string, bounds: readonly number[]) => bandOf(readNoul(answerFor(v.answers, key)), bounds),
     choice<K extends string>(key: string, allowed: readonly K[]): K {
       const pick = v.picks[key] as K | undefined
       if (pick && allowed.includes(pick)) return pick

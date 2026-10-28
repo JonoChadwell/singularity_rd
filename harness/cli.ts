@@ -60,15 +60,15 @@ import {
 } from '@/engine/presets'
 import { ceilingLabel } from '@/engine/ceilings'
 import { lossOf } from '@/engine/losses'
-import { cardsFor, clockMoved, coversLeft, lockReason, PHASE_NAMES, weeksLeft, type Feature } from '@/engine/phase'
+import { cardsFor, clockMoved, coversLeft, lockReason, newPhase, PHASE_NAMES, weeksLeft, type Feature } from '@/engine/phase'
 import { plansFor, planIdeas } from '@/engine/planPresets'
-import { draftPlan } from '@/engine/planProposal'
+import { draftPlan, judgePlan } from '@/engine/planProposal'
 import { goalOf, projectGoal, projectionText } from '@/engine/projection'
 import { alarmLabel, alarmQuestions, expansionRiskText, RISK_BONUS, riskFrom, riskText } from '@/engine/risk'
 import { resourceTrait, traitLine } from '@/engine/resourceTraits'
 import { describeCatch } from '@/engine/storageProposal'
 import { proposalText } from '@/engine/stateText'
-import { catchesOf, complicationName, draftResource } from '@/engine/proposals'
+import { bandOf, catchesOf, complicationName, draftResource } from '@/engine/proposals'
 import { draftStrategy } from '@/engine/strategyProposal'
 import { TRAITS, type TraitId } from '@/engine/traits'
 import type { GameState, Strategy, UpgradeTarget } from '@/engine/types'
@@ -486,12 +486,49 @@ async function advance(save: Save, n: number) {
   }
 }
 
+// ---------------------------------------------------------------- calibration
+
+/**
+ * Judges every ready-made plan for the given phases, straight from Jev (no cache), and prints
+ * each one's 0-1 answers sorted by approach, so the bands can be set where the presets fall.
+ */
+async function calibratePlans(phases: (1 | 2)[]) {
+  const runId = `calibrate-${Date.now().toString(36)}`
+  const judge = new NodeJudge(() => runId)
+  for (const phase of phases) {
+    const rows: { goal: string; nouls: Record<string, number> }[] = []
+    for (const plan of plansFor(phase)) {
+      const state = createInitialState()
+      state.runId = runId
+      if (phase === 2) state.phase = newPhase(2, 7)
+      const v = await judgePlan(state, judge, plan)
+      const nouls = Object.fromEntries(
+        Object.entries(v.answers).flatMap(([k, a]) => (a.type === 'noul' && !/_is_thing$/.test(k) ? [[k, a.noul]] : []))
+      )
+      rows.push({ goal: plan.goal, nouls })
+    }
+    rows.sort((a, b) => (a.nouls.approach ?? 0) - (b.nouls.approach ?? 0))
+    const bounds = B.APPROACH_BOUNDS[phase]
+    say(`Phase ${phase} (bands up to ${bounds.join(', ')}):`)
+    for (const r of rows) {
+      const level = bandOf(r.nouls.approach ?? 0, bounds)
+      const others = Object.entries(r.nouls).filter(([k]) => k !== 'approach').map(([k, p]) => `${k} ${pct(p)}`)
+      say(`  ${(r.nouls.approach ?? 0).toFixed(2)}  ${B.GOAL_APPROACH[level]![0].padEnd(44)} ${r.goal}  (${others.join(', ')})`)
+    }
+    const counts = B.GOAL_APPROACH.map((_, i) => rows.filter((r) => bandOf(r.nouls.approach ?? 0, bounds) === i).length)
+    say(`  per band: ${counts.join(' / ')}`)
+  }
+  say(`Raw answers are in logs/runs/${runId}/jev.jsonl.`)
+}
+
 // ---------------------------------------------------------------- commands
 
 const HELP = `Commands (slot from --slot <name>, default "claude"):
   new                          start a new game
   status                       everything on screen, plus next week's preview
   plans [all|shuffle]          the three plan ideas for this phase (all: the whole bank; shuffle: three others)
+  calibrate plans [1|2]        asks Jev about every ready-made plan (one call each, no slot needed) and prints
+                               each one's 0-1 answers, sorted by approach, with the band each falls in
   propose plan '{"goal":"..","means":"..","resources":[{"name":"..","description":".."}],"firstUnit":{"name":"..","description":".."}}'
                                (firstUnit only in Phase 2; Jev picks which resource the goal is built from and uses up)
   presets <resource|strategy|unit|mind|create|units|storage|cover>
@@ -570,6 +607,12 @@ async function run(args: string[], slot: string): Promise<number> {
     }[rest[0] as 'unit']
     if (!list) throw new Error('presets resource|strategy|unit|mind|create|units|storage|cover')
     for (const p of list) say(JSON.stringify(p))
+    return 0
+  }
+
+  if (cmd === 'calibrate') {
+    if (rest[0] !== 'plans') throw new Error('calibrate plans [1|2]')
+    await calibratePlans(rest[1] ? [Number(rest[1]) as 1 | 2] : [1, 2])
     return 0
   }
 

@@ -21,7 +21,7 @@ const env = (globalThis as { process?: { env: Record<string, string | undefined>
 it.skipIf(!env.BOT_REPORT)(
   'reports every bot',
   async () => {
-    for (const approach of [0, 2, 4]) {
+    for (const approach of [0, 1, 2]) {
       line(`p1 idle a${approach}`, await play(await phase1(approach), idle, 12))
       line(`p1 flat a${approach}`, await play(await phase1(approach), flat, 12))
       line(`p1 chain a${approach}`, await play(await phase1(approach), chain, 12))
@@ -29,7 +29,7 @@ it.skipIf(!env.BOT_REPORT)(
       line(`p1 smart a${approach}`, await play(await phase1(approach), smart, 12))
       line(`p1 covered a${approach}`, await play(await phase1(approach), covered, 14))
     }
-    for (const approach of [0, 2, 4]) {
+    for (const approach of [0, 1, 2]) {
       line(`p2 steady a${approach}`, await play(await phase2(approach), steady({ reinvest: true }), 120))
       line(`p2 hoarder a${approach}`, await play(await phase2(approach), steady({ reinvest: false }), 120))
       line(`p2 risky a${approach}`, await play(await phase2(approach), steady({ reinvest: true, risky: true }), 120))

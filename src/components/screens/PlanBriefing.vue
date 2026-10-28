@@ -86,20 +86,22 @@
           </form>
         </template>
 
-        <VerdictView v-else :verdict="verdict" accept-label="Start the phase" @pick="onPick" @accept="accept" @edit="verdict = null">
-          <template #gauges>
-            <AnalogGauge :value="approach.at" label="takes more of" :zones="APPROACH_ZONES" :ends="['Brilliance', 'Scale']">
-              <span class="approach">{{ approach.short }}</span>
-              <span class="lbl">takes more of</span>
-            </AnalogGauge>
-          </template>
+        <VerdictView
+          v-else
+          :verdict="verdict"
+          :dials="approachDial ? [approachDial] : []"
+          accept-label="Start the phase"
+          @pick="onPick"
+          @accept="accept"
+          @edit="verdict = null"
+        >
           <div v-if="draft" class="outcome">
             <DataSheet :part="`GOAL-${phase}`" :title="verdict.spec.goal" icon="🎯" :subtitle="verdict.spec.means" compact>
               <SpecTable
                 :rows="[
                   { k: 'Requires', v: `${draft.goal.minIQ} IQ`, num: true },
                   { k: 'Uses up', v: draft.goal.cost.length ? describeCost(draft.state, draft.goal.cost) : 'nothing' },
-                  { k: 'Approach', v: `Takes ${approach.label.toLowerCase()}` },
+                  { k: 'Approach', v: `Takes ${GOAL_APPROACH[approachLevel(verdict)]![0].toLowerCase()}` },
                   { k: 'Clock', v: `${PHASE_WEEKS[phase]} weeks${phase === 2 ? ', moved by your actions' : ', +6 with cover'}` },
                   { k: 'Fails by', v: `${verdict.loss.name}: ${verdict.loss.threat}`, tone: 'bad' }
                 ]"
@@ -129,20 +131,19 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, toRaw, watch } from 'vue'
-import { readScore } from '@/ai/jev'
-import { GOAL_APPROACH, GOAL_TIER, PHASE_WEEKS, PLAN_RESOURCES } from '@/engine/balance'
+import { APPROACH_BOUNDS, GOAL_APPROACH, GOAL_TIER, PHASE_WEEKS, PLAN_RESOURCES } from '@/engine/balance'
 import type { Verdict } from '@/engine/dispatch'
 import { bandText, describeCost, fmt } from '@/engine/model'
 import { PHASE_NAMES } from '@/engine/phase'
 import { ideaLabel, planIdeas } from '@/engine/planPresets'
-import { draftPlan, planPhase, precheckPlan, type PlanSpec, type PlanVerdict } from '@/engine/planProposal'
-import { DESCRIPTION_MAX, NAME_MAX, reader } from '@/engine/proposals'
+import { approachLevel, approachValue, draftPlan, planPhase, precheckPlan, type PlanSpec, type PlanVerdict } from '@/engine/planProposal'
+import { DESCRIPTION_MAX, NAME_MAX } from '@/engine/proposals'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 import { PLAN_HELP, PLAN_INTRO } from '../dialogs/copy'
+import { bandDial } from '../dialogs/dials'
 import HelpTip from '../dialogs/HelpTip.vue'
 import VerdictView from '../dialogs/VerdictView.vue'
-import AnalogGauge, { type GaugeZone } from '../kit/AnalogGauge.vue'
 import DataSheet from '../kit/DataSheet.vue'
 import SpecTable from '../kit/SpecTable.vue'
 import Led from '../kit/StatusLed.vue'
@@ -216,29 +217,19 @@ watch(verdict, (v) =>
 // draftPlan structuredClones the state, which a reactive proxy can't survive.
 const draft = computed(() => (verdict.value && !verdict.value.rejected ? draftPlan(toRaw(game.state), verdict.value) : null))
 
-/** The approach dial: one zone per level, each centred on its level. */
-const steps = GOAL_APPROACH.length - 1
-const APPROACH_ZONES: GaugeZone[] = GOAL_APPROACH.map((_, i) => ({
-  from: Math.max(0, (i - 0.5) / steps),
-  to: Math.min(1, (i + 0.5) / steps),
-  tone: 'abc'[i] ?? 'c'
-}))
-/** GOAL_APPROACH's labels, short enough for the dial. */
-const APPROACH_SHORT = ['Mostly brilliance', 'Both equally', 'Mostly scale']
-
-/**
- * Where the needle sits: Jev's raw score, kept inside the zone of the level the game uses (which
- * the player's pick sets when Jev is torn), so the needle and the label always agree.
- */
-const approach = computed(() => {
-  const v = verdict.value
-  if (!v) return { at: 0, label: '', short: '' }
-  const level = reader(v).level('approach', GOAL_APPROACH.length)
-  const zone = APPROACH_ZONES[level]!
-  const answer = v.answers.approach
-  const raw = answer?.type === 'score' && v.picks.approach === undefined ? readScore(answer, GOAL_APPROACH.length) / steps : level / steps
-  return { at: Math.min(zone.to, Math.max(zone.from, raw)), label: GOAL_APPROACH[level]![0], short: APPROACH_SHORT[level] ?? '' }
-})
+/** What the goal takes more of: Jev's 0–1 answer, read in the phase's bands. */
+const approachDial = computed(() =>
+  verdict.value
+    ? bandDial({
+        key: 'approach',
+        value: approachValue(verdict.value),
+        bounds: APPROACH_BOUNDS[phase],
+        labels: ['Mostly intelligence', 'Both equally', 'Mostly scale'],
+        label: 'scale over intelligence',
+        ends: ['Intelligence', 'Scale']
+      })
+    : null
+)
 
 function onPick(key: string, value: string) {
   if (verdict.value) verdict.value.picks[key] = value
@@ -499,15 +490,6 @@ function accept() {
 .submit .primary {
   font-size: 15px;
   padding: 5px 18px;
-}
-
-.approach {
-  font-family: var(--font-label);
-  font-weight: 700;
-  font-size: 15px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--lcd-fg);
 }
 
 .outcome {

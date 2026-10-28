@@ -63,14 +63,26 @@ export const PHASE_MAX_BAND: Record<1 | 2 | 3, number> = { 1: 2, 2: 5, 3: 5 }
 export const PHASE_MAX_TIER: Record<1 | 2 | 3, number> = { 1: 0, 2: 3, 3: 4 }
 /**
  * What reaching a goal takes more of: [label, Phase 1 IQ, Phase 1 cost ×, Phase 2 IQ, Phase 2 cost ×].
- * The less brilliance it needs, the more resources. Phase 1 IQs are ones a software step over
+ * The less intelligence it needs, the more resources. Phase 1 IQs are ones a software step over
  * START_IQ can reach exactly: 125, 150 or 175.
  */
 export const GOAL_APPROACH: [string, number, number, number, number][] = [
-  ['Mostly brilliance', 175, 0.6, 600, 0.3],
-  ['Brilliance and resources in equal measure', 150, 1, 525, 1],
+  ['Mostly intelligence', 175, 0.6, 600, 0.3],
+  ['Intelligence and resources in equal measure', 150, 1, 525, 1],
   ['Mostly resources and scale', 125, 1.4, 450, 4]
 ]
+/**
+ * Jev answers the approach question with one number, 0 for all intelligence and 1 for all
+ * resources and scale; each GOAL_APPROACH row takes the answers up to its bound here. Set per
+ * phase so the ready-made plans reach every row (`npm run play -- calibrate plans`; see NOTES.md):
+ * Phase 2's goals are all megaprojects, so Jev puts every one of them above 0.6.
+ */
+export const APPROACH_BOUNDS: Record<1 | 2, number[]> = { 1: [0.42, 0.58, 1], 2: [0.7, 0.81, 1] }
+/** An answer in the middle of each GOAL_APPROACH row, by phase, for scripted players and tests. */
+export const APPROACH_AT: Record<1 | 2, number[]> = {
+  1: APPROACH_BOUNDS[1].map((upTo, i) => ((APPROACH_BOUNDS[1][i - 1] ?? 0) + upTo) / 2),
+  2: APPROACH_BOUNDS[2].map((upTo, i) => ((APPROACH_BOUNDS[2][i - 1] ?? 0) + upTo) / 2)
+}
 /** Phase 1 is a tutorial: its research (storage and upgrades) costs this share of the usual price. */
 export const PHASE1_RESEARCH_COST = 0.3
 /**

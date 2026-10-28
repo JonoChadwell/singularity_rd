@@ -74,8 +74,8 @@ export const PLAN_INTRO: Record<1 | 2, string> = {
 }
 
 export const PLAN_HELP: Record<1 | 2, string> = {
-  1: 'The plan sets this phase’s goal: a research with an IQ bar and a cost in the plan’s resources. Jev judges whether the plan hangs together and whether reaching the goal takes more brilliance or more resources: brilliant goals need a higher IQ but fewer resources. Research the goal before week 6 ends, or the plan fails: Jev picks how. One cover can buy six more weeks.',
-  2: 'The plan sets Phase 2’s goal: a research needing IQ 300–600 and a cost in the plan’s resources. Goals that take more brilliance need more IQ and fewer resources. Jev also picks how the plan fails: that happens after 80 weeks; risky research and expanding bring that closer, and cover pushes it back.'
+  1: 'The plan sets this phase’s goal: a research with an IQ bar and a cost in the plan’s resources. Jev judges whether the plan hangs together and whether reaching the goal takes more intelligence or more resources: goals that take intelligence need a higher IQ but fewer resources. Research the goal before week 6 ends, or the plan fails: Jev picks how. One cover can buy six more weeks.',
+  2: 'The plan sets Phase 2’s goal: a research needing IQ 300–600 and a cost in the plan’s resources. Goals that take more intelligence need more IQ and fewer resources. Jev also picks how the plan fails: that happens after 80 weeks; risky research and expanding bring that closer, and cover pushes it back.'
 }
 
 export const UNIT_PROCURE_HELP =

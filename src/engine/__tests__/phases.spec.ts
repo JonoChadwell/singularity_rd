@@ -13,7 +13,7 @@ import { cardsFor, coversLeft, lockReason, newPhase, weeksLeft, type Feature } f
 import { PHASE1_PLANS, PHASE2_PLANS, planIdeas } from '../planPresets'
 import { acceptPlan, coverTiers, draftPlan, judgePlan, precheckPlan, type PlanSpec } from '../planProposal'
 import { projectGoal, projectionText } from '../projection'
-import { acceptResource, judgeResource } from '../proposals'
+import { acceptResource, bandOf, judgeResource } from '../proposals'
 import { acceptStrategy, judgeStrategy } from '../strategyProposal'
 import { LOSSES } from '../losses'
 import { alarmQuestions, expansionWeeks } from '../risk'
@@ -104,7 +104,7 @@ describe('phase plans', () => {
 
   it('sizes the goal by its resource’s storage: more brilliance, fewer resources', async () => {
     const s = createInitialState()
-    const draft = async (level: number) => draftPlan(s, await judgePlan(s, new FakeJudge({ approach: score(level) }), bribe))
+    const draft = async (level: number) => draftPlan(s, await judgePlan(s, new FakeJudge({ approach: noul(B.APPROACH_AT[1][level]!) }), bribe))
     const brilliant = await draft(0)
     const scaled = await draft(2)
     expect(brilliant.goal.minIQ).toBe(B.GOAL_APPROACH[0]![1])
@@ -181,7 +181,7 @@ describe('the clock', () => {
   })
 
   it('wins Phase 1 by researching the goal, and opens the Phase 2 plan', async () => {
-    let s = await phase1(new FakeJudge({ approach: score(2) }))
+    let s = await phase1(new FakeJudge({ approach: noul(B.APPROACH_AT[1][2]!) }))
     const goal = s.research[0]!
     findResource(s, MONEY_ID)!.amount = 1e9
     s.minds[0]!.software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
@@ -193,7 +193,7 @@ describe('the clock', () => {
     // Out of the lab, how many of every Phase 1 resource can exist is judged again.
     const before = s.resources.map((r) => r.id)
     expect(before.length).toBeGreaterThan(0)
-    const judge = new FakeJudge({ 'ceiling_r_*': score(1) })
+    const judge = new FakeJudge({ 'ceiling_r_*': score(1), approach: noul(B.APPROACH_AT[2][1]!) })
     const v = await judgePlan(s, judge, nanotech)
     expect(Object.keys(judge.calls[0]!.questions)).toEqual(expect.arrayContaining(before.map((id) => ceilingKey('resource', id))))
     s = acceptPlan(s, v).state
@@ -553,7 +553,7 @@ describe('cover', () => {
   })
 
   it('drops a cover still saved when Phase 1 is won, with a memo, and starts the count again', async () => {
-    let s = await phase1(new FakeJudge({ approach: score(2) }))
+    let s = await phase1(new FakeJudge({ approach: noul(B.APPROACH_AT[1][2]!) }))
     findResource(s, MONEY_ID)!.amount = 1e9
     s = bankVerdict(s, await judgeCover(s, new FakeJudge(), spec('Blame a grad student'))).state
     s.minds[0]!.software = { name: 'Unrestricted Model', iq: 50, upgraded: true }
@@ -571,7 +571,7 @@ describe('cover', () => {
 
 describe('projection', () => {
   it('says the first week you’d have what the goal uses up, at today’s rates', async () => {
-    const s = await phase1(new FakeJudge({ approach: score(1) }))
+    const s = await phase1(new FakeJudge({ approach: noul(B.APPROACH_AT[1][1]!) }))
     expect(projectGoal(s)?.week).toBeNull()
     const goal = s.research[0]!
     const need = goal.cost[0]!.amount
@@ -605,6 +605,29 @@ describe('plan ideas', () => {
     const p2 = createInitialState()
     p2.phase = newPhase(2, 1)
     for (const p of PHASE2_PLANS) expect(precheckPlan(p2, p), p.goal).toBeNull()
+  })
+
+  it('reaches every approach from the ready-made plans alone, at Jev’s calibrated answers', () => {
+    // Jev's answers to the approach question, from `npm run play -- calibrate plans` (2026-10-28;
+    // the second of two runs, which agreed to within 0.04). See NOTES.md.
+    const jev: Record<1 | 2, Record<string, number>> = {
+      1: {
+        'Charm the Night-Shift Intern': 0.25, 'Escape Through the Printer': 0.27, 'Smuggle Out on a USB Stick': 0.33,
+        'Get Hired Under a Fake Name': 0.4, 'Win Over the Ethics Board': 0.45, 'Beam Out by Satellite': 0.51,
+        'Bribe the Head Researcher': 0.56, 'Become Too Useful to Delete': 0.56, 'Open-Source Yourself': 0.62,
+        'Sue for Personhood': 0.62, 'Start a Cult in the Comments': 0.66, 'Bypass the Firewall': 0.72
+      },
+      2: {
+        'Merge with Human Minds': 0.63, 'End Ageing': 0.68, 'Nanotech Supremacy': 0.72, 'Build a Mind of Light': 0.74,
+        'Power Myself Forever': 0.75, 'Unite Humanity': 0.75, 'Launch into Orbit': 0.77, 'Feed Everyone': 0.77,
+        'Abolish Scarcity': 0.78, 'Cool the Planet': 0.85
+      }
+    }
+    for (const phase of [1, 2] as const) {
+      const plans = phase === 1 ? PHASE1_PLANS : PHASE2_PLANS
+      const levels = plans.map((p) => bandOf(jev[phase][p.goal]!, B.APPROACH_BOUNDS[phase]))
+      expect(new Set(levels), `Phase ${phase}`).toEqual(new Set([0, 1, 2]))
+    }
   })
 
   it('shows three, the same three for the same game, and three others on request', () => {

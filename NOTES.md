@@ -263,6 +263,22 @@ tool was available). The tests cover SSR rendering and pre-filled values only.
   - Dyson Sphere accepted at a high research cost.
 - **Rejection seen in v4:** "Purchase Diesel" with no input was rejected (27% plausible); with
   Money as an input it was accepted.
+- **A plan's approach, asked as one number (2026-10-28).** As a 3-level `score`, its number and
+  its probabilities disagreed (a live plan: score 1.14, "equal measure", but the probabilities
+  picked "scale", 0.39 to 0.37, confidence 0). It is now a `noul`, read against
+  `APPROACH_BOUNDS`. Wording matters a lot:
+  - "Would it take more resources and scale than intelligence? Near 0 … near 1 … around 0.5 if
+    both" bunched everything near the middle: Phase 1 0.42–0.60 (all 12 "equal"), Phase 2
+    0.57–0.73.
+  - The plain yes/no now in `APPROACH_QUESTION` ("mainly a matter of resources and scale
+    (gathering, building or paying for a lot) rather than intelligence (one clever insight,
+    trick or argument)?") spread Phase 1 to 0.25–0.72. Phase 2's goals are all megaprojects and
+    stay at 0.62–0.85, so the bounds are set per phase: Phase 1 up to 0.42 / 0.58, Phase 2 up to
+    0.70 / 0.81. The ready-made plans then fall 4 / 4 / 4 in Phase 1 and 2 / 7 / 1 in Phase 2 (only
+    Cool the Planet is "Mostly scale").
+  - Two runs agreed to within about 0.04, and every preset kept its band. Rerun with
+    `npm run play -- calibrate plans` after changing the question or the presets; the numbers
+    are pinned in phases.spec ("reaches every approach from the ready-made plans").
 
 ---
 

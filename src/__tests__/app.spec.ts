@@ -3,7 +3,11 @@ import { createSSRApp } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { renderToString } from 'vue/server-renderer'
 import App from '@/App.vue'
+import { bandDial } from '@/components/dialogs/dials'
+import VerdictView from '@/components/dialogs/VerdictView.vue'
+import * as B from '@/engine/balance'
 import type { PayoutOption } from '@/engine/createProposal'
+import { approachValue } from '@/engine/planProposal'
 import { newResource, newUnit, SERVER_ID } from '@/engine/initialState'
 import { newPhase } from '@/engine/phase'
 import { findResource, MONEY_ID } from '@/engine/model'
@@ -315,5 +319,30 @@ describe('App', () => {
 
     const next = await render((_, ui) => ui.openInvent({ kind: 'mind', preset: 'Lab GPU Server Mk II' }))
     expect(next).toContain('value="Lab GPU Server Mk II"')
+  })
+
+  it('shows a verdict as dials, each with its own number and Jev’s verdict under it', async () => {
+    const dialsFor = async (approach: number, plausible = 0.8) => {
+      const app = createSSRApp({ render: () => null })
+      app.use(createPinia())
+      setActivePinia(app.config.globalProperties.$pinia)
+      const game = useGameStore()
+      ready(game, new FakeJudge({ coherent: noul(plausible), approach: noul(approach) }))
+      const v = await game.propose({ kind: 'plan', spec: { goal: 'Bribe the Head Researcher', means: '', resources: ['Money', 'Story Ideas', 'Published Novels'].map((name) => ({ name, description: '' })) } })
+      if (v?.kind !== 'plan') throw new Error('expected a plan')
+      const dial = bandDial({ key: 'approach', value: approachValue(v), bounds: B.APPROACH_BOUNDS[1], labels: ['Mostly intelligence', 'Both equally', 'Mostly scale'], label: 'scale over intelligence' })
+      const view = createSSRApp(VerdictView, { verdict: v, dials: [dial] })
+      view.use(app.config.globalProperties.$pinia)
+      return renderToString(view)
+    }
+    const accepted = await dialsFor(0.3)
+    expect(accepted.match(/class="dial"/g)).toHaveLength(2)
+    expect(accepted.match(/Jev’s verdict/g)).toHaveLength(2)
+    for (const text of ['80%', 'Accepted', '30%', 'scale over intelligence', 'Mostly intelligence']) expect(accepted).toContain(text)
+    expect(await dialsFor(0.9)).toContain('Mostly scale')
+    // A rejected plan shows only the plausible dial.
+    const rejected = await dialsFor(0.3, 0.05)
+    expect(rejected.match(/class="dial"/g)).toHaveLength(1)
+    expect(rejected).toContain('Rejected')
   })
 })

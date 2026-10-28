@@ -14,7 +14,6 @@ import {
   reader,
   resourceFrom,
   resourceQuestions,
-  scale,
   setTier,
   type Accepted,
   type ResourceSpec,
@@ -53,6 +52,16 @@ const prefix = (i: number) => `r${i}_`
 const topKey = (i: number) => `r${i}`
 /** The `loss` question's option for the i-th loss condition. */
 const lossKey = (i: number) => `l${i}`
+
+/** How much reaching the goal takes resources and scale over intelligence: Jev answers 0 to 1. */
+export const APPROACH_QUESTION =
+  'Is reaching this goal mainly a matter of resources and scale (gathering, building or paying for a lot of something) rather than intelligence (one clever insight, trick or argument)?'
+
+/** Jev's answer to the approach question, 0 (all intelligence) to 1 (all resources and scale). */
+export const approachValue = (v: Pick<PlanVerdict, 'answers' | 'picks'>) => reader(v).noul('approach')
+/** The GOAL_APPROACH row Jev's answer falls in, by the phase's bounds. */
+export const approachLevel = (v: Pick<PlanVerdict, 'answers' | 'picks' | 'phase'>) =>
+  reader(v).band('approach', B.APPROACH_BOUNDS[v.phase])
 
 /** The phase a plan is for: the one waiting for a plan. */
 export const planPhase = (state: GameState): 1 | 2 => (state.phase.n === 2 ? 2 : 1)
@@ -112,10 +121,10 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
           ? 'Could the AI plausibly escape the lab by reaching this goal, this way, with these resources? Be generous: odd plans work if they hang together.'
           : 'Could the AI plausibly deal with humanity by reaching this goal, this way, with these resources? Be generous: odd plans work if they hang together.'
     },
+    // One number, read against GOAL_APPROACH's bounds.
     approach: {
-      type: 'score',
-      instructions: 'What would reaching this goal take more of: sheer brilliance, or resources and scale?',
-      criteria: scale(B.GOAL_APPROACH)
+      type: 'noul',
+      instructions: APPROACH_QUESTION
     },
     // The phase is about its new batch, so the goal is built from one of the new resources.
     top: {
@@ -150,10 +159,7 @@ export async function judgePlan(state: GameState, judge: Judge, raw: PlanSpec): 
     questions,
     'plan'
   )
-  const torn: TornSpec[] = [
-    { key: 'approach', topic: 'what the goal takes more of' },
-    { key: 'top', topic: 'what the goal is built from' }
-  ]
+  const torn: TornSpec[] = [{ key: 'top', topic: 'what the goal is built from' }]
   const base = baseVerdict('plan', questions, answers, 'coherent', torn)
   const loss = LOSSES[phase][Number(reader(base).choice('loss', LOSSES[phase].map((_, i) => lossKey(i))).slice(1))]!
   const v: PlanVerdict = { ...base, kind: 'plan', spec, phase, loss }
@@ -219,8 +225,7 @@ export function draftPlan(current: GameState, v: PlanVerdict): PlanDraft {
   }
   const top = added[fresh.indexOf(at)]!
   if (v.phase === 2) coverTiers(added, top)
-  const level = reader(v).level('approach', B.GOAL_APPROACH.length)
-  const [, iq1, mult1, iq2, mult2] = B.pick(B.GOAL_APPROACH, level)
+  const [, iq1, mult1, iq2, mult2] = B.GOAL_APPROACH[approachLevel(v)]!
   const minIQ = v.phase === 1 ? iq1 : iq2
   const fit = costMultiplier(v.plausibility, v.bar)
   // Both goals are sized by worth, so they don't follow storage. Phase 1's only income is Procurement,
