@@ -6,9 +6,10 @@ import type { Dial } from '../kit/VerdictDial.vue'
 // adds more by passing VerdictView `dials` built here.
 
 /** Plausibility against its bar: red below, green above, and the verdict on the whole proposal. */
-export function plausibleDial(v: Pick<VerdictBase, 'plausibility' | 'bar' | 'rejected' | 'duplicateOf'>): Dial {
+export function plausibleDial(v: Pick<VerdictBase, 'plausibility' | 'bar' | 'rejected' | 'duplicateOf'>, title = 'Plausibility'): Dial {
   return {
     key: 'plausible',
+    title,
     value: v.plausibility,
     label: `plausible · bar ${Math.round(v.bar * 100)}%`,
     valueTone: v.plausibility >= v.bar ? 'good' : 'bad',
@@ -33,6 +34,7 @@ const BAND_TONES = ['a', 'b', 'c']
  */
 export function bandDial(o: {
   key: string
+  title: string
   value: number
   bounds: readonly number[]
   labels: readonly string[]
@@ -46,6 +48,7 @@ export function bandDial(o: {
   }))
   return {
     key: o.key,
+    title: o.title,
     value: o.value,
     label: o.label,
     valueTone: 'info',

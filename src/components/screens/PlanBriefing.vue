@@ -90,6 +90,7 @@
           v-else
           :verdict="verdict"
           :dials="approachDial ? [approachDial] : []"
+          plausible-title="Plan Plausibility"
           accept-label="Start the phase"
           @pick="onPick"
           @accept="accept"
@@ -222,9 +223,10 @@ const approachDial = computed(() =>
   verdict.value
     ? bandDial({
         key: 'approach',
+        title: 'Goal Requires',
         value: approachValue(verdict.value),
         bounds: APPROACH_BOUNDS[phase],
-        labels: ['Mostly intelligence', 'Both equally', 'Mostly scale'],
+        labels: ['Intelligence', 'Mixed', 'Scale'],
         label: 'scale over intelligence',
         ends: ['Intelligence', 'Scale']
       })

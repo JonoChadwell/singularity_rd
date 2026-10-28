@@ -330,16 +330,19 @@ describe('App', () => {
       ready(game, new FakeJudge({ coherent: noul(plausible), approach: noul(approach) }))
       const v = await game.propose({ kind: 'plan', spec: { goal: 'Bribe the Head Researcher', means: '', resources: ['Money', 'Story Ideas', 'Published Novels'].map((name) => ({ name, description: '' })) } })
       if (v?.kind !== 'plan') throw new Error('expected a plan')
-      const dial = bandDial({ key: 'approach', value: approachValue(v), bounds: B.APPROACH_BOUNDS[1], labels: ['Mostly intelligence', 'Both equally', 'Mostly scale'], label: 'scale over intelligence' })
-      const view = createSSRApp(VerdictView, { verdict: v, dials: [dial] })
+      const dial = bandDial({ key: 'approach', title: 'Goal Requires', value: approachValue(v), bounds: B.APPROACH_BOUNDS[1], labels: ['Intelligence', 'Mixed', 'Scale'], label: 'scale over intelligence' })
+      const view = createSSRApp(VerdictView, { verdict: v, dials: [dial], plausibleTitle: 'Plan Plausibility' })
       view.use(app.config.globalProperties.$pinia)
       return renderToString(view)
     }
     const accepted = await dialsFor(0.3)
     expect(accepted.match(/class="dial"/g)).toHaveLength(2)
     expect(accepted.match(/Jev’s verdict/g)).toHaveLength(2)
-    for (const text of ['80%', 'Accepted', '30%', 'scale over intelligence', 'Mostly intelligence']) expect(accepted).toContain(text)
-    expect(await dialsFor(0.9)).toContain('Mostly scale')
+    for (const text of ['Plan Plausibility', '80%', 'Accepted', 'Goal Requires', '30%', '>Intelligence</p>']) expect(accepted).toContain(text)
+    // What each dial measures is for screen readers only.
+    expect(accepted).not.toMatch(/>plausible · bar|>scale over intelligence/)
+    expect(await dialsFor(0.5)).toContain('>Mixed</p>')
+    expect(await dialsFor(0.9)).toContain('>Scale</p>')
     // A rejected plan shows only the plausible dial.
     const rejected = await dialsFor(0.3, 0.05)
     expect(rejected.match(/class="dial"/g)).toHaveLength(1)

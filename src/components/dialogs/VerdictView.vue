@@ -73,8 +73,11 @@ import { useGameStore, type Verdict } from '@/stores/game'
 import VerdictDial, { type Dial } from '../kit/VerdictDial.vue'
 import { plausibleDial } from './dials'
 
-/** `dials`: more of Jev's answers to show beside plausibility (see dials.ts), hidden on a rejection. */
-const props = defineProps<{ verdict: Verdict; acceptLabel?: string | null; saveLabel?: string; dials?: Dial[] }>()
+/**
+ * `dials`: more of Jev's answers to show beside plausibility (see dials.ts), hidden on a rejection.
+ * `plausibleTitle`: the heading over the plausible dial.
+ */
+const props = defineProps<{ verdict: Verdict; acceptLabel?: string | null; saveLabel?: string; dials?: Dial[]; plausibleTitle?: string }>()
 const emit = defineEmits<{
   pick: [key: string, value: string]
   accept: []
@@ -85,7 +88,7 @@ const game = useGameStore()
 
 const shownDials = computed(() => {
   const v = props.verdict
-  return [plausibleDial(v), ...(v.rejected || v.duplicateOf ? [] : (props.dials ?? []))]
+  return [plausibleDial(v, props.plausibleTitle), ...(v.rejected || v.duplicateOf ? [] : (props.dials ?? []))]
 })
 
 const riskLine = computed(() => {

@@ -1,9 +1,9 @@
 <template>
   <figure class="dial">
+    <span class="lbl title">{{ dial.title }}</span>
     <AnalogGauge :value="dial.value" :label="dial.label" :zones="dial.zones" :marks="dial.marks" :ends="dial.ends" />
     <figcaption>
       <span class="num" :class="dial.valueTone">{{ Math.round(dial.value * 100) }}%</span>
-      <span class="lbl">{{ dial.label }}</span>
     </figcaption>
     <div class="verdict">
       <span class="lbl">Jev’s verdict</span>
@@ -23,7 +23,9 @@ export interface Dial {
   key: string
   /** 0 to 1: the needle, and the percentage under it. */
   value: number
-  /** What the number measures, under it in small capitals. */
+  /** The heading over the dial, e.g. "Plan Plausibility". */
+  title: string
+  /** What the number measures, for screen readers. */
   label: string
   /** The percentage's colour. */
   valueTone?: 'good' | 'bad' | 'info'
@@ -43,7 +45,7 @@ defineProps<{ dial: Dial }>()
   box-sizing: border-box;
   flex: none;
   width: 180px;
-  height: 188px;
+  height: 200px;
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -80,11 +82,17 @@ figcaption .num {
   color: var(--ai);
 }
 
-figcaption .lbl {
+.dial > * {
+  flex: none;
+}
+
+.title {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
+  color: var(--silk);
 }
 
 .verdict {
