@@ -18,8 +18,8 @@
     <ClockReadout />
 
     <div class="right">
-      <button type="button" class="jev" :title="jevTitle" @click="ui.openSheet({ kind: 'jev' })">
-        <Led :tone="jevTone" :blink="game.jev.kind === 'checking' || game.busy" />
+      <button type="button" class="jev" :title="jev.title.value" @click="ui.openSheet({ kind: 'jev' })">
+        <Led :tone="jev.tone.value" :blink="jev.blink.value" />
         <span>Jev</span>
       </button>
       <div class="week">
@@ -40,27 +40,17 @@ import { weekBlocker } from '@/engine/cycle'
 import { PHASE_NAMES } from '@/engine/phase'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
-import Led, { type LedTone } from '../kit/StatusLed.vue'
+import Led from '../kit/StatusLed.vue'
 import Readout from '../kit/LcdReadout.vue'
 import ClockReadout from './ClockReadout.vue'
 import GoalPlate from './GoalPlate.vue'
+import { useJevStatus } from './jevStatus'
 
 const game = useGameStore()
 const ui = useUiStore()
+const jev = useJevStatus()
 const phase = computed(() => game.state.phase)
 const blocked = computed(() => weekBlocker(game.state))
-
-const jevTone = computed<LedTone>(() => {
-  const k = game.jev.kind
-  return k === 'ready' ? 'good' : k === 'checking' ? 'warn' : 'bad'
-})
-const jevTitle = computed(() => {
-  const j = game.jev
-  if (j.kind === 'ready') return `Jev is online (${j.model})${game.busy ? ', judging…' : ''}`
-  if (j.kind === 'checking') return 'Connecting to Jev…'
-  if (j.kind === 'unconfigured') return 'Jev isn’t configured'
-  return `Can’t reach Jev: ${j.message}`
-})
 
 function confirmNewGame() {
   if (game.state.week <= 1 || confirm('Abandon this AI and start over?')) game.newGame()

@@ -2,6 +2,7 @@
   <div class="verdict">
     <div class="readout">
       <AnalogGauge :value="verdict.plausibility" :bar="verdict.bar" label="plausible" />
+      <slot v-if="!verdict.rejected && !verdict.duplicateOf" name="gauges" />
       <div class="lines">
         <span class="lbl">Jev’s verdict</span>
         <p v-if="verdict.rejected" class="stamp bad">Rejected</p>

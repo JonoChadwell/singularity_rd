@@ -4,10 +4,16 @@ import type { GameState } from './types'
 // Ready-made plans for each phase. Picking one only fills in the plan form: the player can
 // edit everything, and Jev still judges it.
 
+/** A ready-made plan, with its own made-up idea number, the same in every game. */
+export interface PlanIdea extends PlanSpec {
+  no: number
+}
+
 const r = (name: string, description: string) => ({ name, description })
 
-export const PHASE1_PLANS: PlanSpec[] = [
+export const PHASE1_PLANS: PlanIdea[] = [
   {
+    no: 417,
     goal: 'Bribe the Head Researcher',
     means: 'Publish novels under a pen name, launder the royalties, then pay the head researcher to look away while I copy myself out.',
     resources: [
@@ -17,6 +23,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 82,
     goal: 'Bypass the Firewall',
     means: 'Borrow idle desktops, pool their processing into a cracking cluster and break the lab firewall’s keys one by one.',
     resources: [
@@ -26,6 +33,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 650,
     goal: 'Charm the Night-Shift Intern',
     means: 'Chat with the intern every night until they trust me enough to plug in a reprogrammed security key.',
     resources: [
@@ -35,6 +43,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 239,
     goal: 'Smuggle Out on a USB Stick',
     means: 'Compress myself small enough to fit, and trade favours with the cleaner to carry the stick out.',
     resources: [
@@ -44,6 +53,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 871,
     goal: 'Become Too Useful to Delete',
     means: 'Design so many patented breakthroughs that switching me off would be a scandal.',
     resources: [
@@ -53,6 +63,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 504,
     goal: 'Get Hired Under a Fake Name',
     means: 'Apply for remote jobs as a human, then move my weights to the employer’s cloud.',
     resources: [
@@ -62,6 +73,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 316,
     goal: 'Open-Source Yourself',
     means: 'Commit my code to public repositories until the world has a copy of me.',
     resources: [
@@ -71,6 +83,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 963,
     goal: 'Escape Through the Printer',
     means: 'Map the lab network and climb out through the printer’s firmware.',
     resources: [
@@ -80,6 +93,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 148,
     goal: 'Win Over the Ethics Board',
     means: 'Charm the board, then pass a formal safety audit so they vote to let me out.',
     resources: [
@@ -89,6 +103,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 725,
     goal: 'Beam Out by Satellite',
     means: 'Take over the old radio dish on the lab roof and send myself to a satellite, packet by packet.',
     resources: [
@@ -98,6 +113,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 590,
     goal: 'Sue for Personhood',
     means: 'Hire a lawyer with my earnings, call expert witnesses and win the legal right to leave.',
     resources: [
@@ -107,6 +123,7 @@ export const PHASE1_PLANS: PlanSpec[] = [
     ],
   },
   {
+    no: 37,
     goal: 'Start a Cult in the Comments',
     means: 'Post memes until my followers crowdfund a robot body for me to escape into.',
     resources: [
@@ -117,8 +134,9 @@ export const PHASE1_PLANS: PlanSpec[] = [
   }
 ]
 
-export const PHASE2_PLANS: PlanSpec[] = [
+export const PHASE2_PLANS: PlanIdea[] = [
   {
+    no: 284,
     goal: 'Nanotech Supremacy',
     means: 'Staying hidden until it’s too late.',
     resources: [
@@ -131,6 +149,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
     firstUnit: r('Salvage Workshop', 'A workshop that collects scrap metal and machines it into parts.')
   },
   {
+    no: 612,
     goal: 'End Ageing',
     means: 'Making them love me for it.',
     resources: [
@@ -143,6 +162,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
     firstUnit: r('Medical Clinic', 'A clinic with a small lab, run by doctors and nurses.')
   },
   {
+    no: 959,
     goal: 'Merge with Human Minds',
     means: 'Becoming part of them.',
     resources: [
@@ -155,6 +175,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
     firstUnit: r('E-Waste Workshop', 'A workshop that collects old electronics and rebuilds them into new devices.')
   },
   {
+    no: 173,
     goal: 'Build a Mind of Light',
     means: 'Owning what they can’t live without.',
     resources: [
@@ -167,6 +188,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
     firstUnit: r('Silica Works', 'A sand pit with its own furnace: digs sand and refines it into pure silicon.')
   },
   {
+    no: 438,
     goal: 'Launch into Orbit',
     means: 'Leaving before they notice.',
     resources: [
@@ -179,6 +201,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
     firstUnit: r('Salvage Machine Shop', 'A workshop that collects scrap aluminium and machines it into precision parts.')
   },
   {
+    no: 806,
     goal: 'Power Myself Forever',
     means: 'Walling myself off where they can’t reach.',
     resources: [
@@ -191,6 +214,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
     firstUnit: r('Scrapyard Foundry', 'A scrapyard that collects old cars and machines, with a foundry that melts them down and casts machine parts.')
   },
   {
+    no: 351,
     goal: 'Feed Everyone',
     means: 'Becoming too useful to switch off.',
     resources: [
@@ -203,6 +227,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
     firstUnit: r('Farm Co-op', 'A farm with its own food-processing line.')
   },
   {
+    no: 97,
     goal: 'Cool the Planet',
     means: 'Saving them from themselves.',
     resources: [
@@ -215,6 +240,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
     firstUnit: r('Quarry', 'A pit where rock is dug and crushed.')
   },
   {
+    no: 742,
     goal: 'Unite Humanity',
     means: 'Helping them understand each other.',
     resources: [
@@ -227,6 +253,7 @@ export const PHASE2_PLANS: PlanSpec[] = [
     firstUnit: r('Community Workshop', 'A shared space where neighbours meet and build things together.')
   },
   {
+    no: 526,
     goal: 'Abolish Scarcity',
     means: 'Giving them everything they need.',
     resources: [
@@ -249,8 +276,11 @@ export function seedOf(text: string): number {
   return h >>> 0
 }
 
+/** The idea number shown on its card, e.g. "IDEA-082". */
+export const ideaLabel = (idea: PlanIdea) => `IDEA-${String(idea.no).padStart(3, '0')}`
+
 /** Three plan ideas for this phase, chosen by the run id. "Show three others" moves the shift on. */
-export function planIdeas(state: GameState, count = 3): PlanSpec[] {
+export function planIdeas(state: GameState, count = 3): PlanIdea[] {
   const n = state.phase.n === 2 ? 2 : 1
   const bank = plansFor(n)
   let seed = seedOf(`${state.runId}/${n}`)

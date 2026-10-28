@@ -53,8 +53,8 @@ export const SPECULATIVE_RANGE: [number, number] = [0.25, 2]
 
 /** How long each phase's clock runs, by phase. Phase 3 has none. */
 export const PHASE_WEEKS: Record<1 | 2, number> = { 1: 6, 2: 80 }
-/** Resources in a plan: [fewest, most]. Phase 2 needs this many new ones. */
-export const PLAN_RESOURCES: Record<1 | 2, [number, number]> = { 1: [3, 5], 2: [5, 8] }
+/** Resources in a plan, exactly. Phase 2's must all be new. */
+export const PLAN_RESOURCES: Record<1 | 2, number> = { 1: 3, 2: 5 }
 /** The tier of the plan's top resource, which the goal uses up. The rest of a Phase 1 plan is tier 0. */
 export const GOAL_TIER: Record<1 | 2, number> = { 1: 1, 2: 3 }
 /** The highest value band a resource can have, by the phase it arrives in: Phase 1 things are cheap. */

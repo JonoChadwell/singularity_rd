@@ -17,7 +17,9 @@ You start as one unattended AI server in a research lab. Nothing is pre-made: ev
 unit, strategy and intelligence system is something you propose and
 [Jev](https://openrouter.ai/docs/guides/community/typesafe-sdk) judges. A game has three phases,
 each opened by a **plan** (a goal, the batch of resources it's about, and how you mean to get
-there) that Jev judges and that becomes the phase's goal research.
+there) that Jev judges and that becomes the phase's goal research. The game opens on a title
+screen; each plan is a full-page briefing (three resources in Phase 1, five new ones in Phase 2),
+and the bench appears once it's accepted.
 
 | Phase | Clock | You can propose | Lose |
 | --- | --- | --- | --- |
@@ -161,7 +163,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |
 | `src/stores/ui.ts` | UI state: open dialog, tab, datasheets, board zoom and hover |
-| `src/components/` | UI: `shell/` (top bar, side panel), `board/` (the circuit board; `layout.ts` places buses, chips and traces), `sheets/` (datasheets), `views/` (Research, Manual, Log, game over), `dialogs/` (proposals, plan, upgrades), `kit/` (LEDs, gauges, readouts) |
+| `src/components/` | UI: `shell/` (top bar, side panel), `board/` (the circuit board; `layout.ts` places buses, chips and traces), `sheets/` (datasheets), `views/` (Research, Manual, Log, game over), `screens/` (the title screen and the full-page plan briefing), `dialogs/` (proposals, upgrades), `kit/` (LEDs, gauges, readouts) |
 | `server/` | Vite plugins: Jev proxy and run logs |
 | `harness/` | Command-line harness |
 | `old/` | The original transformers.js prototype, archived and not built |

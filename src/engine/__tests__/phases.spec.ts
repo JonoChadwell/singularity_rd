@@ -78,9 +78,10 @@ describe('phase plans', () => {
   it('checks the plan before asking Jev', () => {
     const s = createInitialState()
     expect(precheckPlan(s, bribe)).toBeNull()
-    expect(precheckPlan(s, { ...bribe, resources: bribe.resources.slice(0, 2) })).toMatch(/at least 3/)
+    expect(precheckPlan(s, { ...bribe, resources: bribe.resources.slice(0, 2) })).toMatch(/Name all 3/)
+    expect(precheckPlan(s, { ...bribe, resources: [...bribe.resources, { name: 'Royalties', description: '' }] })).toMatch(/has 3 resources/)
     expect(precheckPlan(s, { ...bribe, goal: '' })).toMatch(/goal/)
-    const dup = { ...bribe, resources: [...bribe.resources, { name: 'money', description: '' }] }
+    const dup = { ...bribe, resources: [...bribe.resources.slice(0, 2), { name: 'money', description: '' }] }
     expect(precheckPlan(s, dup)).toMatch(/different name/)
   })
 
@@ -158,7 +159,8 @@ describe('phase plans', () => {
     s.resources.push(newResource({ id: MONEY_ID, name: 'Money' }))
     expect(precheckPlan(s, nanotech)).toBeNull()
     const four = { ...nanotech, resources: [...nanotech.resources.slice(0, 4), { name: 'Money', description: '' }] }
-    expect(precheckPlan(s, four)).toMatch(/at least 5 resources you don’t have yet \(4/)
+    expect(precheckPlan(s, four)).toMatch(/one you don’t have yet/)
+    expect(precheckPlan(s, { ...nanotech, resources: nanotech.resources.slice(0, 4) })).toMatch(/Name all 5 resources/)
     expect(precheckPlan(s, { ...nanotech, firstUnit: null })).toMatch(/first unit/)
   })
 })
@@ -594,6 +596,10 @@ describe('plan ideas', () => {
     expect(others.some((p) => three.includes(p))).toBe(false)
   })
 })
+    // Each idea keeps its own three-digit number in every game.
+    const numbers = [...PHASE1_PLANS, ...PHASE2_PLANS].map((p) => p.no)
+    expect(new Set(numbers).size).toBe(numbers.length)
+    for (const no of numbers) expect(no).toBeLessThan(1000)
 
 // ---------------------------------------------------------------- fixes from the playtests
 
@@ -636,9 +642,8 @@ describe('fixes', () => {
     const s = createInitialState()
     s.phase = newPhase(2, 5)
     s.resources.push(newResource({ id: MONEY_ID, name: 'Money' }))
-    const withMoney = { ...nanotech, resources: [{ name: 'Money', description: '' }, ...nanotech.resources] }
-    const judge = new FakeJudge(Object.fromEntries([1, 2, 3, 4, 5].map((i) => [`r${i}_tier`, score(9)])))
-    const v = await judgePlan(s, judge, withMoney)
+    const judge = new FakeJudge(Object.fromEntries([0, 1, 2, 3, 4].map((i) => [`r${i}_tier`, score(9)])))
+    const v = await judgePlan(s, judge, nanotech)
     const q = judge.calls[0]!.questions
     // Money is already yours, so the goal can't be built from it.
     expect(Object.values((q.top as { criteria: Record<string, string> }).criteria)).not.toContain('Money')
@@ -660,9 +665,8 @@ describe('fixes', () => {
       const s = createInitialState()
       s.phase = newPhase(2, 5)
       s.resources.push(newResource({ id: MONEY_ID, name: 'Money', tier: moneyTier }))
-      const withMoney = { ...nanotech, resources: [{ name: 'Money', description: '' }, ...nanotech.resources] }
       // Jev tiers every new resource in the middle (tier 2), so the other tiers would be empty.
-      const d = draftPlan(s, await judgePlan(s, new FakeJudge(), withMoney))
+      const d = draftPlan(s, await judgePlan(s, new FakeJudge(), nanotech))
       expect(d.added.map((r) => r.tier).sort()).toEqual([0, 1, 2, 2, 3])
       expect(d.top.tier).toBe(3)
     }

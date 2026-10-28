@@ -77,17 +77,16 @@ export function precheckPlan(state: GameState, raw: PlanSpec): string | null {
   if (state.phase.status !== 'planning') return 'This phase already has a plan.'
   const spec = cleanPlan(raw)
   const phase = planPhase(state)
-  const [fewest, most] = B.PLAN_RESOURCES[phase]
+  const count = B.PLAN_RESOURCES[phase]
   if (spec.goal.length < 2) return 'Name your goal.'
   const taken = namesInUse(state)
   if (taken.has(lower(spec.goal))) return `${spec.goal} already exists.`
   const names = spec.resources.map((r) => lower(r.name))
   if (new Set(names).size !== names.length) return 'Each resource needs a different name.'
   if (names.includes(lower(spec.goal))) return 'The goal needs a different name from its resources.'
-  const fresh = newIndexes(state, spec).length
-  if (phase === 1 && spec.resources.length < fewest) return `Name at least ${fewest} resources.`
-  if (phase === 2 && fresh < fewest) return `Name at least ${fewest} resources you don’t have yet (${fresh} so far).`
-  if (spec.resources.length > most) return `At most ${most} resources.`
+  if (spec.resources.length < count) return `Name all ${count} resources.`
+  if (spec.resources.length > count) return `A plan has ${count} resources.`
+  if (phase === 2 && newIndexes(state, spec).length < count) return 'Each resource needs to be one you don’t have yet.'
   if (phase === 2) {
     const first = spec.firstUnit
     if (!first) return 'Name your first unit: the first thing you’ll build.'

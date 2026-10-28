@@ -23,7 +23,7 @@ Each phase will begin with a phase planning dialog where the user proposes how t
    * Goal: Bypass the firewall. Resources: Borrowed Servers, Compute Power, Busted Ciphers
 
 2. Humanity
- * Must introduce at least 5 new resources
+ * Must introduce 5 new resources
  * Unlock the ability to create industrial units
  * Time limit of 100 weeks. Time up => humans stop you
  * Some actions you take in this section can / will reduce your time remaining. This includes buying lots of units and any research deemed "risky" (which should reward the risk with large gains).
@@ -76,7 +76,7 @@ tuning changed. Where this plan is silent, the current build (NOTES.md §10) sta
 | Role | A short tutorial with a puzzle in it | The real challenge | Free play, for now |
 | Clock | 10 weeks, fixed | 100 weeks, moved by your actions | None |
 | Lose | Discovered: game over | Humans stop you: game over | Can't lose |
-| New resources | The plan's batch: 3–5 | The plan's batch: 5 or more new | Any |
+| New resources | The plan's batch: 3 | The plan's batch: 5 new | Any |
 | You can propose | Resources, passive incomes, software upgrades to the Starting Server | + industry units, strategies, cover. After your first unit: + intelligence systems, hardware upgrades, unit upgrades | Everything |
 | Won by | Researching the plan's goal | Researching the plan's goal | — |
 
@@ -102,9 +102,9 @@ can't be closed: the phase hasn't started until it has a plan.
   - Phase 1, **Means**: a line on how, like "Publish books for money, then pay a researcher to
     set me loose."
   - Phase 2, **Handle humans by**: a line, like "Staying hidden until it's too late."
-  - **Resources**: a list of names, each with an optional line of description. Phase 1 needs
-    3–5 resources. Phase 2 needs at least 5 that aren't in the game yet, and at most 8 in
-    all. Names already in the game are shown as "already have" and don't count as new.
+  - **Resources**: a list of names, each with an optional line of description. Phase 1 has
+    exactly 3 resources (one may be one you already have). Phase 2 has exactly 5, none of them
+    in the game yet. Names already in the game are shown as "have".
   - **Goal uses up**: 1–3 of the batch's resources, ticked. This is the goal's cost. The
     first pick defaults to the batch's last resource. In Phase 2 they must be resources that
     are new in the plan, so the goal can't be paid in what you already make.
@@ -135,8 +135,9 @@ is in the light of it.
 
 ### D3. Phase 1: Escape the Lab
 
-**Start.** Week 1, the Starting Server (IQ 100, ceiling 150), nothing else. The plan dialog
-opens at once.
+**Start.** Week 1, the Starting Server (IQ 100, ceiling 150), nothing else. The game opens on
+a title screen; Start leads to the plan briefing, a full page, and the bench appears once the
+plan is accepted.
 
 **Clock.** You have weeks 1 to 10. If you press Next week on week 10 without having
 researched the goal, the lab discovers you: game over. The clock never moves in Phase 1.
@@ -185,7 +186,7 @@ in week 8 (discovery after week 10)". Target: a sensible first game wins with tw
 weeks to spare; a fumbled one can still lose.
 
 **Winning.** Researching the goal shows "You escaped the lab in week N" and opens the Phase 2
-plan dialog. Everything carries over.
+plan briefing. Everything carries over.
 
 ### D4. Phase 2: Humanity
 
@@ -378,7 +379,7 @@ tiers them that way unprompted (checked against the real Jev). The first unit ca
 | --- | --- | --- |
 | `PHASE_WEEKS` | 10, 100 | |
 | `PLAN_BAR` | 0.25 | Plans are generous |
-| `PLAN_RESOURCES` | Phase 1: 3–5; Phase 2: 5–8 (5+ new) | |
+| `PLAN_RESOURCES` | Phase 1: 3; Phase 2: 5 (all new) | |
 | `GOAL_APPROACH` | 5 levels: Phase 1 IQ 145 / 135 / 125 / 115 / 105, cost ×0.6 / 0.8 / 1 / 1.2 / 1.4. Phase 2 IQ 600 / 500 / 420 / 350 / 300, cost ×0.3 / 0.55 / 1 / 2 / 4 | Lower IQ, bigger cost |
 | `GOAL_COST` | Phase 1: 6,000 worth. Phase 2: 1e13 worth | Tuned by the bots and playtests, §D14 |
 | `INCOME_COST_WEEKS` | 1 (was 4) | Phase 1 has only ten weeks; Jev's plausibility of 60–80% raises it to 1.5–2 |

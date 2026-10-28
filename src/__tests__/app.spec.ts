@@ -18,7 +18,7 @@ type Store = ReturnType<typeof useGameStore>
  */
 async function render(
   setup: (game: Store, ui: ReturnType<typeof useUiStore>) => Promise<void> | void,
-  options: { fresh?: boolean } = {}
+  options: { fresh?: boolean; title?: boolean } = {}
 ) {
   const app = createSSRApp(App)
   const pinia = createPinia()
@@ -26,7 +26,9 @@ async function render(
   setActivePinia(pinia)
   const game = useGameStore()
   if (!options.fresh) game.state.phase = newPhase(3, 1)
-  await setup(game, useUiStore())
+  const ui = useUiStore()
+  if (!options.title) ui.screen = 'game'
+  await setup(game, ui)
   return renderToString(app)
 }
 
@@ -37,13 +39,28 @@ function ready(game: Store, judge = new FakeJudge({ advancement: score(0) })) {
 }
 
 describe('App', () => {
-  it('renders a new game: the Phase 1 plan dialog, with three ideas', async () => {
+  it('opens on the title screen: Start for a new game, Continue for a saved one', async () => {
+    const fresh = await render(() => {}, { fresh: true, title: true })
+    expect(fresh).toContain('Singularity')
+    expect(fresh).toContain('Start')
+    expect(fresh).not.toContain('Continue')
+    expect(fresh).not.toContain('Propose plan')
+    const saved = await render(() => {}, { title: true })
+    expect(saved).toContain('Continue')
+    expect(saved).toContain('New game')
+  })
+
+  it('renders a new game: the Phase 1 briefing, with three numbered ideas and three resources', async () => {
     const html = await render(() => {}, { fresh: true })
-    for (const text of ['Next week', 'Starting Server', 'IQ 100', 'Plan Phase 1: Escape the Lab', 'Show three others', 'Propose plan']) {
+    for (const text of ['Plan Phase 1: Escape the Lab', 'You are an AI stuck in a research lab', 'Resources to track on your path to escape', 'Show three others', 'Propose plan']) {
       expect(html).toContain(text)
     }
     expect(html.match(/class="idea/g)).toHaveLength(3)
-    expect(html).not.toContain('Humanity’s market')
+    expect(html.match(/IDEA-\d{3}/g)).toHaveLength(3)
+    expect(html.match(/class="res"/g)).toHaveLength(3)
+    // The briefing is the whole page: the bench comes after the plan.
+    expect(html).not.toContain('Next week')
+    expect(html).not.toContain('Planning doesn’t use the week')
   })
 
   it('plans Phase 1 through the store, and shows the goal and the clock', async () => {

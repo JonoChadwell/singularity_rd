@@ -1,5 +1,7 @@
 <template>
-  <div class="bench">
+  <TitleScreen v-if="ui.screen === 'title'" />
+  <PlanBriefing v-else-if="game.state.phase.status === 'planning'" :key="`plan-${game.state.phase.n}`" />
+  <div v-else class="bench">
     <TopBar />
     <StatusLine />
 
@@ -18,8 +20,7 @@
       <DatasheetDrawer class="right" />
     </main>
 
-    <PlanDialog v-if="game.state.phase.status === 'planning'" :key="`plan-${game.state.phase.n}`" />
-    <UpgradeDialog v-else-if="ui.invent?.kind === 'upgrade'" :key="JSON.stringify(ui.invent)" :request="ui.invent" />
+    <UpgradeDialog v-if="ui.invent?.kind === 'upgrade'" :key="JSON.stringify(ui.invent)" :request="ui.invent" />
     <ProposalDialog v-else-if="ui.invent" :key="JSON.stringify(ui.invent)" :request="ui.invent" />
   </div>
 </template>
@@ -29,7 +30,6 @@ import { onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 import CircuitBoard from '@/components/board/CircuitBoard.vue'
-import PlanDialog from '@/components/dialogs/PlanDialog.vue'
 import ProposalDialog from '@/components/dialogs/ProposalDialog.vue'
 import UpgradeDialog from '@/components/dialogs/UpgradeDialog.vue'
 import DatasheetDrawer from '@/components/sheets/DatasheetDrawer.vue'
@@ -37,6 +37,8 @@ import SidePanel from '@/components/shell/SidePanel.vue'
 import StatusLine from '@/components/shell/StatusLine.vue'
 import TopBar from '@/components/shell/TopBar.vue'
 import ViewTabs from '@/components/shell/ViewTabs.vue'
+import PlanBriefing from '@/components/screens/PlanBriefing.vue'
+import TitleScreen from '@/components/screens/TitleScreen.vue'
 import GameOver from '@/components/views/GameOver.vue'
 import LogView from '@/components/views/LogView.vue'
 import ManualView from '@/components/views/ManualView.vue'

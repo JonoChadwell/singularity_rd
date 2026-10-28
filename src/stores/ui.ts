@@ -39,6 +39,8 @@ export type SheetRef =
 const sameSheet = (a: SheetRef, b: SheetRef) => a.kind === b.kind && ('id' in a ? a.id : '') === ('id' in b ? b.id : '')
 
 export const useUiStore = defineStore('ui', () => {
+  /** The title screen shows on every load, until the player starts or continues. */
+  const screen = ref<'title' | 'game'>('title')
   const invent = ref<InventRequest | null>(null)
   const notice = ref<{ tone: 'good' | 'bad'; text: string } | null>(null)
   const tab = ref<Tab>('board')
@@ -52,6 +54,11 @@ export const useUiStore = defineStore('ui', () => {
   const hover = ref<string | null>(null)
 
   const log = (event: string, data: Record<string, unknown>) => useGameStore().logTo('ui', event, data)
+
+  function leaveTitle(how: 'start' | 'continue' | 'new') {
+    screen.value = 'game'
+    log('title_closed', { how })
+  }
 
   function openInvent(request: InventRequest) {
     notice.value = null
@@ -129,6 +136,8 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   return {
+    screen,
+    leaveTitle,
     invent,
     notice,
     tab,
