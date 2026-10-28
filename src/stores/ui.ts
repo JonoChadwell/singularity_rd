@@ -74,7 +74,7 @@ export const useUiStore = defineStore('ui', () => {
     const top = sheets.value[sheets.value.length - 1]
     if (top && sameSheet(top, sheet)) return
     sheets.value = stack ? [...sheets.value, sheet] : [sheet]
-    log('sheet', { ...sheet, depth: sheets.value.length })
+    log('sheet', { ...sheet, draft: 'draft' in sheet && sheet.draft ? true : undefined, depth: sheets.value.length })
   }
 
   function backSheet() {
