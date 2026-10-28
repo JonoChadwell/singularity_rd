@@ -17,8 +17,9 @@
     <section>
       <h4>Notes</h4>
       <p class="note">
-        Jev rates how plausible each idea is against a bar. Its answers are saved with the game, so the same proposal always gets the
-        same verdict. When Jev is torn, you pick between its top two answers.
+        Jev is an AI model that judges instead of writing. It reads the state of your game and what you propose, and answers set
+        questions with numbers: how likely something is, which of a few options fits best, or where it sits on a scale. It never
+        writes text of its own, so every name in the game comes from you or from a fixed list.
       </p>
     </section>
     <template #foot>

@@ -6,7 +6,7 @@
         <span class="screws" aria-hidden="true" />
         <HelpTip :text="PLAN_HELP[phase]" />
         <h2 id="plan-title">Plan Phase {{ phase }}: {{ PHASE_NAMES[phase] }}</h2>
-        <button type="button" class="small jev" :title="jev.title.value" @click="ui.openSheet({ kind: 'jev' })">
+        <button type="button" class="jev" :title="jev.title.value" @click="ui.openSheet({ kind: 'jev' })">
           <Led :tone="jev.tone.value" :blink="jev.blink.value" />
           <span>Jev</span>
         </button>
