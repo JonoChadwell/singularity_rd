@@ -1,5 +1,6 @@
 <template>
   <main class="page">
+    <BoardBackdrop />
     <section class="console" aria-labelledby="plan-title">
       <header class="plate">
         <span class="screws" aria-hidden="true" />
@@ -146,6 +147,7 @@ import DataSheet from '../kit/DataSheet.vue'
 import SpecTable from '../kit/SpecTable.vue'
 import Led from '../kit/StatusLed.vue'
 import { useJevStatus } from '../shell/jevStatus'
+import BoardBackdrop from './BoardBackdrop.vue'
 
 const game = useGameStore()
 const ui = useUiStore()
@@ -258,6 +260,8 @@ function accept() {
 <style scoped>
 /* The briefing fills the screen, on the bare board. */
 .page {
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
   display: flex;
   justify-content: center;
@@ -267,6 +271,7 @@ function accept() {
 }
 
 .console {
+  position: relative;
   width: min(820px, 100%);
   display: flex;
   flex-direction: column;
