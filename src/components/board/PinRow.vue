@@ -21,7 +21,7 @@
       <template v-if="strategy.kind === 'make'">
         {{ perUnit }}<span class="muted">/u</span>
         <span v-if="run && run.fraction < 0.999 && run.units > 0" class="warn">
-          · {{ Math.round(run.fraction * 100) }}%<template v-if="run.limitedBy"> short of {{ resName(run.limitedBy) }}</template>
+          · {{ Math.round(run.fraction * 100) }}% output<template v-if="run.limitedBy"> (low {{ resName(run.limitedBy) }})</template>
         </span>
       </template>
       <template v-else>Crews {{ fmt(strategy.amount) }} {{ unitName(strategy.outputId) }} each</template>
