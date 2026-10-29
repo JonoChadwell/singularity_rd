@@ -1,6 +1,6 @@
 <template>
-  <main class="page">
-    <BoardBackdrop />
+  <main class="page" :class="{ overlay }">
+    <BoardBackdrop v-if="!overlay" />
     <section class="console" aria-labelledby="plan-title">
       <header class="plate">
         <span class="screws" aria-hidden="true" />
@@ -174,6 +174,8 @@ import DatasheetDrawer from '../sheets/DatasheetDrawer.vue'
 import { useJevStatus } from '../shell/jevStatus'
 import BoardBackdrop from './BoardBackdrop.vue'
 
+defineProps<{ overlay?: boolean }>()
+
 const game = useGameStore()
 const ui = useUiStore()
 const jev = useJevStatus()
@@ -286,6 +288,15 @@ function accept() {
   gap: 12px;
   padding: 32px 16px;
   background: radial-gradient(ellipse at center, var(--pcb-2), var(--pcb-1) 55%, var(--pcb-0));
+}
+
+/* Phase 2's plan pops up over the running bench instead. */
+.page.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: auto;
+  background: rgb(0 0 0 / 0.6);
 }
 
 /* A datasheet opened from the briefing sits beside it, as on the bench. */

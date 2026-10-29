@@ -18,8 +18,8 @@ unit, strategy and intelligence system is something you propose and
 [Jev](https://openrouter.ai/docs/guides/community/typesafe-sdk) judges. A game has three phases,
 each opened by a **plan** (a goal, the batch of resources it's about, and how you mean to get
 there) that Jev judges and that becomes the phase's goal research. The game opens on a title
-screen; each plan is a full-page briefing (three resources in Phase 1, five new ones in Phase 2),
-and the bench appears once it's accepted.
+screen; the Phase 1 plan is a full-page briefing (three resources) and the bench appears once it's
+accepted. The Phase 2 plan (five new resources) pops up over the running bench.
 
 | Phase | Clock | You can propose | Lose |
 | --- | --- | --- | --- |

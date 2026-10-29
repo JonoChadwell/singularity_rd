@@ -1,7 +1,8 @@
 <template>
   <TitleScreen v-if="ui.screen === 'title'" />
-  <PlanBriefing v-else-if="game.state.phase.status === 'planning'" :key="`plan-${game.state.phase.n}`" />
+  <PlanBriefing v-else-if="planning && planPhase(game.state) === 1" :key="`plan-${game.state.phase.n}`" />
   <div v-else class="bench">
+    <PlanBriefing v-if="planning" :key="`plan-${game.state.phase.n}`" overlay />
     <TopBar />
     <StatusLine />
 
@@ -26,7 +27,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { planPhase } from '@/engine/planProposal'
 import { useGameStore } from '@/stores/game'
 import { useUiStore } from '@/stores/ui'
 import CircuitBoard from '@/components/board/CircuitBoard.vue'
@@ -46,6 +48,7 @@ import ResearchView from '@/components/views/ResearchView.vue'
 
 const game = useGameStore()
 const ui = useUiStore()
+const planning = computed(() => game.state.phase.status === 'planning')
 onMounted(() => game.checkJev())
 </script>
 
