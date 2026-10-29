@@ -209,6 +209,14 @@ function onChange(e: Event) {
   width: 4.2em;
   padding: 1px 4px;
   font-size: 12px;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.n::-webkit-inner-spin-button,
+.n::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .rest {
