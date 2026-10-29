@@ -1173,6 +1173,19 @@ describe('storage', () => {
     expect(precheckDepot(s, { ...spec, name: 'Silo' })).toMatch(/Only about a million Steel can exist/)
   })
 
+  it('is never paid for in the resource it stores, nor past what a payer can hold', async () => {
+    const s = world()
+    findResource(s, 'steel')!.amount = 1e9
+    findResource(s, MONEY_ID)!.cap = 500
+    findResource(s, MONEY_ID)!.amount = 400
+    // Jev would pay in Steel, but Steel is what it's for; Money pays, never more than it holds.
+    const v = await drum(s, { pay: choice('steel', { steel: 0.9, [MONEY_ID]: 0.1 }), tier: score(3) })
+    for (const o of v.options) {
+      expect(o.cost.map((c) => c.resourceId)).not.toContain('steel')
+      for (const c of o.cost) expect(c.amount).toBeLessThanOrEqual(500)
+    }
+  })
+
   it('holds twice as much of a Cryogenic resource', async () => {
     const s = world()
     findResource(s, 'steel')!.traits = ['cryogenic']

@@ -155,7 +155,7 @@ export async function judgeDepot(state: GameState, judge: Judge, raw: DepotSpec)
       criteria: options(partPool(state, B.MAX_UNIT_TIER))
     },
     icon: iconQuestion,
-    ...payQuestion(state, `the design of ${spec.name}`),
+    ...payQuestion(state, `the design of ${spec.name}`, payableFor(state, r)),
     ...alarmQuestions(state)
   }
   const answers = await judge.ask(
@@ -200,7 +200,7 @@ export function depotOptions(state: GameState, v: Pick<DepotVerdict, 'answers' |
   // What one holds for each dollar it's worth.
   const perDollar = B.pick(B.DEPOT_RATIO, level)[1]
   const chosen = bands.slice(0, B.UNIT_OPTIONS)
-  const pay = payerPerTake(v.answers, chosen.length)
+  const pay = payerPerTake(v.answers, chosen.length).map((id) => (id === r.id ? undefined : id))
   const room = Math.max(0, v.target.amount - capOf(state, r))
   const risk = tracedRisk(r, v.risk)
   return chosen.map((band, i) => {
@@ -219,12 +219,25 @@ export function depotOptions(state: GameState, v: Pick<DepotVerdict, 'answers' |
       needed,
       neededWorth: needed * value,
       minIQ: floorIQ(minIQ),
-      cost: costFor(state, v, worth, undefined, pay[i]),
+      cost: withinStorage(state, costFor(state, v, worth, payableFor(state, r), pay[i])),
       risk,
       pay: pay[i]
     }
   })
 }
+
+/**
+ * What may pay for a depot's design: anything that can be stored, except the resource it's for,
+ * which by then has nowhere to go.
+ */
+const payableFor = (state: GameState, r: Resource) => (x: Resource) => x.id !== r.id && capOf(state, x) > 0
+
+/** No cost is more than its payer can hold, so it can always be saved up for. */
+const withinStorage = (state: GameState, cost: Cost): Cost =>
+  cost.map((c) => {
+    const payer = findResource(state, c.resourceId)
+    return payer ? { ...c, amount: Math.min(c.amount, Math.floor(capOf(state, payer))) } : c
+  })
 
 /** Hazardous, Untraceable and Contraband resources scale the clock weeks of designing depots for them. */
 function tracedRisk(r: Resource, risk: Risk | null): Risk | null {
