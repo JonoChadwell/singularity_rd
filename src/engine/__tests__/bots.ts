@@ -10,12 +10,12 @@ import { previewWeek } from '../economy'
 import { computeTrait } from '../computeTraits'
 import { acceptMind, judgeMind } from '../mindProposal'
 import { createInitialState, newResource, SERVER_ID } from '../initialState'
-import { bestIQ, capOf, contractsFor, creatable, currentIQ, findResource, findUnit, MONEY_ID, openSlots, weeklyUse } from '../model'
+import { affordable, bestIQ, capOf, contractsFor, creatable, currentIQ, depotsFor, findResource, findUnit, MONEY_ID, openSlots, weeklyUse } from '../model'
 import { coversLeft, newPhase } from '../phase'
 import { acceptPlan, judgePlan, type PlanSpec } from '../planProposal'
 import { goalOf } from '../projection'
-import { acceptStorage, judgeStorage } from '../storageProposal'
-import type { CreateTarget, GameState, UpgradeTarget } from '../types'
+import { acceptDepot, judgeDepot } from '../depotProposal'
+import type { CreateTarget, GameState, Resource, UpgradeTarget } from '../types'
 import { acceptUpgrade, judgeUpgrade } from '../upgrade'
 import { choice, FakeJudge, noul, score, type Overrides } from './fakeJudge'
 
@@ -162,23 +162,40 @@ async function coverNow(s: GameState): Promise<GameState | null> {
   return pick ? applyVerdict(s, v, pick.i).state : null
 }
 
-/** Expands storage for a resource when what it must hold doesn't fit, and none is waiting. */
-async function storeIfShort(s: GameState, resourceId: string, need: number, answers: Overrides = {}): Promise<GameState | null> {
+/** The bots assume one of Jev's depots holds about this many times its own worth of what it holds. */
+export const DEPOT_BOT_RATIO = 10
+/** The value band the bots assume for a depot: modest, like a car ($35k). */
+export const DEPOT_BOT_BAND = 2
+
+/** Fake Jev's answer to how many one depot holds: about DEPOT_BOT_RATIO times its worth of the resource. */
+export function depotHolds(r: Resource): JevAnswer {
+  const units = (DEPOT_BOT_RATIO * B.UNIT_VALUE[DEPOT_BOT_BAND]![1]) / Math.max(1e-9, r.value)
+  return score(Math.min(B.DEPOT_HOLDS.length - 1, Math.max(0, Math.round(Math.log10(Math.max(1, units))))))
+}
+
+/** Fake Jev's answers for a typical depot for a resource. */
+export const depotAnswers = (r: Resource): Overrides => ({ value: score(DEPOT_BOT_BAND), tier: score(0), holds: depotHolds(r) })
+
+/**
+ * Room for `need` of a resource. With a depot designed, builds as many as it takes and can pay
+ * for (no action); with none designed or waiting, designs one (the week's action). Null when
+ * there's nothing to do.
+ */
+export async function depotIfShort(s: GameState, resourceId: string, need: number, answers: Overrides = {}): Promise<GameState | null> {
   const r = findResource(s, resourceId)!
-  const waiting = s.research.some((x) => x.effect.kind === 'storage' && x.effect.resourceId === resourceId)
-  if (s.proposedThisWeek || waiting || capOf(s, r) >= need) return null
-  const v = await judgeStorage(s, new FakeJudge({ ...TYPICAL, efficiency: score(2), ...answers }), {
-    resourceId,
-    name: fresh('Rent warehouse space'),
-    description: ''
-  })
-  if (v.rejected) return null
-  // The first that fits and isn't risky, never one sized for an IQ the AI doesn't have yet.
-  const ok = v.options.map((o, i) => ({ o, i })).filter(({ o }) => !o.advanced)
-  const pick = ok.find(({ o }) => capOf(s, r) + o.added >= need && !o.risky) ?? ok.find(({ o }) => !o.risky) ?? ok[0]
-  if (!pick) return null
-  v.choice = pick.i
-  return acceptStorage(s, v).state
+  if (capOf(s, r) >= need) return null
+  const depot = depotsFor(s, resourceId)[0]
+  if (depot?.holds) {
+    const c = contractsFor(s, depot.id)[0]
+    const n = c ? Math.min(openSlots(c), Math.ceil((need - capOf(s, r)) / depot.holds.amount - 1e-9), affordable(s, c)) : 0
+    return n > 0 ? createUnits(s, c!.id, n) : null
+  }
+  const waiting = s.research.some((x) => x.effect.kind === 'depot' && x.effect.unit.holds?.resourceId === resourceId)
+  if (s.proposedThisWeek || waiting) return null
+  const v = await judgeDepot(s, new FakeJudge({ ...TYPICAL, ...depotAnswers(r), ...answers }), { resourceId, name: fresh('Warehouse'), description: '' })
+  if (v.rejected || !v.options.length) return null
+  v.choice = 0
+  return acceptDepot(s, v).state
 }
 
 // ---------------------------------------------------------------- Phase 1
@@ -215,15 +232,13 @@ export const idle: Turn = async (s) => {
 
 /**
  * Phase 1, flat: a cheap Procurement first, then Procurements straight into the goal's resource every
- * week, with upgrades and storage as the goal needs them.
+ * week, with upgrades as the goal needs them (storage is fixed in the lab).
  */
 export const flat: Turn = async (s) => {
   s = researchAll(s)
-  const goal = goalOf(s)!
   const top = goalResource(s)
   if (s.week === 1) return researchAll(await createVia(s, resourceTarget('story-ideas'), 'now'))
   s = (await upgradeIfShort(s)) ?? s
-  s = (await storeIfShort(s, top, goal.cost[0]!.amount)) ?? s
   // Pay for waiting research first, then pile up the goal's resource.
   if (!s.proposedThisWeek) s = await createVia(s, resourceTarget(shortForResearch(s) ?? top), 'now').catch(() => s)
   return researchAll(s)
@@ -323,7 +338,7 @@ export function steady(style: Phase2Style): Turn {
     }
     const has = (name: string) => s.strategies.some((x) => x.name === name) || s.research.some((r) => r.name === name)
     const waiting = (kind: string, id?: string) =>
-      s.research.some((r) => r.effect.kind === kind && (!id || (r.effect.kind === 'storage' ? r.effect.resourceId === id : true)))
+      s.research.some((r) => r.effect.kind === kind && (!id || (r.effect.kind === 'depot' ? r.effect.unit.holds?.resourceId === id : true)))
     const strategy = (name: string, outputId: string, unitId: string): ProposalInput => ({
       kind: 'strategy',
       spec: { name, description: '', unitId, outputId }
@@ -371,7 +386,7 @@ export function steady(style: Phase2Style): Turn {
     const tooBig = () =>
       s.research
         .flatMap((r) => r.cost)
-        .find((c) => capOf(s, findResource(s, c.resourceId)!) < c.amount && !waiting('storage', c.resourceId))
+        .find((c) => capOf(s, findResource(s, c.resourceId)!) < c.amount && !waiting('depot', c.resourceId))
 
     if (!s.proposedThisWeek) {
       const weeksLeft = (s.phase.deadline ?? 0) - s.week + 1
@@ -400,11 +415,11 @@ export function steady(style: Phase2Style): Turn {
         }
       } else if (tooBig()) {
         const c = tooBig()!
-        s = (await storeIfShort(s, c.resourceId, c.amount, alarm)) ?? s
+        s = (await depotIfShort(s, c.resourceId, c.amount, alarm)) ?? s
       } else if (needsSourcing(MILL)) {
         s = await source(MILL)
       } else if (money.amount >= capOf(s, money) * 0.9) {
-        s = (await storeIfShort(s, MONEY_ID, capOf(s, money) * 4, alarm)) ?? s
+        s = (await depotIfShort(s, MONEY_ID, capOf(s, money) * 4, alarm)) ?? s
       }
       if (!s.proposedThisWeek) {
         // A Procurement: a part nobody makes, the goal's resource once it's within reach, or Money.

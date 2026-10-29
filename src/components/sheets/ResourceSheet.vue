@@ -22,7 +22,7 @@
       <SpecTable
         :rows="[
           { k: 'To start', v: fmt(r.cap), num: true },
-          ...r.expansions.map((e) => ({ k: e.name, v: `+${fmt(e.added)}`, num: true })),
+          ...depotsFor(game.state, r.id).map((u) => ({ k: `${u.icon} ${u.name} ×${fmtCount(u.count)}`, v: `+${fmt(u.count * (u.holds?.amount ?? 0))}`, num: true })),
           { k: 'Storage', v: fmt(cap), num: true },
           { k: 'Can exist', v: ceilingLabel(r.ceiling) }
         ]"
@@ -71,7 +71,7 @@ import { computed } from 'vue'
 import type { Resource } from '@/engine/types'
 import { ceilingLabel } from '@/engine/ceilings'
 import { netFlow } from '@/engine/economy'
-import { bandText, capOf, deliveryTiming, findResource, fmt, tierText } from '@/engine/model'
+import { bandText, capOf, deliveryTiming, depotsFor, findResource, fmt, fmtCount, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
 import { resourceTrait, speculativeFactor } from '@/engine/resourceTraits'
 import { useGameStore } from '@/stores/game'

@@ -2,6 +2,7 @@ import type { Judge } from '@/ai/jev'
 import { acceptCreate, judgeCreate, type CreateSpec, type CreateVerdict } from './createProposal'
 import { bankVerdict } from './banking'
 import { judgeCover, type CoverSpec, type CoverVerdict } from './coverProposal'
+import { acceptDepot, judgeDepot, type DepotSpec, type DepotVerdict } from './depotProposal'
 import { acceptMind, judgeMind, type MindSpec, type MindVerdict } from './mindProposal'
 import { acceptPlan, judgePlan, type PlanSpec, type PlanVerdict } from './planProposal'
 import {
@@ -11,7 +12,6 @@ import {
   type ResourceSpec,
   type ResourceVerdict
 } from './proposals'
-import { acceptStorage, judgeStorage, type StorageSpec, type StorageVerdict } from './storageProposal'
 import { acceptStrategy, judgeStrategy, type StrategySpec, type StrategyVerdict } from './strategyProposal'
 import type { GameState } from './types'
 import { acceptUnit, judgeUnit, type UnitSpec, type UnitVerdict } from './unitProposal'
@@ -23,7 +23,7 @@ export type ProposalInput =
   | { kind: 'strategy'; spec: StrategySpec }
   | { kind: 'unit'; spec: UnitSpec }
   | { kind: 'mind'; spec: MindSpec }
-  | { kind: 'storage'; spec: StorageSpec }
+  | { kind: 'storage'; spec: DepotSpec }
   | { kind: 'create'; spec: CreateSpec }
   | { kind: 'cover'; spec: CoverSpec }
   | { kind: 'plan'; spec: PlanSpec }
@@ -33,7 +33,7 @@ export type Verdict =
   | StrategyVerdict
   | UnitVerdict
   | MindVerdict
-  | StorageVerdict
+  | DepotVerdict
   | CreateVerdict
   | CoverVerdict
   | PlanVerdict
@@ -50,7 +50,7 @@ export function judgeAny(s: GameState, judge: Judge, input: ProposalInput): Prom
     case 'mind':
       return judgeMind(s, judge, input.spec)
     case 'storage':
-      return judgeStorage(s, judge, input.spec)
+      return judgeDepot(s, judge, input.spec)
     case 'create':
       return judgeCreate(s, judge, input.spec)
     case 'cover':
@@ -72,7 +72,7 @@ export function acceptAny(s: GameState, verdict: Verdict): Accepted {
     case 'mind':
       return acceptMind(s, verdict)
     case 'storage':
-      return acceptStorage(s, verdict)
+      return acceptDepot(s, verdict)
     case 'create':
       return acceptCreate(s, verdict)
     case 'cover':

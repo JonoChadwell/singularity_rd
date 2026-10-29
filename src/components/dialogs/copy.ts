@@ -50,13 +50,13 @@ export const COPY: Record<
     cost: 'One Jev call. Taking an offer uses the week’s action.'
   },
   storage: {
-    title: 'Store more',
-    help: 'Storage caps what each resource can hold; anything past it is lost, and it never grows past how many Jev said could exist when the resource was added (judged again when Phase 2 begins; Phase 3 has no limit). Say how you’d hold more: Jev rates how effective that is, and the extra room grows with Industry and IQ too. You pick one of three: modest and clean, large with a catch, or huge and risky. Your IQ limits who could plausibly hold the total: an individual at 100, a small corporation at 200, a large corporation at 300, a nation at 400, the whole Earth at 500. It becomes research, and uses the week’s action.',
+    title: 'Design a depot',
+    help: 'Storage caps what each resource can hold; anything past it is lost. In the lab it is fixed. From Phase 2, design a depot for a resource: a place to keep it that you can build many of. Jev judges whether the place suits the resource (a yard won’t hold data, a drum will hold a billion nanobots) and, realistically, how many one holds, and works out how many it takes to hold what you need. The design is research and uses the week’s action; after that, build as many as you like from its card, at no action, paying their parts. Depots never hold more than Jev said could exist of the resource (judged again when Phase 2 begins; Phase 3 has no limit).',
     presets: 'Pick one to fill the form, or write your own:',
-    name: 'e.g. Rent warehouse space, Offshore accounts',
-    description: 'How will you hold more? (helps Jev)',
-    cost: 'Two Jev calls. It becomes research.',
-    note: 'IQ 100 an individual · 200 a small corporation · 300 a large one · 400 a nation'
+    name: 'e.g. Shipping Container, Cold Store',
+    description: 'What kind of place is it? (helps Jev)',
+    cost: 'One Jev call. The design becomes research.',
+    note: 'One design holds one resource: pick a place that suits it.'
   },
   cover: {
     title: 'Propose cover',
@@ -79,7 +79,7 @@ export const PLAN_HELP: Record<1 | 2, string> = {
 }
 
 export const UNIT_PROCURE_HELP =
-  'Procure a unit to own some. Say how you’d get them: Jev judges whether that’s more like getting a batch now or setting up a supply, and its three offers mix the two, a different mix each time. Units now cost twice what a contract would, and arrive with room to match. A sourcing contract is room for more, each created later from its parts at no action: Jev’s own, a quiet one (fewer, no alarm), or one that cuts corners (ten times as many, half the parts, risky). Bigger contracts cost more weeks on the Phase 2 clock. Several contracts can be open for one unit. Nothing goes past how many Jev said could exist when the unit was designed. It uses the week’s action.'
+  'Procure a unit to own some. Say how you’d get them: Jev judges whether that’s more like getting a batch now or setting up a supply, and its three offers mix the two, a different mix each time. Units now cost twice what a contract would, and arrive with room to match. A sourcing contract is room for more, each created from its parts at no action: Jev’s own, a quiet one (fewer, no alarm), or one that cuts corners (ten times as many, half the parts, risky). Jev says how big a supply your way could realistically give; you pick the size up to that, and signing creates the first quarter at once, from their parts, so a big contract takes the stock to start it. Bigger contracts cost more weeks on the Phase 2 clock. Several contracts can be open for one unit. Nothing goes past how many Jev said could exist when the unit was designed. It uses the week’s action.'
 
 export const UPGRADE_HELP =
   'Jev looks at what this is and offers its three most natural improvements. Pick one and it becomes research, with a minimum IQ and the resources it will use up. A platform’s software upgrade adds IQ over its bare hardware: each option has its own size (bigger adds more IQ and costs more; the sizes on offer change each week), and it may add a perk or take away a drawback. It can be redone, but a redo replaces the last upgrade instead of adding to it, and costs in full; only a new platform goes further. An industry upgrade is technology of the unit’s own tier the first time, and a tier higher each time after, on the same strategy.'

@@ -16,9 +16,9 @@ import { projectGoal, projectionText } from '../projection'
 import { acceptResource, bandOf, judgeResource } from '../proposals'
 import { acceptStrategy, judgeStrategy } from '../strategyProposal'
 import { LOSSES } from '../losses'
+import { acceptDepot, judgeDepot } from '../depotProposal'
 import { alarmQuestions, expansionWeeks } from '../risk'
 import { describeState } from '../stateText'
-import { acceptStorage, judgeStorage } from '../storageProposal'
 import type { Delivery, GameState } from '../types'
 import { acceptUnit, judgeUnit, precheckUnit, type UnitSpec } from '../unitProposal'
 import { acceptUpgrade, judgeUpgrade, upgradeCandidates } from '../upgrade'
@@ -271,9 +271,10 @@ describe('loss conditions', () => {
 // ---------------------------------------------------------------- unlocks
 
 describe('unlocks', () => {
-  it('Phase 1 has only resources, Procurements, storage, upgrades and cover', async () => {
+  it('Phase 1 has only resources, Procurements, upgrades and cover; storage is fixed in the lab', async () => {
     const s = await phase1()
-    for (const f of ['resource', 'create', 'storage', 'upgrade', 'cover'] as Feature[]) expect(lockReason(s, f)).toBeNull()
+    for (const f of ['resource', 'create', 'upgrade', 'cover'] as Feature[]) expect(lockReason(s, f)).toBeNull()
+    expect(lockReason(s, 'storage')).toMatch(/fixed in the lab/)
     for (const f of ['strategy', 'unit', 'mind', 'unit-upgrade'] as Feature[]) {
       expect(lockReason(s, f)).toMatch(/Phase 2/)
     }
@@ -449,20 +450,21 @@ describe('expansions', () => {
     expect(state.phase.deadline).toBe(100 - own.risk!.weeks)
   })
 
-  it('make big storage expansions cost weeks too, and none outside Phase 2', async () => {
+  it('make depot designs cost the alarm’s weeks, double for a Hazardous resource, and none outside Phase 2', async () => {
+    const spec = { resourceId: 'gold', name: 'Vault', description: '' }
     const s = phase2()
-    s.resources.push(newResource({ id: 'gold', name: 'Gold', tier: 4, value: 60 }))
-    s.minds[0]!.hardware.iq = 300
-    const v = await judgeStorage(s, new FakeJudge({ 'holder_*': score(0) }), { resourceId: 'gold', name: 'Vault', description: '' })
-    expect(v.options[2]!.risk!.weeks).toBeGreaterThan(v.options[0]!.risk?.weeks ?? 0)
-    v.choice = 0
-    const state = acceptStorage(s, v).state
-    expect(state.research[0]!.risk).toEqual(v.options[0]!.risk)
+    s.resources.push(newResource({ id: 'gold', name: 'Gold', tier: 1, value: 60 }))
+    const plain = await judgeDepot(s, new FakeJudge({ alarm: score(3) }), spec)
+    const weeks = plain.options[0]!.risk!.weeks
+    expect(weeks).toBeGreaterThan(0)
+    findResource(s, 'gold')!.traits = ['hazardous']
+    const hazardous = await judgeDepot(s, new FakeJudge({ alarm: score(3) }), spec)
+    expect(hazardous.options[0]!.risk!.weeks).toBe(2 * weeks)
+    expect(acceptDepot(s, hazardous).state.research[0]!.risk).toEqual(hazardous.options[0]!.risk)
     const p3 = phase2()
     p3.phase = newPhase(3, 1)
-    p3.resources.push(newResource({ id: 'gold', name: 'Gold', tier: 4, value: 60 }))
-    p3.minds[0]!.hardware.iq = 300
-    const free = await judgeStorage(p3, new FakeJudge({ 'holder_*': score(0) }), { resourceId: 'gold', name: 'Vault', description: '' })
+    p3.resources.push(newResource({ id: 'gold', name: 'Gold', tier: 1, value: 60 }))
+    const free = await judgeDepot(p3, new FakeJudge({ alarm: score(3) }), spec)
     expect(free.options.every((o) => o.risk === null)).toBe(true)
   })
 })

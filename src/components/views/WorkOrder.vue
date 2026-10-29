@@ -72,7 +72,7 @@ const KIND: Record<Research['effect']['kind'], string> = {
   mind: 'Platform',
   strategy: 'Strategy',
   upgrade: 'Upgrade',
-  storage: 'Storage',
+  depot: 'Depot design',
   cover: 'Cover'
 }
 

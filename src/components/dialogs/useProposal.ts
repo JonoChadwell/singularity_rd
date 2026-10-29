@@ -4,7 +4,7 @@ import { computeTrait } from '@/engine/computeTraits'
 import { precheckCover } from '@/engine/coverProposal'
 import { precheckCreate } from '@/engine/createProposal'
 import { draftMind, precheckMind } from '@/engine/mindProposal'
-import { bestMind, capOf, describeCost, describeFlows, findResource, fmt, nextHardwareName, tierLabel, unitValueText } from '@/engine/model'
+import { bestMind, describeCost, describeFlows, findResource, fmt, nextHardwareName, tierLabel, unitValueText } from '@/engine/model'
 import {
   coverPresets,
   CREATE_PRESETS,
@@ -12,7 +12,7 @@ import {
   resolveResources,
   RESOURCE_PRESETS,
   runnerFor,
-  STORAGE_PRESETS,
+  DEPOT_PRESETS,
   STRATEGY_PRESETS,
   taken,
   UNIT_PRESETS,
@@ -20,7 +20,7 @@ import {
 } from '@/engine/presets'
 import { draftResource, precheckName } from '@/engine/proposals'
 import { resourceTrait } from '@/engine/resourceTraits'
-import { precheckStorage } from '@/engine/storageProposal'
+import { precheckDepot } from '@/engine/depotProposal'
 import { draftStrategy, precheckStrategy } from '@/engine/strategyProposal'
 import type { CreateTarget } from '@/engine/types'
 import { draftUnit, precheckUnit } from '@/engine/unitProposal'
@@ -76,7 +76,7 @@ export function useProposal(request: InventRequest) {
     if (kind === 'strategy') return STRATEGY_PRESETS.map((p) => ({ ...p, blocked: blocked(p.name) }))
     if (kind === 'create' && creationTarget.value.kind === 'unit') return UNIT_PROCURE_PRESETS.map((p) => ({ ...p, icon: '📦', blocked: null }))
     if (kind === 'create') return CREATE_PRESETS.map((p) => ({ ...p, icon: '⚗️', blocked: null }))
-    if (kind === 'storage') return STORAGE_PRESETS.map((p) => ({ ...p, icon: '🏗️', blocked: null }))
+    if (kind === 'storage') return DEPOT_PRESETS.map((p) => ({ ...p, icon: '🏗️', blocked: blocked(p.name) }))
     if (kind === 'cover') return coverPresets(game.state.phase.n).map((p) => ({ ...p, icon: '🕶️', blocked: blocked(p.name) }))
     if (kind === 'mind') return mindPresets.value.map((p) => ({ ...p, icon: '🧠', blocked: blocked(p.name) }))
     return UNIT_PRESETS.map((p) => ({ ...p, icon: '🏭', blocked: blocked(p.name) }))
@@ -108,7 +108,7 @@ export function useProposal(request: InventRequest) {
       const output = resolveResources(game.state, [p.output])
       if (output.ids[0]) creation.target = `resource:${output.ids[0]}`
       missingResources.value = output.missing
-    } else if (kind === 'storage') fill(STORAGE_PRESETS.find((x) => x.name === presetId))
+    } else if (kind === 'storage') fill(DEPOT_PRESETS.find((x) => x.name === presetId))
     else if (kind === 'cover') fill(coverPresets(game.state.phase.n).find((x) => x.name === presetId))
     else if (kind === 'mind') fill(mindPresets.value.find((x) => x.name === presetId))
     else fill(UNIT_PRESETS.find((x) => x.name === presetId))
@@ -148,7 +148,7 @@ export function useProposal(request: InventRequest) {
     if (i.kind === 'unit') return precheckUnit(game.state, i.spec)
     if (i.kind === 'mind') return precheckMind(game.state, i.spec)
     if (i.kind === 'create') return precheckCreate(game.state, i.spec)
-    if (i.kind === 'storage') return precheckStorage(game.state, i.spec)
+    if (i.kind === 'storage') return precheckDepot(game.state, i.spec)
     if (i.kind === 'cover') return precheckCover(game.state, i.spec)
     return precheckName(game.state, name.value)
   })
@@ -229,12 +229,6 @@ export function useProposal(request: InventRequest) {
         draft
       }
     })
-  })
-  /** What the resource being expanded holds now. */
-  const storageTotal = computed(() => {
-    const v = verdict.value
-    const r = v?.kind === 'storage' ? findResource(game.state, v.spec.resourceId) : undefined
-    return r ? capOf(game.state, r) : 0
   })
   const researchText = (d: { minIQ: number; cost: Parameters<typeof describeCost>[1] }) =>
     `Research: needs IQ ${d.minIQ}, uses up ${d.cost.length ? describeCost(game.state, d.cost) : 'nothing'}.`
@@ -344,7 +338,6 @@ export function useProposal(request: InventRequest) {
     mindOptions,
     resourceOptions,
     strategyOptions,
-    storageTotal,
     researchText,
     acceptLabel,
     bankable,

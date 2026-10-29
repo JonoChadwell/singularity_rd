@@ -33,7 +33,7 @@
         <button
           class="link small"
           :disabled="!!lockReason(game.state, 'storage')"
-          :title="`Research more storage for ${r.name}`"
+          :title="lockReason(game.state, 'storage') ?? `Design a depot for ${r.name}`"
           @click.stop="ui.openInvent({ kind: 'storage', resourceId: r.id })"
         >
           + Store

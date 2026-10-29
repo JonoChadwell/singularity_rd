@@ -20,8 +20,8 @@ export function effectText(state: GameState, r: Research): string {
   switch (e.kind) {
     case 'goal':
       return 'Researching it wins the phase.'
-    case 'storage':
-      return `Room for ${fmt(e.expansion.added)} more ${findResource(state, e.resourceId)?.name ?? ''}.`
+    case 'depot':
+      return `A depot: each ${e.unit.name} holds ${fmt(e.unit.holds?.amount ?? 0)} ${findResource(state, e.unit.holds?.resourceId ?? '')?.name ?? ''}. Build them from its card.`
     case 'cover':
       return `Adds ${e.weeks} weeks to the clock, once researched.`
     case 'unit':

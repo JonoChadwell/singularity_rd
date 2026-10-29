@@ -18,6 +18,7 @@
           @input="count = Number(($event.target as HTMLInputElement).value)"
         />
         <button class="small" :disabled="!canCreate" @click="game.createUnits(contract.id, n)">Create {{ fmtCount(n) }}</button>
+        <button v-if="enough" class="link" title="As many as it takes to hold what you're storing towards" @click="count = enough">enough {{ fmtCount(enough) }}</button>
         <button class="link" :disabled="!max" title="The most you can pay the parts for right now" @click="count = max">max {{ fmtCount(max) }}</button>
         <button
           class="link"
@@ -41,7 +42,8 @@ import { affordable, costShortfall, creatable, describeFlows, fmtCount, openSlot
 import type { Sourcing, UnitType } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
 
-const props = defineProps<{ contract: Sourcing; unit: UnitType }>()
+/** `want`: for a depot, how many more it takes to hold what you're storing towards. */
+const props = defineProps<{ contract: Sourcing; unit: UnitType; want?: number }>()
 const game = useGameStore()
 /** How many to create. */
 const count = ref(1)
@@ -50,6 +52,7 @@ const max = computed(() => affordable(game.state, props.contract))
 const safe = computed(() => creatable(game.state, props.contract, weeklyUse(game.preview)))
 const short = computed(() => (n.value ? costShortfall(game.state, createCost(partsFor(props.unit, props.contract), n.value)) : null))
 const canCreate = computed(() => n.value >= 1 && n.value <= openSlots(props.contract) && !short.value)
+const enough = computed(() => Math.min(props.want ?? 0, openSlots(props.contract)))
 </script>
 
 <style scoped>

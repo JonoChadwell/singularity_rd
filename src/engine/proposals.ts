@@ -540,7 +540,6 @@ export function resourceFrom(
     value,
     amount: 0,
     cap: B.nice(startingCap(tier, value) * capFactor({ traits })),
-    expansions: [],
     traits,
     ceiling: readCeiling(state, v.answers, 'resource', `${prefix}ceiling`)
   }

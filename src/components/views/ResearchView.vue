@@ -10,7 +10,7 @@
     </div>
 
     <p v-if="!game.state.research.length" class="empty silk">
-      No work orders. Research comes only from your ideas: a unit or a platform to design, sourcing or storage, an advanced strategy, or an
+      No work orders. Research comes only from your ideas: a unit, a platform or a depot to design, an advanced strategy, or an
       upgrade to something you own.
     </p>
 

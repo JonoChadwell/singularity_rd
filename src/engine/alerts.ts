@@ -97,7 +97,7 @@ export function alertsFor(state: GameState, preview: WeekReport): Alert[] {
       key: `overflow-${id}`,
       tone: 'warn',
       text: `${r.icon} ${fmt(amount)} ${r.name} will overflow its storage next week.`,
-      prompt: { label: 'Store more?', to: { kind: 'storage', resourceId: id } }
+      ...(lockReason(state, 'storage') ? {} : { prompt: { label: 'Store more?', to: { kind: 'storage', resourceId: id } } })
     })
   }
 

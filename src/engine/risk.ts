@@ -53,8 +53,8 @@ export function riskText(risk: Risk, kind: keyof typeof RISK_BONUS): string {
 // ---------------------------------------------------------------- expansions
 
 /**
- * Weeks humans would take off for an expansion that adds `worth` (units × value, or extra
- * storage × value): a week from EXPANSION_NOTICE_FROM, and one more for every tenfold after.
+ * Weeks humans would take off for a contract that adds `worth` (units × value): a week from
+ * EXPANSION_NOTICE_FROM, and one more for every tenfold after.
  * Twice that for a risky one.
  */
 export function expansionWeeks(worth: number, risky: boolean): number {

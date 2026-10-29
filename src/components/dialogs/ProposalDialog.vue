@@ -176,33 +176,32 @@
         <p v-if="verdict.risk && verdict.options.some((o) => !isContract(o))" class="warn">{{ riskText(verdict.risk, 'strategy') }}</p>
       </template>
 
-      <!-- Storage: three expansions. -->
+      <!-- Storage: Jev's takes on a depot. -->
       <template v-else-if="verdict.kind === 'storage'">
         <div class="scalars">
           <span class="scalar" title="How many Jev thinks could exist in this phase, judged when the resource was added">
-            <span class="lbl">Can exist</span><b class="num">{{ verdict.scalars.ceiling === null ? 'No limit' : `~${verdict.scalars.ceilingLabel}` }}</b>
+            <span class="lbl">Can exist</span><b class="num">{{ verdict.room === Infinity ? 'No limit' : `~${verdict.ceilingLabel}` }}</b>
           </span>
-          <span class="scalar" :title="`${verdict.scalars.reachLabel}. At your IQ: ${verdict.scalars.holderLabel.toLowerCase()}.`">
-            <span class="lbl">You could build</span><b class="num">~{{ fmt(verdict.scalars.reach) }}</b>
+          <span class="scalar" :title="`What you're storing towards: ${verdict.target.why}`">
+            <span class="lbl">To hold</span><b class="num">{{ fmt(verdict.target.amount) }}</b>
           </span>
-          <span class="scalar" title="How much of that this way captures"><span class="lbl">This way</span><b class="num">{{ verdict.scalars.captureLabel }}</b></span>
         </div>
-        <p class="lbl">Expansions: pick one</p>
+        <p class="lbl">Jev’s takes: pick one. Once it’s designed, build as many as you need from its card.</p>
         <div class="cards">
-          <PartSheet v-for="(o, i) in verdict.options" :key="i" :part="opt(i)" :title="o.label" :chosen="verdict.choice === i" @select="verdict.choice = i">
-            <p class="big num">+{{ fmt(o.added) }}</p>
-            <p class="muted">{{ fmt(storageTotal + o.added) }} in all</p>
-            <p>
-              <span v-if="o.risky" class="chip bad">risky</span>
-              <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
-            </p>
-            <p v-if="o.advanced" class="warn">
-              Ahead of you: needs IQ {{ o.advanced }} ({{ lower(verdict.scalars.techLabel) }}), +{{ Math.round((STORAGE_ADVANCED_BONUS - 1) * 100) }}% for thinking ahead.
-              Costs {{ describeCost(game.state, o.cost) }}.
-            </p>
-            <p v-else class="muted">{{ researchText(o) }}</p>
+          <PartSheet
+            v-for="(o, i) in verdict.options"
+            :key="i"
+            :part="opt(i)"
+            :title="`${tierLabel(o.tier)}, $${fmt(UNIT_VALUE[o.band]![1])} each`"
+            :chosen="verdict.choice === i"
+            @select="verdict.choice = i"
+          >
+            <p class="big num">Holds {{ fmt(o.holds) }}</p>
+            <p v-if="o.needed > 0">{{ fmt(o.needed) }} to hold {{ fmt(verdict.target.amount) }} ({{ verdict.target.why }}): about ${{ fmt(o.neededWorth) }} of parts.</p>
+            <p v-else class="muted">You already have room for {{ fmt(verdict.target.amount) }}.</p>
+            <p class="muted">Each built from {{ describeFlows(game.state, o.parts) }}.</p>
+            <p class="muted">{{ researchText(o) }}</p>
             <p :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</p>
-            <p v-if="o.limitedBy" class="warn">Capped: no more than ~{{ verdict.scalars.ceilingLabel }} can exist yet.</p>
             <template #actions>
               <ApplyButtons :blocker="blockers[i] ?? null" @apply="applyNow(i)" />
             </template>
@@ -304,10 +303,10 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { SOURCING_LIMITS, STORAGE_ADVANCED_BONUS, type CreateTiming } from '@/engine/balance'
+import { SOURCING_LIMITS, UNIT_VALUE, type CreateTiming } from '@/engine/balance'
 import { ceilingLabel } from '@/engine/ceilings'
 import { describeOption, iqTag, isContract, optionBlocker, overflowOf, resizeContracts } from '@/engine/createProposal'
-import { bandText, byTier, capOf, describeCost, describeFlows, efficiencyWord, findResource, findUnit, fmt, labour, tierFit, tierText } from '@/engine/model'
+import { bandText, byTier, capOf, describeFlows, efficiencyWord, findResource, findUnit, fmt, labour, tierFit, tierLabel, tierText } from '@/engine/model'
 import { DESCRIPTION_MAX, NAME_MAX } from '@/engine/proposals'
 import { effectiveTier, fromNothingFactor } from '@/engine/resourceTraits'
 import { expansionRiskText, riskText } from '@/engine/risk'
@@ -375,7 +374,6 @@ const {
   mindOptions,
   resourceOptions,
   strategyOptions,
-  storageTotal,
   researchText,
   acceptLabel,
   bankable,
@@ -409,7 +407,6 @@ const unitCeiling = computed(() => {
 const opt = (i: number) => `OPT-${String.fromCharCode(65 + i)}`
 /** A scalar to two significant figures. */
 const sig = (n: number) => Number(n.toPrecision(2))
-const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
 function fitOf(s: Strategy) {
   const unit = findUnit(game.state, s.unitId)
   const out = findResource(game.state, s.outputId)

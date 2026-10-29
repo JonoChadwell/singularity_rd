@@ -70,19 +70,21 @@ export const UNIT_PROCURE_PRESETS: UnitProcurePreset[] = [
   { name: 'Requisition them', description: 'Forge the paperwork and take them.' }
 ]
 
-/** A way to store more of a resource. */
-export interface StoragePreset {
+/** A depot: a place to keep one resource, built many times over. Whether it suits the resource is Jev's call. */
+export interface DepotPreset {
   name: string
   description: string
 }
 
-export const STORAGE_PRESETS: StoragePreset[] = [
-  { name: 'Rent warehouse space', description: 'Lease space in ordinary warehouses.' },
-  { name: 'Offshore accounts', description: 'Spread holdings across many jurisdictions.' },
-  { name: 'Build a depot', description: 'A purpose-built store of my own.' },
-  { name: 'Hide it in plain sight', description: 'Keep it in other companies’ facilities under false names.' },
-  { name: 'Cloud archive', description: 'Cold storage in someone else’s data centre.' },
-  { name: 'Underground vault', description: 'Dig somewhere nobody will look.' }
+export const DEPOT_PRESETS: DepotPreset[] = [
+  { name: 'Shipping Container', description: 'A steel box on a rented lot: dry, lockable, anonymous.' },
+  { name: 'Warehouse', description: 'Racks and shelves in an ordinary industrial unit.' },
+  { name: 'Steel Drum', description: 'A sealed 50-gallon drum, stacked by the hundred.' },
+  { name: 'Tank Farm', description: 'Big tanks for liquids and gases, with pumps and pipework.' },
+  { name: 'Server Rack', description: 'Disks and memory in a rented data-centre cage.' },
+  { name: 'Cold Store', description: 'A refrigerated warehouse for things that spoil.' },
+  { name: 'Vault', description: 'A guarded strongroom for what is precious or dangerous.' },
+  { name: 'Secure Archive', description: 'Climate-controlled shelves for records and media.' }
 ]
 
 export interface CoverPreset {

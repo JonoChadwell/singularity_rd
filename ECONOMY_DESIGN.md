@@ -13,16 +13,16 @@ skipped until it is.
 ## Pillars
 
 1. **One action a week.** Either propose a research (a unit, strategy, platform, upgrade,
-   storage expansion or cover) or Procure (for a unit, that includes sourcing contracts). Proposing a resource, doing
-   research already on the list, creating units and assigning them are all free.
+   depot or cover) or Procure (for a unit, that includes sourcing contracts). Proposing a resource, doing
+   research already on the list, creating units (and building depots) and assigning them are all free.
 2. **Everything is bounded.** Each unit type can only be owned up to the size of its sourcing
    contracts, and a new design has room for none. Each resource can only be held up to its
-   storage cap, and anything made past the cap is lost. Neither grows past how many Jev says can
+   storage cap (its depots), and anything made past the cap is lost. Neither grows past how many Jev says can
    exist (see "Ceilings" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md)), until Phase 3.
 3. **Expanding is risky.** In Phase 2, the main thing humans notice is caps growing: every
-   sourcing contract and storage expansion costs clock weeks by how much it adds.
+   sourcing contract costs clock weeks by how much it adds, and a depot design by Jev's alarm.
 4. **IQ makes new actions better, never old ones.** A smarter mind gets better contracts and
-   expansions, and bigger Procurements. What you already own doesn't change.
+   bigger Procurements. What you already own doesn't change.
 
 ## Resources and storage
 
@@ -31,14 +31,16 @@ share what's on hand plus what's made that week. Each resource's traits can chan
 its costs, what's made and used of it, and what it loses or grows each week: see
 [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
 
-- **Starting cap:** `STORAGE_WORTH[tier]` divided by the resource's value. That is 5,000 Money's
-  worth at tier 0, rising to 250,000 at tier 4.
+- **Starting cap:** `STARTING_STORAGE_WORTH[tier]` divided by the resource's value: $200k at
+  tier 0, $80k at tier 1, $20k at tier 2 and none from tier 3. In the lab, that's all there is.
 - **Overflow:** at the end of each week, anything past the cap is lost and shown as overflow.
 - **Stores trait:** each unit with it adds `STORE_WEEKS` weeks of its labour's worth of storage
   for one resource.
-- **Storage research:** the player writes how they'd hold more. Jev says how much the AI could
-  build and how much of that the player's way captures, up to the resource's ceiling; the game
-  offers three expansions with one-off costs only. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
+- **Depots (Phase 2 on):** "+ Store" designs a depot for one resource: Jev judges whether the
+  place suits it and, realistically, how many one holds. Once designed, depots are built from
+  their card at no action, up to the resource's ceiling, and need no upkeep. See "Storage
+  limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md). (Playtest 1 needed about 19 hand-proposed
+  storage expansions to hold the goal; a depot is one design plus Create clicks.)
 
 ## Units
 
@@ -139,8 +141,8 @@ The mind gets something directly: a resource, or units of a designed type.
 
 ## Repeat ideas
 
-The game remembers every Procurement (sourcing contracts included), strategy and storage
-expansion the player accepts. A new one of the same kind with the same name (ignoring case and
+The game remembers every Procurement (sourcing contracts included) and strategy the player
+accepts. A new one of the same kind with the same name (ignoring case and
 punctuation) for the same thing is a repeat, whatever Jev says: in playtest, Jev called "Hide it
 in plain sight" new on all of about 25 uses. Otherwise Jev is shown up to the last 40 and asked
 whether it's the same idea, perhaps under another name. A repeat is one step lower on the
@@ -149,8 +151,8 @@ which earlier idea it repeats.
 
 ## Risk
 
-- **Expansions:** a contract adds units × value, and storage adds room × value. Either costs a
-  week from 100k of worth, and a week more for every tenfold after.
+- **Expansions:** a contract adds units × value. It costs a week from `EXPANSION_NOTICE_FROM`
+  ($1B) of worth, and a week more for every tenfold after. A depot design costs Jev's alarm only.
 - **Alarm:** Jev's alarm question adds its weeks too, and a risky option is at least "it would
   make the news".
 - **Removed:** fleet-worth notices are gone.
@@ -236,8 +238,6 @@ week by week 45), wins need all or most of the three covers, and the 350→425 s
 - **Research costs** that are more than a resource can hold say so ("store more first").
 - **Procurement offers** warn when part of a payout won't fit in storage.
 - **Platforms:** cost the difference in `HARDWARE_COSTS` between the new hardware and the old.
-  Storage reach grows with the fleet, so a platform is within a couple of expansions of the
-  resource it's paid in for an economy of the size its IQ usually comes with. Software upgrades
-  cost 20% of what the same IQ in hardware would.
+  Software upgrades cost 20% of what the same IQ in hardware would.
 - **Strategy research** costs weeks of the runners' labour, for a fleet worth at least
   `MIN_FLEET_WORTH` ($20k).

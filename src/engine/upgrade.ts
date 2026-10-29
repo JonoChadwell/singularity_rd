@@ -128,6 +128,8 @@ function unitCandidates(state: GameState, u: UnitType): Candidate[] {
   for (const id of partIds) {
     out.push({ key: `parts_${id}`, name: `Less ${res(id)} per unit made`, changes: [{ kind: 'parts', resourceId: id, factor: B.PARTS_FACTOR }] })
   }
+  // A depot only holds: cheaper to build is the only way to improve it.
+  if (u.holds) return out
   for (const t of ALL_TRAITS) {
     if (t.param) continue
     // Overclockable or Hardy would be free for a unit that runs on nothing.

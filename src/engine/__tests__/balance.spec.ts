@@ -3,12 +3,15 @@ import * as B from '../balance'
 import { createUnits } from '../actions'
 import { runWeek } from '../cycle'
 import { createInitialState, newResource, newUnit } from '../initialState'
+import { judgeDepot } from '../depotProposal'
 import { previewWeek } from '../economy'
 import { capOf, creatable, findResource, MONEY_ID, weeklyUse } from '../model'
 import { newPhase } from '../phase'
+import { goalOf } from '../projection'
 import type { GameState } from '../types'
-import { chain, chain2, covered, flat, idle, phase1, phase2, play, smart, steady, type Result } from './bots'
-import { score } from './fakeJudge'
+import { chain, chain2, covered, depotAnswers, flat, idle, phase1, phase2, play, smart, steady, type Result } from './bots'
+import { econStart } from './econBots'
+import { FakeJudge, noul, score } from './fakeJudge'
 
 // Scripted checks of the balance, with Jev's typical answers. The bots are in bots.ts; the
 // rules are in ECONOMY_DESIGN.md. Set BOT_REPORT=1 and run botreport.spec.ts to see them all.
@@ -97,16 +100,20 @@ describe('balance', () => {
     expect(B.platformGateTier(B.START_IQ + B.MAX_IQ_STEP)).toBeNull()
   })
 
-  it('keeps the next platform within two storage expansions, for a fleet of the size its IQ usually comes with', () => {
-    // [IQ, fleet worth]: storage reach grows with the fleet, so a big platform needs big industry.
-    for (const [iq, fleet] of [
-      [300, 3e9],
-      [400, 1e10]
-    ] as const) {
-      const reach = (B.STORAGE_WORTH[1]! * B.STORAGE_REACH_SIZE + B.STORAGE_PER_FLEET * fleet) * (iq / 100) ** 2
-      // All in, captured Reasonably.
-      const allIn = reach * B.STORAGE_CAPTURE[2]![1] * B.STORAGE_SIZES[2]![1]
-      expect(B.platformPrice(iq, iq + B.MAX_IQ_STEP)).toBeLessThan(2 * allIn)
+  it('holds the goal after one depot design, building them for a small share of what they hold', async () => {
+    for (const approach of [0, 1, 2]) {
+      const s = await econStart(approach)
+      s.proposedThisWeek = false
+      const goal = goalOf(s)!
+      const r = findResource(s, goal.cost[0]!.resourceId)!
+      // Nothing to hold it in at first: tier 3 starts with no storage.
+      expect(capOf(s, r)).toBeLessThan(goal.cost[0]!.amount)
+      const v = await judgeDepot(s, new FakeJudge({ plausible: noul(0.7), ...depotAnswers(r) }), { resourceId: r.id, name: 'Vat', description: '' })
+      expect(v.target.amount).toBe(goal.cost[0]!.amount)
+      // One design holds it all; building them costs 3–30% of what they hold (Jev's answer is a power of ten).
+      const share = v.options[0]!.neededWorth / (goal.cost[0]!.amount * r.value)
+      expect(share, `approach ${approach}`).toBeGreaterThan(0.03)
+      expect(share, `approach ${approach}`).toBeLessThan(0.3)
     }
   })
 
@@ -162,7 +169,7 @@ describe('Phase 1 bots', () => {
 
   // Bots never lose plausibility penalties the way a real player keeps Jev happy, so they win
   // sooner than people do: within the six weeks here is what leaves room for the cover in play.
-  it('win in weeks 4 to 6 Creating into the goal, with upgrades and storage as needed: Phase 1 is a tutorial', async () => {
+  it('win in weeks 4 to 6 Creating into the goal, with upgrades as needed and no storage: Phase 1 is a tutorial', async () => {
     for (const a of APPROACHES) {
       const r = await play(await phase1(a), flat, 12)
       expect(r.won, `approach ${a}`).toBeGreaterThanOrEqual(4)

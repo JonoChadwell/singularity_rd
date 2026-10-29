@@ -46,9 +46,9 @@ export interface ResourceEffects {
   make?: number | [number, number]
   /** Its storage cap, starting and expansions. */
   cap?: number
-  /** Storage expansions for it: room added. */
+  /** Depots for it: how many each holds. */
   expansion?: number
-  /** Storage expansions for it: clock weeks. */
+  /** Designing depots for it: clock weeks. */
   clock?: number
   /** Share of the stock gained each week, up to the cap. */
   growth?: number
@@ -203,7 +203,7 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     id: 'cryogenic',
     name: 'Cryogenic',
     icon: '❄️',
-    upside: 'Storage expansions for it hold twice as much.',
+    upside: 'Depots for it hold twice as much.',
     downside: 'Units making it need a tier more.',
     family: 'making',
     effects: { expansion: 2, tier: { make: 1 } }
@@ -240,7 +240,7 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     name: 'Hazardous',
     icon: '🚨',
     upside: 'As a Procurement input, it counts 1.5× its worth.',
-    downside: 'Storage expansions for it cost double the clock weeks.',
+    downside: 'Designing depots for it costs double the clock weeks.',
     family: 'clock',
     effects: { createInput: 1.5, clock: 2 }
   }),
@@ -248,7 +248,7 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     id: 'untraceable',
     name: 'Untraceable',
     icon: '🕶️',
-    upside: 'Storage expansions for it cost no clock weeks.',
+    upside: 'Designing depots for it costs no clock weeks.',
     downside: 'Procurements make half as much of it.',
     family: 'clock',
     effects: { clock: 0, createOutput: 0.5 }
@@ -257,8 +257,8 @@ export const RESOURCE_TRAITS: Record<ResourceTraitId, ResourceTrait> = {
     id: 'contraband',
     name: 'Contraband',
     icon: '🔒',
-    upside: 'Storage expansions for it hold twice as much.',
-    downside: 'They cost triple the clock weeks.',
+    upside: 'Depots for it hold twice as much.',
+    downside: 'Designing them costs triple the clock weeks.',
     family: 'clock',
     effects: { expansion: 2, clock: 3 }
   })

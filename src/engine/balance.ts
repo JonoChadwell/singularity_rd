@@ -119,9 +119,9 @@ export const RISK_COST = 0.5
 export const RISK_OUTPUT = 1.5
 export const RISK_PARTS = 0.5
 /**
- * Expanding caps is what humans notice. A sourcing contract or storage expansion that adds this
- * much worth (units × value, or extra storage × value) costs a week, and a week more for every
- * tenfold after: $1B costs 1, $10B costs 2, $100B costs 3. Risky expansions cost twice that.
+ * Expanding caps is what humans notice. A sourcing contract that adds this much worth (units ×
+ * value) costs a week, and a week more for every tenfold after: $1B costs 1, $10B costs 2, $100B
+ * costs 3. Risky ones cost twice that.
  */
 export const EXPANSION_NOTICE_FROM = 1e9
 /**
@@ -252,28 +252,31 @@ export const RISK_SOURCING = 10
  */
 export const PROCURE_NOW_ODDS: [number, number] = [0.2, 0.8]
 
-/** Worth a resource of each tier can be stored to at the start, before expansions. Tier 3 up starts with none. */
+/** Worth a resource of each tier can be stored to at the start, before depots. Tier 3 up starts with none. */
 export const STARTING_STORAGE_WORTH = [2e5, 8e4, 2e4, 0]
-/** The base worth of a storage expansion for each tier, and what it costs. */
-export const STORAGE_WORTH = [5e4, 1.2e5, 4e5, 1e6, 2.5e6]
 /**
- * Reach, before Jev's band: this many STORAGE_WORTHs times Industry, plus STORAGE_PER_FLEET of
- * the fleet's worth, all times IQ².
+ * How many of a resource one depot holds, Jev's realistic judgement: [label, units]. One rung per
+ * power of ten, so a drum of nanobots and a warehouse of engines can both be told.
  */
-export const STORAGE_REACH_SIZE = 10
-/** What owning a fleet adds to storage reach: this share of its worth. Big industry builds big storage. */
-export const STORAGE_PER_FLEET = 1
-/**
- * Storage options: [label, share of the yield (reach × capture), cost factor, clock]. The clock is
- * none, half of Jev's alarm, or Jev's full alarm as a risky expansion.
- */
-export const STORAGE_SIZES: [string, number, number, 'none' | 'half' | 'full'][] = [
-  ['Careful', 0.25, 0.25, 'none'],
-  ['Pushed', 0.6, 1, 'half'],
-  ['All in', 1, 1.25, 'full']
-]
-/** An expansion costs this share of its base worth (STORAGE_WORTH × reach size × share, before the scalars). */
-export const STORAGE_COST_SHARE = 0.2
+export const DEPOT_HOLDS: [string, number][] = [
+  'one',
+  'ten',
+  'a hundred',
+  'a thousand',
+  'ten thousand',
+  'a hundred thousand',
+  'a million',
+  'ten million',
+  'a hundred million',
+  'a billion',
+  'ten billion',
+  'a hundred billion',
+  'a trillion'
+].map((label, i) => [label, 10 ** i])
+/** With no ceiling (Phase 3), a depot's build contract allows this many. */
+export const DEPOT_OPEN = 1e9
+/** With no waiting cost too big to hold, a depot is sized for this many weeks of what you make. */
+export const DEPOT_TARGET_WEEKS = 4
 /** How many of a resource the AI could have in Phase 2: [label, units]. One rung per two powers of ten. */
 export const STORAGE_CEILINGS: [string, number][] = [
   'a thousand',
@@ -314,50 +317,8 @@ export const UNIT_CEILINGS: [string, number][] = [
   'a billion',
   'ten billion'
 ].map((label, i) => [label, 10 ** (i + 1)])
-/** What the AI's holdings, units and platforms let it build, as a multiple of the baseline: [label, factor]. */
-export const STORAGE_REACH: [string, number][] = [
-  ['Barely anything: it owns almost nothing to build with', 0.25],
-  ['Little: a thin base for its size', 0.5],
-  ['Ordinary: about what you would expect for its size', 1],
-  ['Well equipped: more than its size suggests', 2],
-  ['Very well equipped: holdings well suited to storing this', 4],
-  ['Exceptionally equipped: almost everything it owns helps', 8]
-]
-/** How much of the reach a way of storing captures, by Jev's efficiency: the B.EFFICIENCY labels, never past 1. */
-export const STORAGE_CAPTURE: [string, number][] = [
-  ['Wasteful', 0.15],
-  ['Mediocre', 0.3],
-  ['Reasonable', 0.5],
-  ['Clever', 0.75],
-  ['Brilliant', 1]
-]
-/** What IQ a way of storing needs: [label, IQ]. */
-export const STORAGE_TECH_LEVELS: [string, number][] = [
-  ['Everyday: what anyone could arrange, like rented space, shelves or tanks', 100],
-  ['Professional: what a small firm of engineers could build', 200],
-  ['Industrial: what a large corporation could build', 300],
-  ['National: a project on the scale of a government programme', 400],
-  ['Planetary: engineering that reshapes Earth', 500],
-  ['Beyond today’s science', 600]
-]
-/** An option that needs more IQ than the AI has holds this much more, for thinking ahead. */
-export const STORAGE_ADVANCED_BONUS = 1.25
 /** Stores trait: a unit holds this many weeks of its labour's worth. */
 export const STORE_WEEKS = 4
-/**
- * Who could plausibly hold so much, [label, best IQ that reaches it]. A guide to scale for Jev's
- * reach question; nothing is gated on it.
- */
-export const HOLDERS: [string, number][] = [
-  ['An ordinary individual', 100],
-  ['A small corporation', 200],
-  ['A large corporation', 300],
-  ['A nation', 400],
-  ['The whole of planet Earth', 500],
-  ['More than Earth could hold', 600]
-]
-/** The biggest holder a mind this smart may reach, as an index into HOLDERS. */
-export const holderReach = (iq: number) => HOLDERS.filter(([, minIQ]) => minIQ <= iq).length - 1
 
 // ---------------------------------------------------------------- create
 

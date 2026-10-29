@@ -76,6 +76,8 @@ function buildRunners(state: GameState, report: WeekReport): Runner[] {
   for (const u of state.units) {
     const week = emptyUnitWeek()
     report.units[u.id] = week
+    // Depots only hold: no tasks, no upkeep, never idle.
+    if (u.holds) continue
     const { byTask, free } = allocation(state, u)
     week.unassigned = free
     if (resting(state, u)) {

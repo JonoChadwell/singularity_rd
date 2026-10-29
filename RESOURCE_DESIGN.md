@@ -55,7 +55,7 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
 | 🎰 Speculative | Some weeks, new costs in it are as little as ×0.25 | Other weeks, up to ×2 | spend |
 | ⛏️ Crude | Units making it need a tier less | Research costs in it are 25% more | making |
 | 🌾 Seasonal | Units make 2× of it in odd weeks | 0.5× in even weeks | making |
-| ❄️ Cryogenic | Storage expansions for it hold twice as much | Units making it need a tier more | making |
+| ❄️ Cryogenic | Depots for it hold twice as much | Units making it need a tier more | making |
 | 📈 Compounding | Stock grows 3% a week, up to its cap | Research costs in it are 50% more | growth |
 | 🐇 Self-replicating | Stock grows 10% a week, up to its cap | Every use needs 25% more: costs, parts, strategies, upkeep | growth |
 | 🌱 Renewable | Making it from nothing (a Procurement or a strategy with no resource inputs) gives 25% more | Cap 25% smaller | making |
@@ -65,9 +65,9 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
 | 🔬 Exotic | Procurements make 50% more of it | Units make 50% less of it | create |
 | 📦 Mundane | Procurements of it need a tier less | Procurements of it pay 25% less | create |
 | 👑 Prestigious | Pays for platforms as if a tier higher | Procurements make 25% less of it | create |
-| 🚨 Hazardous | Counts 1.5× its worth as a Procurement input | Storage expansions for it cost double the clock weeks | clock |
-| 🕶️ Untraceable | Storage expansions for it cost no clock weeks | Procurements make half as much of it | clock |
-| 🔒 Contraband | Storage expansions for it hold twice as much | They cost triple the clock weeks | clock |
+| 🚨 Hazardous | Counts 1.5× its worth as a Procurement input | Designing depots for it costs double the clock weeks | clock |
+| 🕶️ Untraceable | Designing depots for it costs no clock weeks | Procurements make half as much of it | clock |
+| 🔒 Contraband | Depots for it hold twice as much | Designing them costs triple the clock weeks | clock |
 
 A resource's two traits never share a family, so one lever is never doubled up or cancelled out.
 Several weekly losses compound (Perishable and Liquid together lose 14.5%, not 15%).
@@ -83,11 +83,11 @@ Several weekly losses compound (Perishable and Liquid together lose 14.5%, not 1
 - **Renewable.** "From nothing" means a Procurement that ends up using no resource (none offered,
   or none held), or a strategy with no resource inputs (upkeep doesn't count). A by-product is not
   made from nothing.
-- **Cap traits** (Renewable, Liquid) scale the starting cap and every storage expansion.
-  Expansion traits (Cryogenic, Contraband) scale expansions only. Neither scales the Stores unit
+- **Cap traits** (Renewable, Liquid) scale the starting cap and what each depot holds.
+  Expansion traits (Cryogenic, Contraband) scale depots only. Neither scales the Stores unit
   trait.
-- **Clock traits** scale all of an expansion's clock weeks, alarm included, rounded. They only
-  matter in Phase 2, where there is a clock.
+- **Clock traits** scale a depot design's clock weeks (Jev's alarm), rounded. They only matter in
+  Phase 2, where there is a clock.
 - **Making traits** scale what strategies make of the resource each week, including a By-product.
   A strategy's listed rate is before them. The tier traits change the rate a strategy is priced
   at when it's accepted, and its fit tag.
@@ -98,8 +98,9 @@ Several weekly losses compound (Perishable and Liquid together lose 14.5%, not 1
 
 # Storage limits
 
-Status: **built** (2026-10-24). Code: [src/engine/storageProposal.ts](src/engine/storageProposal.ts);
-numbers: the `STORAGE_*` tables in [src/engine/balance.ts](src/engine/balance.ts). Not playtested.
+Status: **built** (2026-10-24; depots replaced storage expansions in save version 19,
+2026-10-29). Code: [src/engine/depotProposal.ts](src/engine/depotProposal.ts) and `capOf` in
+[src/engine/model.ts](src/engine/model.ts). Not playtested.
 
 Caps are there for realism and storytelling. They stop paths that pass realistic limits (100
 billion hired humans in Phase 2), and they push the player toward a blend of resources instead of
@@ -111,14 +112,15 @@ Status: **built** (2026-10-27, save version 17; made phase-specific 2026-10-28).
 [src/engine/ceilings.ts](src/engine/ceilings.ts).
 
 Every resource and unit has a `ceiling`: how many the AI could reasonably have in its phase.
-Storage expansions let the player grow towards it, and the ceiling keeps that growth plausible.
+Depots let the player grow storage towards it, and the ceiling keeps that growth plausible.
 It is not a world total. The question depends on the phase:
 
 - **Phase 1:** how many the AI could have while still stuck in a supervised research lab,
   without its overseers noticing. Resources pick from `LAB_CEILINGS`, one rung per power of ten
   from ten to a hundred million. The ceiling is then held to at most `LAB_CEILING_WORTH` ($100
   million worth) ÷ the resource's value, but never below `LAB_CEILING_ROOM` (2) × its starting
-  storage, rounded up, so storage can always grow.
+  storage, rounded up. Storage is fixed in the lab, so this matters little now; dropping the
+  question in Phase 1 is a possible follow-up.
 - **Phase 2:** how many it could have while humans are still dominant over AI, through fronts,
   companies and people, bound to Earth unless the world text says otherwise. Resources pick from
   `STORAGE_CEILINGS`, one rung per two powers of ten from a thousand to ten quintillion (nine
@@ -140,69 +142,46 @@ ceiling is settled at three points:
   Phase 3 has no ceilings. Storage caps and contract slots still apply.
 
 Storage room = ceiling − current cap, and a unit's room = ceiling − the sum of its contracts.
-With no room left, a storage expansion or a Procurement of the unit is refused. The world text
+Depots only count up to the ceiling. With no room left, a depot design or a Procurement of the
+unit is refused. The world text
 Jev reads lists each ceiling, so later answers stay consistent with it. Resource and unit
 datasheets show it as "Can exist".
 
-## Two questions, one Jev call
+## Storage is fixed in the lab
 
-**Expand Storage** asks Jev two questions in a single `storage` call. Neither depends on the
-other's answer. How many can exist is the resource's stored ceiling, above.
+Phase 1 has no "+ Store": the starting caps (`STARTING_STORAGE_WORTH`, $200k of a tier 0
+resource, $80k of tier 1) already hold what the lab's goal needs, so storage there was only clicks.
+Playtest 1 showed the old storage expansions at their worst in Phase 2: about 19 of them, each
+re-proposed by hand, to hold the ~70M Nanobots the goal needed.
 
-1. **How much could the AI build now?** (`reach`) This is judged from its holdings, units,
-   platforms and industry, not from the proposal. The baseline is the old formula:
-   (`STORAGE_WORTH[tier]` × `STORAGE_REACH_SIZE` (10) + `STORAGE_PER_FLEET` (1) × the worth of
-   the units you own) × (IQ/100)² ÷ value × the
-   resource's cap and expansion traits. Jev's band on `STORAGE_REACH` scales it by ×0.25 to ×8.
-   The old ownership ladder (`HOLDERS`: an individual at IQ 100 up to the whole Earth at 500) is
-   now only a guide in this prompt. Nothing is gated on it.
-2. **How good is the player's way?** Jev answers several questions about it:
-   - `plausible`: a no rejects the proposal.
-   - `efficiency`: Wasteful to Brilliant on `STORAGE_CAPTURE`, which gives 0.15 to 1. That is the
-     share of the reach this way captures, so it never goes past the reach.
-   - `techLevel`: the IQ the way needs, from 100 to 600 (`STORAGE_TECH_LEVELS`), judged against
-     what the AI's IQ means.
-   - `pay`, `alarm` (Phase 2) and `repeat`, as for other proposals.
+## Depots (Phase 2 and after)
 
-**Yield** = reach × capture.
+"+ Store" answers "what will it take to let me store X?" in one visit. It designs a **depot**: a
+place to keep one resource that the AI can build many of. A depot is a unit with `holds`: each
+one adds `holds.amount` of its resource to the cap.
 
-## Three options
+- **Fit, not cleverness.** Jev's `plausible` question asks whether the place suits the resource:
+  the kind of space, conditions and security it needs. The wrong kind of place fails, however
+  inventive (a yard won't hold Encoded Transmissions). There is no efficiency question.
+- **How many one holds is realism.** `holds` is one of `DEPOT_HOLDS`, a power of ten from one to
+  a trillion: a 50-gallon drum might hold a billion nanobots, a warehouse ten thousand engines.
+  Cap traits (Renewable, Liquid) and expansion traits (Cryogenic, Contraband) scale it.
+- **Jev also judges** `value` (what one is worth, `UNIT_VALUE`), `tier` (how advanced, `UNIT_TIERS`),
+  `parts` (what one is built from), the icon, who pays for the design, Jev's alarm, and `same_as`
+  against the resource's other depots.
+- **Up to three takes**, Jev's own first, differing in tier, worth and how many one holds. Each
+  shows how many it takes to hold the **target** and their parts' worth. The target is worked out,
+  never typed: the dearest waiting cost in the resource (the goal included), else
+  `DEPOT_TARGET_WEEKS` (4) weeks of what you make, else ten times the room you have, never past
+  the ceiling.
+- **The design is research**, priced by tier like a unit's (`TIERS`), and uses the week's action.
+  Its clock weeks are Jev's alarm × the resource's clock traits. It can be banked like any design.
+- **Building is free of actions.** A designed depot comes with a build contract, "Build <depot>",
+  for as many as it takes to hold all that can exist (`DEPOT_OPEN`, a billion, with no ceiling).
+  Each is made from its parts on its card, which offers "enough" for the target.
+- **Depots only hold.** They have no strategies, no upkeep and no traits, are never idle, can't
+  be Procured, and don't count towards Industry. Their only upgrade is cheaper parts.
 
-The three options are the same way, pushed further each time. Every one takes the week's action
-and costs only once. **There are no ongoing costs:** no upkeep, decay or slow fill.
-
-| Option | Adds | Cost factor | Clock |
-| --- | --- | --- | --- |
-| Careful | 0.25 × yield | ×0.25 | none |
-| Pushed | 0.6 × yield | ×1 | half of Jev's alarm, plus size weeks |
-| All in | 1 × yield | ×1.25 | risky: Jev's alarm, at least "makes the news", doubled size weeks |
-
-- **Cost** = `STORAGE_COST_SHARE` (0.2) × `STORAGE_WORTH[tier]` × 10 × share × cost factor × IQ
-  efficiency × plausibility. Industry, IQ² and capture make an option bigger, not dearer.
-- **Ceiling.** An option is cut to the room left and flagged. Cutting happens after pricing, so
-  overreaching costs more for what it gives **(Claude's default)**. When a bigger option is cut to
-  the size of the one below, it is labelled "at the ceiling" and costs what that one costs.
-- **An advanced way.** When `techLevel` is above the AI's best IQ, Pushed or All in (drawn from a
-  run, week and resource seed) is sized for that IQ: the baseline at the needed IQ, × 1.25
-  (`STORAGE_ADVANCED_BONUS`). It needs that IQ to research, and its IQ efficiency is read at that
-  IQ **(Claude's default)**. The other two options are unchanged.
-- **Payers.** Payers are taken from Jev's ranking and shuffled across the options by seed. A clear
-  favourite pays for two options and the second favourite for one. "Clear" means the second
-  scores under `RESOURCE_SECOND_TRAIT` (60%) of the first **(Claude's default)**. Otherwise the
-  top three pay for one option each. A resource with no storage is never asked about or charged.
-  No cost is more than its payer's cap.
-
-## What the player sees
-
-- **Chips:**
-  - **Can exist:** the resource's ceiling rung, or "No limit" in Phase 3.
-  - **You could build:** the reach in units, with Jev's band and the IQ guide in the tooltip.
-  - **This way:** the capture label.
-- **Cards** show:
-  - the room added and the new total;
-  - the research cost and needed IQ, or for the advanced option, "Ahead of you: needs IQ N (…),
-    +25% for thinking ahead";
-  - the clock;
-  - "Capped: no more than ~N can exist yet" when the option was cut.
-- **Refusals** say why: Jev doesn't think the way could work, or only about N can exist and the
-  player already has room for that.
+The bots (`econBots.ts`) assume Jev's depot holds about `DEPOT_BOT_RATIO` (10) times its own
+worth of the resource, rounded to a power of ten; at that, holding the Phase 2 goal costs 3–30% of
+what it holds (`balance.spec.ts`).

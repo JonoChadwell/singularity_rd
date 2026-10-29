@@ -44,19 +44,25 @@
       </label>
     </div>
 
-    <div v-if="strategies.length" class="pins">
+    <p v-if="depot" class="holds">
+      Each holds {{ fmt(depot.each) }} {{ depot.icon }} {{ depot.name }}: room for {{ fmt(depot.total) }}.
+      <template v-if="depot.toTarget > 0">{{ fmtCount(depot.toTarget) }} more to hold {{ fmt(depot.target.amount) }} ({{ depot.target.why }}).</template>
+    </p>
+    <div v-else-if="strategies.length" class="pins">
       <PinRow v-for="s in strategies" :key="s.id" :strategy="s" :unit="unit" :count="alloc.byTask[s.id] ?? 0" :pin="pinOf(s.id)" />
     </div>
     <p v-else class="lock">No strategies yet.</p>
 
     <div class="feeders">
       <p v-if="!contracts.length" class="nosrc"><Led tone="warn" /> None yet: you can’t own any until you Procure some.</p>
-      <FeederRow v-for="c in contracts" :key="c.id" :contract="c" :unit="unit" />
+      <FeederRow v-for="c in contracts" :key="c.id" :contract="c" :unit="unit" :want="depot?.toTarget" />
     </div>
 
     <footer class="pkg-foot">
-      <button class="link" @click="ui.openInvent({ kind: 'strategy', unitId: unit.id })">+ strategy</button>
-      <button class="link" @click="ui.openInvent({ kind: 'create', unitId: unit.id })">Procure</button>
+      <template v-if="!depot">
+        <button class="link" @click="ui.openInvent({ kind: 'strategy', unitId: unit.id })">+ strategy</button>
+        <button class="link" @click="ui.openInvent({ kind: 'create', unitId: unit.id })">Procure</button>
+      </template>
       <button
         class="link"
         :disabled="!!upgradeLock"
@@ -72,7 +78,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { allocation, contractsFor, findResource, fmt, fmtCount, owned, tierLabel, unitCap } from '@/engine/model'
+import { depotTarget } from '@/engine/depotProposal'
+import { allocation, capOf, contractsFor, findResource, fmt, fmtCount, owned, tierLabel, unitCap } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
 import { has, TRAITS } from '@/engine/traits'
 import type { UnitType } from '@/engine/types'
@@ -100,6 +107,15 @@ const incoming = computed(() =>
   game.state.deliveries.filter((d) => d.target.kind === 'unit' && d.target.id === props.unit.id).reduce((n, d) => n + d.amount, 0)
 )
 const upgradeLock = computed(() => lockReason(game.state, 'unit-upgrade'))
+/** A depot: what it holds, how much all of them hold, and how many more would reach what you're storing towards. */
+const depot = computed(() => {
+  const h = props.unit.holds
+  const r = h && findResource(game.state, h.resourceId)
+  if (!h || !r) return null
+  const target = depotTarget(game.state, r)
+  const toTarget = Math.max(0, Math.ceil((target.amount - capOf(game.state, r)) / Math.max(1e-9, h.amount) - 1e-9))
+  return { each: h.amount, icon: r.icon, name: r.name, total: props.unit.count * h.amount, target, toTarget }
+})
 const pinOf = (strategyId: string) => props.column?.lanes.find((l) => l.id === strategyId)?.pin ?? null
 
 const week = computed(() => game.preview.units[props.unit.id])
@@ -253,7 +269,12 @@ watch(
   color: var(--led-a);
 }
 
-.lock {
+.lock,
+.holds {
   margin: 0;
+}
+
+.holds {
+  font-size: 12px;
 }
 </style>

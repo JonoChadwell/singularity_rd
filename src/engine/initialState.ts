@@ -25,6 +25,7 @@ export function newUnit(fields: Pick<UnitType, 'id' | 'name'> & Partial<UnitType
     boosts: null,
     byproduct: null,
     stores: null,
+    holds: null,
     overclocked: false,
     weeksRun: 0,
     pending: [],
@@ -56,7 +57,6 @@ export function newResource(fields: Pick<Resource, 'id' | 'name'> & Partial<Reso
     value: 1,
     amount: 0,
     cap: startingCap(fields.tier ?? 0, fields.value ?? 1),
-    expansions: [],
     traits: [],
     ceiling: null,
     ...fields

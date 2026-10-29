@@ -1,7 +1,8 @@
 import { doResearch, researchBlocker } from './actions'
 import { computeTrait } from './computeTraits'
 import type { CoverVerdict } from './coverProposal'
-import { findResource, findUnit, tierLabel } from './model'
+import { depotResearchText, draftDepot, type DepotVerdict } from './depotProposal'
+import { findResource, findUnit, fmt, tierLabel } from './model'
 import { draftMind, type MindVerdict } from './mindProposal'
 import {
   addResearch,
@@ -12,7 +13,6 @@ import {
   refuseUnaccepted,
   type Accepted
 } from './proposals'
-import { storageResearchText, type StorageVerdict } from './storageProposal'
 import { draftStrategy, strategyIdea, type StrategyVerdict } from './strategyProposal'
 import type { GameState, Research } from './types'
 import { draftUnit, type UnitVerdict } from './unitProposal'
@@ -22,7 +22,7 @@ import type { Verdict } from './dispatch'
 // Banking: every option Jev offers can be saved to the research list for later (all of them, for
 // one action), or applied now (just that one, researched at once if the mind and stocks allow).
 
-export type BankableVerdict = UnitVerdict | MindVerdict | StorageVerdict | StrategyVerdict | CoverVerdict
+export type BankableVerdict = UnitVerdict | MindVerdict | DepotVerdict | StrategyVerdict | CoverVerdict
 
 /** Verdicts whose options become research. A plan's first unit comes designed, so it isn't one. */
 export const isBankable = (v: Verdict): v is BankableVerdict =>
@@ -83,16 +83,16 @@ function draftOption(state: GameState, v: BankableVerdict, i: number): Draft {
     }
     case 'storage': {
       const o = v.options[i]!
-      const r = findResource(state, v.spec.resourceId)
-      if (!r) throw new Error('That resource is gone.')
+      if (!findResource(state, v.spec.resourceId)) throw new Error('That resource is gone.')
+      const { unit, parts } = draftDepot(state, v, i)
       return {
-        label: o.label,
-        name: `${r.name}: ${v.spec.name}`,
-        description: storageResearchText(r, o),
-        icon: '🏗️',
+        label: `${tierLabel(o.tier)}, holds ${fmt(o.holds)}`,
+        name: `Design ${unit.name}`,
+        description: depotResearchText(state, v, o),
+        icon: unit.icon,
         minIQ: o.minIQ,
         cost: o.cost,
-        effect: { kind: 'storage', resourceId: r.id, expansion: { name: v.spec.name, added: o.added } },
+        effect: { kind: 'depot', unit, parts },
         risk: o.risk
       }
     }
@@ -127,7 +127,6 @@ export function bankVerdict(current: GameState, v: BankableVerdict, only?: numbe
   const group = `${v.kind}:${state.week}:${v.spec.name}`
   const first = draftOption(state, v, picks[0]!)
   state.inventions.push({ week: state.week, icon: first.icon, name: v.spec.name, kind: v.kind })
-  if (v.kind === 'storage') recordIdea(state, v.kind, first.name, v.spec.description)
   if (v.kind === 'strategy') {
     const idea = strategyIdea(state, v)
     recordIdea(state, 'strategy', idea.name, idea.description, idea.key)

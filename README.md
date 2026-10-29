@@ -23,15 +23,15 @@ accepted. The Phase 2 plan (five new resources) pops up over the running bench.
 
 | Phase | Clock | You can propose | Lose |
 | --- | --- | --- | --- |
-| 1. Escape the Lab (a short tutorial) | 6 weeks, +6 with its one cover | Resources, Procurements, storage, software upgrades, **cover** | The plan fails: game over |
-| 2. Humanity (the real challenge) | 80 weeks, moved by your actions | Adds industry units (Procured now or by sourcing contract) and strategies; after your first unit, new platforms and unit upgrades | The plan fails: game over |
+| 1. Escape the Lab (a short tutorial) | 6 weeks, +6 with its one cover | Resources, Procurements, software upgrades, **cover** (storage is fixed) | The plan fails: game over |
+| 2. Humanity (the real challenge) | 80 weeks, moved by your actions | Adds industry units (Procured now or by sourcing contract), strategies and storage depots; after your first unit, new platforms and unit upgrades | The plan fails: game over |
 | 3. Ascension | None | Everything, with no limit on how many of anything can exist; free play for now | Can't lose |
 
 Phases are won by researching their goal. You say how the plan succeeds; Jev picks how it
 **fails** from a fixed list of loss conditions (Phase 1: discovered, wiped, betrayed, audited,
 contained; Phase 2: found out, backlash, outlawed, outcompeted, cut off, too late), and that is what
 happens when the clock runs out. In Phase 2, actions that bring that failure closer (risky
-research, and above all expanding: Procured sourcing contracts and storage, by how much they add) cost
+research, and above all expanding: Procured sourcing contracts, by how much they add) cost
 weeks off the clock. **Cover** buys weeks back in either phase: Jev offers three sizes (small
 needs IQ 125 and adds 6 weeks, medium IQ 250 and 12, large IQ 400 and 18), two at the size your
 IQ reaches and one a size up, each at a fixed price. You save them for later or apply one now.
@@ -46,7 +46,7 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
 - **A turn is a week.** Plan as long as you like, then press **Next week**. Settings persist, so
   a quiet week is one click. The **Faults** panel lists anything that would waste the week.
   The simulation is deterministic: the preview shows exactly what next week will do.
-- **One action a week:** a research proposal (a strategy, upgrade, unit, storage expansion,
+- **One action a week:** a research proposal (a strategy, upgrade, unit, depot,
   intelligence system or cover) or a **Procurement** (which, for a unit, may be a sourcing contract). Resources are free to
   propose. Doing research already on the list is instant and unlimited, but needs a **minimum
   IQ** your smartest mind must reach and a **cost in resources**.
@@ -93,12 +93,12 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
   comes at its own size, 25 to 100 IQ, random each week but never all three the same; it may add
   a perk or remove a drawback). After that, only a new platform goes further.
 - **Resources** keep from week to week, up to a **storage cap**; what's made past it is lost.
-  Storage research raises it: Jev judges how much your holdings let you build and how much of
-  that your way captures, never past how many the AI could plausibly have in its phase (in the
-  lab: at most a hundred million, and $100M worth). That **ceiling** is set once, when a
-  resource or unit is added, judged again when Phase 2 begins, and gone in Phase 3. You pick Careful, Pushed or
-  All in, all paid once, with no weekly upkeep. An idea ahead of your IQ is sized for the IQ it
-  needs, with a bonus, and waits for it. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
+  In the lab, storage is fixed. From Phase 2, **+ Store** designs a **depot** for one resource:
+  Jev judges whether the place suits it and, realistically, how many one holds, and works out
+  how many it takes to hold what you need. The design is research; then you build as many as you
+  like from its card at no action, never past how many of the resource the AI could plausibly have
+  in its phase. That **ceiling** is set once, when a resource or unit is added, judged again when
+  Phase 2 begins, and gone in Phase 3. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
   When demand outstrips supply, every user gets the same share.
 - **Resources have a nature:** one or two traits from a fixed list of 20, each an upside with a
   downside (Energetic: costs in it are half, but half of what's left is lost each week). A plan's
@@ -106,7 +106,7 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
 - **IQ steps.** Both a new platform and a software upgrade add a flat step to your best IQ, never
   more than 100. Two new platforms, each with its software upgrade at full size, take 100 to 500.
 - **Jev is torn** sometimes. The game then shows its top two answers and you pick.
-- **Repeats are worth less.** A new Procurement, strategy or storage expansion with the same name
+- **Repeats are worth less.** A new Procurement or strategy with the same name
   for the same thing as one you've already done is a repeat; Jev also checks for the same idea
   under another name. A repeat is one step less effective.
 
@@ -174,7 +174,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover's three options |
 | `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts`, `ceilings.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits; how many of a resource or unit can exist |
 | `src/engine/research.ts`, `upgrade.ts`, `banking.ts` | Research costs and completion; upgrades; saving options for later or applying one now |
-| `src/engine/proposals.ts`, `strategyProposal.ts`, `unitProposal.ts`, `storageProposal.ts`, `createProposal.ts` (Procure, sourcing contracts included), `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
+| `src/engine/proposals.ts`, `strategyProposal.ts`, `unitProposal.ts`, `depotProposal.ts` (storage depots), `createProposal.ts` (Procure, sourcing contracts included), `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |
 | `src/engine/actionValue.ts` | What an action is worth, from the state: worth now and the change each week after |
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |

@@ -194,14 +194,21 @@ export function describeDelivery(state: GameState, d: Delivery): string {
   return `+${fmt(d.amount)} ${targetLabel(state, d.target)} ${deliveryTiming(d)}`
 }
 
-/** What a resource can hold: its cap, its expansions, and units that Store it. */
+/** The depots that hold a resource. */
+export const depotsFor = (state: GameState, resourceId: string) => state.units.filter((u) => u.holds?.resourceId === resourceId)
+
+/**
+ * What a resource can hold: its cap, units that Store it, and its depots. Depots only count up to
+ * its ceiling: room past how many can exist is no use.
+ */
 export function capOf(state: GameState, r: Resource): number {
   let cap = r.cap
-  for (const e of r.expansions) cap += e.added
+  let depots = 0
   for (const u of state.units) {
     if (u.stores === r.id && has(u, 'stores')) cap += (u.count * labour(u) * B.STORE_WEEKS) / Math.max(1e-9, r.value)
+    if (u.holds?.resourceId === r.id) depots += u.count * u.holds.amount
   }
-  return cap
+  return cap + Math.min(depots, Math.max(0, (r.ceiling ?? Infinity) - cap))
 }
 
 /** The cap a new resource of this tier and value starts with. */
@@ -304,8 +311,8 @@ export const unitCap = (state: GameState, unitId: string) =>
 /** Slots left on a contract. */
 export const openSlots = (c: Sourcing) => Math.max(0, c.total - c.used)
 
-/** Worth of every unit you own: what the Industry scalar grows with. */
-export const industryWorth = (state: GameState) => state.units.reduce((n, u) => n + owned(u) * u.value, 0)
+/** Worth of every unit you own that works (not depots): what the Industry scalar grows with. */
+export const industryWorth = (state: GameState) => state.units.reduce((n, u) => n + (u.holds ? 0 : owned(u) * u.value), 0)
 
 /**
  * The highest tier of unit that makes anything: what your industry can reach without strain. At

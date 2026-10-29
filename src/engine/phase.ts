@@ -35,9 +35,10 @@ export function lockReason(state: GameState, feature: Feature): string | null {
   switch (feature) {
     case 'resource':
     case 'create':
-    case 'storage':
     case 'upgrade':
       return null
+    case 'storage':
+      return n < 2 ? 'Storage is fixed in the lab. From Phase 2, design depots to hold more.' : null
     case 'strategy':
     case 'unit':
       return n < 2 ? 'Unlocks in Phase 2, once you escape the lab.' : null
@@ -180,7 +181,7 @@ export const CARDS: Card[] = [
   {
     id: 'risk',
     title: 'The clock moves',
-    text: 'Your plan fails its own way when the clock runs out, and you can move it. Expanding draws attention: every sourcing contract and storage expansion costs weeks by how much it adds, and the risky options cost twice as much. Research Jev thinks brings your plan’s failure closer costs weeks too. Cover buys weeks back: 6, 12 or 18, by how smart you are, and up to three times this phase.'
+    text: 'Your plan fails its own way when the clock runs out, and you can move it. Expanding draws attention: every sourcing contract costs weeks by how much it adds, and the risky options cost twice as much. Research Jev thinks brings your plan’s failure closer costs weeks too. Cover buys weeks back: 6, 12 or 18, by how smart you are, and up to three times this phase.'
   },
   {
     id: 'cover-dropped',

@@ -20,10 +20,8 @@ export interface Resource {
   value: number
   /** On hand. */
   amount: number
-  /** The most it can hold before expansions: STARTING_STORAGE_WORTH of its tier, in units. */
+  /** The most it can hold before depots: STARTING_STORAGE_WORTH of its tier, in units. */
   cap: number
-  /** Storage expansions researched for it. */
-  expansions: Expansion[]
   /** One or two traits, each an upside with a downside. See resourceTraits.ts. */
   traits: ResourceTraitId[]
   /**
@@ -31,13 +29,6 @@ export interface Resource {
    * grows past it. null: no ceiling (Phase 3).
    */
   ceiling: number | null
-}
-
-/** Extra storage for one resource, from research. */
-export interface Expansion {
-  name: string
-  /** Units of the resource it adds to the cap. */
-  added: number
 }
 
 export interface Flow {
@@ -111,6 +102,11 @@ export interface UnitType {
   byproduct: string | null
   /** Stores: the resource it adds storage for. */
   stores: string | null
+  /**
+   * A depot: each one holds `amount` of a resource, adding to its cap. Depots don't work, so they
+   * have no strategies or upkeep, and they're built from their card, not Procured.
+   */
+  holds: { resourceId: string; amount: number } | null
   overclocked: boolean
   /** Weeks it has run (Learns on the job). */
   weeksRun: number
@@ -184,7 +180,7 @@ export interface Delivery {
  * same idea, and a repeat is one step less effective.
  */
 export interface Idea {
-  kind: 'create' | 'strategy' | 'storage'
+  kind: 'create' | 'strategy'
   name: string
   description: string
   week: number
@@ -211,8 +207,8 @@ export type ResearchEffect =
   | { kind: 'mind'; mind: Mind }
   | { kind: 'strategy'; strategy: Strategy }
   | { kind: 'upgrade'; target: UpgradeTarget; changes: Change[] }
-  /** A storage expansion for one resource. */
-  | { kind: 'storage'; resourceId: string; expansion: Expansion }
+  /** A depot design: the unit, and the build contract it comes with (what each one is made from). */
+  | { kind: 'depot'; unit: UnitType; parts: Flow[] }
   /** A phase's goal: researching it wins the phase. */
   | { kind: 'goal'; phase: PhaseNumber }
   /** Cover: moves the deadline back by `weeks`. */
