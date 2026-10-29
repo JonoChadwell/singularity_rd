@@ -262,24 +262,23 @@ export const PROCURE_NOW_ODDS: [number, number] = [0.2, 0.8]
 /** Worth a resource of each tier can be stored to at the start, before depots. Tier 3 up starts with none. */
 export const STARTING_STORAGE_WORTH = [2e5, 8e4, 2e4, 0]
 /**
- * How many of a resource one depot holds, Jev's realistic judgement: [label, units]. One rung per
- * power of ten, so a drum of nanobots and a warehouse of engines can both be told.
+ * How dear a depot is next to what it holds, Jev's realistic judgement: [label, worth of the
+ * contents ÷ worth of the depot]. A depot holds its own worth times this, in the resource. Asked as
+ * a ratio because Jev judges an abstract unit's size badly (it put ten thousand Scrap Steel, $5k
+ * of it, in a $35k scrapyard), but knows a scrapyard is dear next to scrap and a drum is next to
+ * nothing next to nanobots.
  */
-export const DEPOT_HOLDS: [string, number][] = [
-  'one',
-  'ten',
-  'a hundred',
-  'a thousand',
-  'ten thousand',
-  'a hundred thousand',
-  'a million',
-  'ten million',
-  'a hundred million',
-  'a billion',
-  'ten billion',
-  'a hundred billion',
-  'a trillion'
-].map((label, i) => [label, 10 ** i])
+export const DEPOT_RATIO: [string, number][] = [
+  ['Far dearer than what it holds: it costs ten times its contents', 0.1],
+  ['Dearer than what it holds: it costs about three times its contents', 0.3],
+  ['About as dear as what it holds', 1],
+  ['Cheap: it holds about three times what it costs', 3],
+  ['Cheap: it holds about ten times what it costs', 10],
+  ['Very cheap: it holds about thirty times what it costs', 30],
+  ['Very cheap: it holds about a hundred times what it costs', 100],
+  ['Almost free: it holds about a thousand times what it costs', 1000],
+  ['Next to nothing: it holds a million times what it costs, or more', 1e6]
+]
 /** With no ceiling (Phase 3), a depot's build contract allows this many. */
 export const DEPOT_OPEN = 1e9
 /** With no waiting cost too big to hold, a depot is sized for this many weeks of what you make. */

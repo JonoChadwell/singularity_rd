@@ -26,6 +26,8 @@ export class FakeJudge implements Judge {
     this.calls.push({ state, questions, purpose })
     const answers: Record<string, JevAnswer> = {}
     for (const [key, q] of Object.entries(questions)) {
+      // The real Jev refuses a score question with more than 10 criteria.
+      if (q.type === 'score' && q.criteria.length > 10) throw new Error(`Jev allows at most 10 criteria; "${key}" has ${q.criteria.length}.`)
       const override = this.override(key)
       if (override) {
         answers[key] = typeof override === 'function' ? override(questions) : override

@@ -351,7 +351,7 @@ export const storage = (resourceId: string, need = 0): Move => ({
     attempt(async () => {
       const r = findResource(s, resourceId)
       if (!r || hasDepot(s, resourceId)) return null
-      const v = await judgeDepot(s, judge(ctx, `storage:${resourceId}`, depotAnswers(s, r)), { resourceId, name: fresh(ctx, 'Warehouse'), description: '' })
+      const v = await judgeDepot(s, judge(ctx, `storage:${resourceId}`, depotAnswers(s)), { resourceId, name: fresh(ctx, 'Warehouse'), description: '' })
       if (v.rejected || !v.options.length) return null
       v.choice = 0
       const after = acceptDepot(s, v).state

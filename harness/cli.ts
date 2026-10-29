@@ -17,7 +17,8 @@ import { runWeek } from '@/engine/cycle'
 import { previewWeek } from '@/engine/economy'
 
 import { acceptAny, judgeAny, type ProposalInput, type Verdict } from '@/engine/dispatch'
-import { describeOption, iqTag, isContract, optionBlocker, overflowOf } from '@/engine/createProposal'
+import { describeOption, iqTag, isContract, optionBlocker, overflowOf, resizeContracts } from '@/engine/createProposal'
+import { depotResearchText } from '@/engine/depotProposal'
 import { createInitialState } from '@/engine/initialState'
 import { computeTrait } from '@/engine/computeTraits'
 import { draftMind } from '@/engine/mindProposal'
@@ -32,6 +33,7 @@ import {
   describeCost,
   describeDelivery,
   describeFlows,
+  depotsFor,
   efficiencyWord,
   findResource,
   findSourcing,
@@ -51,9 +53,9 @@ import {
 import {
   CREATE_PRESETS,
   COVER_PRESETS,
+  DEPOT_PRESETS,
   MIND_PRESETS,
   RESOURCE_PRESETS,
-  STORAGE_PRESETS,
   STRATEGY_PRESETS,
   UNIT_PRESETS,
   UNIT_PROCURE_PRESETS
@@ -66,7 +68,6 @@ import { draftPlan, judgePlan } from '@/engine/planProposal'
 import { goalOf, projectGoal, projectionText } from '@/engine/projection'
 import { alarmLabel, alarmQuestions, expansionRiskText, RISK_BONUS, riskFrom, riskText } from '@/engine/risk'
 import { resourceTrait, traitLine } from '@/engine/resourceTraits'
-import { describeCatch } from '@/engine/storageProposal'
 import { proposalText } from '@/engine/stateText'
 import { bandOf, catchesOf, complicationName, draftResource } from '@/engine/proposals'
 import { draftStrategy } from '@/engine/strategyProposal'
@@ -140,9 +141,7 @@ function load(slot: string): Save {
   const path = savePath(slot)
   if (!existsSync(path)) throw new Error(`No game in slot "${slot}". Start one with: new`)
   const save = JSON.parse(readFileSync(path, 'utf8')) as Save
-  if (save.state.version !== 16) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
-  // Saves from before repeat ideas were tracked.
-  save.state.ideas ??= []
+  if (save.state.version !== 19) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
   return save
 }
 
@@ -222,7 +221,7 @@ function printPhase(s: GameState) {
     say(`  ${projectionText(s, proj)}${proj.week === null ? '' : ' (if you build nothing more)'}`)
   }
   if (p.firstUnit) {
-    say(`FIRST UNIT waiting (designed free, tier 0, with a starter batch of ${B.STARTER_CONTRACT}): ${p.firstUnit.name}: ${p.firstUnit.description} → propose unit with "first": true`)
+    say(`FIRST UNIT waiting (designed free, tier 0; Procure some once it's designed): ${p.firstUnit.name}: ${p.firstUnit.description} → propose unit with "first": true`)
   }
   const locked = FEATURES.filter((f) => lockReason(s, f))
   if (locked.length) say(`Locked: ${locked.map((f) => `${f} (${lockReason(s, f)})`).join('; ')}`)
@@ -248,7 +247,8 @@ function printStatus(s: GameState) {
       `  ${r.id} "${r.name}" tier ${r.tier} worth ${fmt(r.value)}${r.traits.length ? ` [${r.traits.map((t) => resourceTrait(t).name).join(', ')}]` : ''} · have ${fmt(r.amount)} of ${fmt(capOf(s, r))} storage · net ${fmt(net(r.id))}` +
         `${share !== undefined && share < 1 ? ` · SHORT: ${pct(share)} met` : ''}` +
         `${wasted ? ` · OVERFLOWS ${fmt(wasted)}` : ''}` +
-        `${r.expansions.length ? `\n      storage: ${r.expansions.map((e) => `${e.name} +${fmt(e.added)}${e.catch ? ` (${describeCatch(s, e.catch)})` : ''}`).join('; ')}` : ''}` +
+        ` · can exist ${ceilingLabel(r.ceiling)}` +
+        `${depotsFor(s, r.id).length ? `\n      depots: ${depotsFor(s, r.id).map((u) => `${u.name} ×${fmtCount(u.count)} (+${fmt(u.count * (u.holds?.amount ?? 0))})`).join('; ')}` : ''}` +
         `${sources ? `\n      ${sources}` : ''}`
     )
   }
@@ -265,6 +265,14 @@ function printStatus(s: GameState) {
     for (const u of s.units) {
       const w = preview.units[u.id]
       const { byTask, free } = allocation(s, u)
+      if (u.holds) {
+        const c = contractsFor(s, u.id)[0]
+        say(
+          `  ${u.id} "${u.name}" DEPOT for ${u.holds.resourceId} ×${fmtCount(u.count)}, each holds ${fmt(u.holds.amount)} · value ${fmt(u.value)}` +
+            (c ? ` · build with: create ${c.id} <n|max> · parts ${describeFlows(s, partsFor(u, c))} each · can build ${fmtCount(creatable(s, c, weeklyUse(preview)))} now` : '')
+        )
+        continue
+      }
       say(`  ${u.id} "${u.name}" ${tierLabel(u.tier)} ×${fmtCount(u.count)} of ${fmtCount(unitCap(s, u.id))} allowed (built ${fmtCount(u.built)})`)
       say(
         `      upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · value ${fmt(u.value)} (${unitValueText(u.value)})` +
@@ -272,7 +280,7 @@ function printStatus(s: GameState) {
       )
       const contracts = contractsFor(s, u.id)
       if (!contracts.length) say('      NONE ALLOWED: procure some (units now or a contract) to own any')
-      say(`      can exist: ${ceilingLabel('unit', u.ceiling)}`)
+      say(`      can exist: ${ceilingLabel(u.ceiling)}`)
       for (const c of contracts) {
         say(
           `      contract ${c.id} "${c.name}" ${fmtCount(c.used)}/${fmtCount(c.total)}${c.risky ? ' RISKY' : ''}` +
@@ -310,8 +318,8 @@ function printStatus(s: GameState) {
     const blocker = actions.researchBlocker(s, r.id)
     const e = r.effect
     const what =
-      e.kind === 'storage'
-          ? ` · room for ${fmt(e.expansion.added)} more${e.expansion.catch ? ` (${describeCatch(s, e.expansion.catch)})` : ''}`
+      e.kind === 'depot'
+          ? ` · a depot: each holds ${fmt(e.unit.holds?.amount ?? 0)} ${e.unit.holds?.resourceId}`
           : e.kind === 'cover'
             ? ` · adds ${e.weeks} weeks to the clock`
             : e.kind === 'goal'
@@ -372,6 +380,12 @@ function printVerdict(s: GameState, v: Verdict) {
   if (v.kind === 'create') {
     const c = v.scalars
     say(`  factors: Industry ×${fmt(c.industry)} · IQ ×${fmt(c.iq)} · Efficiency ×${fmt(c.efficiency)}${c.reach < 1 ? ` · Reach ×${fmt(c.reach)} (${c.short.toFixed(1)} tiers over)` : ''}`)
+    if (v.sizes && v.options.some(isContract)) {
+      say(
+        `  contract size [size <dollars>]: ${v.sizes.map((w) => `${w === v.size ? '*' : ''}$${fmt(w)}`).join(' · ')} — the biggest is ` +
+          (v.sizeLimit === 'jev' ? 'what Jev thinks this way could supply' : `${B.CONTRACT_SCALE}× what you own (suppliers deal on your scale)`)
+      )
+    }
     say(`  Jev's offers [option <n>] (taking one uses this week's action):`)
     v.options.forEach((o, i) => {
       const blocked = optionBlocker(s, o)
@@ -388,14 +402,13 @@ function printVerdict(s: GameState, v: Verdict) {
     return
   }
   if (v.kind === 'storage') {
-    const c = v.scalars
-    say(`  factors: Industry ×${fmt(c.industry)} · IQ ×${fmt(c.iq)} · Efficiency ×${fmt(c.efficiency)}`)
-    say(`  expansions [option <n>]:`)
+    say(`  depot for ${v.spec.resourceId} · can exist ${v.ceilingLabel} · to hold ${fmt(v.target.amount)} (${v.target.why})`)
+    say(`  Jev's takes [option <n>] (accept or bank it as research; then build them with create, no action):`)
     v.options.forEach((o, i) => {
-      const tag = iqTag(o.iqEfficiency)
       say(
-        `    ${i}${i === v.choice ? ' *' : ''}: ${o.label}: room for ${fmt(o.added)} more${o.risky ? ' RISKY' : ''} · ${describeCatch(s, o.catch)} · needs IQ ${o.minIQ}, uses up ${describeCost(s, o.cost)}` +
-          ` · ${expansionRiskText(o.risk)} · needs ${B.HOLDERS[o.holder]![0].toLowerCase()}${o.blocked ? ' (BLOCKED at your IQ)' : ''}${tag ? ` · ${tag}` : ''}`
+        `    ${i}${i === v.choice ? ' *' : ''}: ${tierLabel(o.tier)} · each holds ${fmt(o.holds)} · ${depotResearchText(s, v, o)} · parts ${describeFlows(s, o.parts)}` +
+          ` · ${o.needed > 0 ? `${fmtCount(o.needed)} to hold the target (~$${fmt(o.neededWorth)} of parts)` : 'room enough already'}` +
+          ` · design needs IQ ${o.minIQ}, uses up ${describeCost(s, o.cost)} · ${expansionRiskText(o.risk)}`
       )
     })
     return
@@ -418,7 +431,7 @@ function printVerdict(s: GameState, v: Verdict) {
   } else if (v.kind === 'unit') {
     const d = draftUnit(s, v)
     const u = d.unit
-    say(v.spec.first ? `  → the plan’s first unit: designed at once, free, with a starter batch of ${B.STARTER_CONTRACT}` : research(d))
+    say(v.spec.first ? `  → the plan’s first unit: designed at once, free` : research(d))
     say(`  Jev's takes [option <n>]:`)
     v.options.forEach((o, i) => {
       const od = draftUnit(s, { ...v, choice: i })
@@ -427,7 +440,7 @@ function printVerdict(s: GameState, v: Verdict) {
           (v.spec.first ? '' : ` · needs IQ ${od.minIQ}, uses up ${describeCost(s, od.cost)}`)
       )
     })
-    say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · can exist ${ceilingLabel('unit', u.ceiling)} · room for none until you procure some`)
+    say(`  → ${tierLabel(u.tier)}, value ${fmt(u.value)}, upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · can exist ${ceilingLabel(u.ceiling)} · room for none until you procure some`)
     say(`  → traits: ${u.traits.length ? traitText(u.traits) : 'none'}`)
   } else if (v.kind === 'mind') {
     say(`  Jev's takes [option <n>]:`)
@@ -447,12 +460,7 @@ function printVerdict(s: GameState, v: Verdict) {
 function printOffer(s: GameState, offer: UpgradeOffer) {
   say(`UPGRADE OPTIONS for ${offer.target.kind} ${offer.target.id} [choose <n>]`)
   offer.options.forEach((o, i) => {
-    say(`  ${i + 1}. ${o.name} (Jev ${pct(o.p)}): ${describeChanges(s, offer.target, o.changes)}`)
-    if (o.sizes) {
-      say(`     sizes [choose ${i + 1} <size>]: ${o.sizes.map((z) => `+${z.step} IQ uses up ${describeCost(s, z.cost) || 'nothing'}`).join(' · ')}`)
-      say(`     needs IQ ${o.minIQ}${o.risk ? ` · ⚠ ${riskText(o.risk, 'upgrade')}` : ''}`)
-      return
-    }
+    say(`  ${i + 1}. ${o.name} (Jev ${pct(o.p)}): ${describeChanges(s, offer.target, o.changes)}${o.step ? ` · +${o.step} IQ` : ''}`)
     say(`     ${o.tier !== undefined ? `Tier ${o.tier} technology · ` : ''}needs IQ ${o.minIQ} · uses up ${describeCost(s, o.cost)}${o.risk ? ` · ⚠ ${riskText(o.risk, 'upgrade')}` : ''}`)
   })
 }
@@ -535,8 +543,10 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   propose resource '{"name":"..","description":".."}'
   propose create '{"target":{"kind":"resource","id":".."},"name":"..","description":".."}'
                                (the week's action. For a resource: paid now, spread, later or weekly. For target kind "unit":
-                               a mix of units now (with cap) and sourcing contracts (room for more, parts per unit). Pick with option <n>)
-  propose storage '{"resourceId":"..","name":"..","description":".."}'   (three expansions; pick with option <n>)
+                               a mix of units now (with cap) and sourcing contracts (room for more, parts per unit). Pick with option <n>;
+                               size <dollars> picks a contract size, up to Jev's limit or ten times what you own)
+  propose storage '{"resourceId":"..","name":"..","description":".."}'   (Phase 2 on: design a depot for that resource,
+                               e.g. "Steel Drum"; Jev judges the fit and how many one holds. Once designed, build them with create)
   propose strategy '{"name":"..","description":"..","unitId":"..","outputId":".."}'
                                (Jev offers three ways, each using up different resources: none allowed for tier 0-1 outputs, 1+ for tier 2, two different for tier 3+; pick with option <n>)
   propose unit '{"name":"..","description":"..","first":false}'   (Jev picks its tier, value and what it runs on)
@@ -544,10 +554,10 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
                                (replaces your platform for good; Jev offers three takes, each a perk+drawback pair at its own IQ step (25-100) and payer, pick with option <n>)
   propose cover '{"name":"..","description":".."}'
   dismiss <cardId|all>         dismiss explainer cards
-  verdict | pick <key> <value> | option <n> (a unit's take, a platform's perk+drawback pair, a Procurement offer, a contract or an expansion)
+  verdict | pick <key> <value> | option <n> (a unit's take, a platform's perk+drawback pair, a Procurement offer, a contract or a depot)
   accept | discard
   upgrade <unit|mind> <id>      ask Jev for three ways to improve it (a platform gets one software upgrade, ever)
-  choose <n> [size]            take upgrade option n as research (a platform upgrade also takes a size: 25/50/75/100 IQ, default 100)
+  choose <n>                   take upgrade option n as research (a platform's software options each have their own IQ step)
   research <researchId>        do a research now (any number a week; proposing is the week's one action)
   drop <researchId>            drop a research
   create <contractId> <n|max>   create units from a sourcing contract's parts (no action; up to its open slots)
@@ -602,7 +612,7 @@ async function run(args: string[], slot: string): Promise<number> {
       mind: MIND_PRESETS,
       create: CREATE_PRESETS,
       units: UNIT_PROCURE_PRESETS,
-      storage: STORAGE_PRESETS,
+      storage: DEPOT_PRESETS,
       cover: COVER_PRESETS
     }[rest[0] as 'unit']
     if (!list) throw new Error('presets resource|strategy|unit|mind|create|units|storage|cover')
@@ -685,6 +695,15 @@ async function run(args: string[], slot: string): Promise<number> {
       printVerdict(s(), v)
       break
     }
+    case 'size': {
+      const v = needVerdict()
+      if (v.kind !== 'create' || !v.sizes) throw new Error('Only a contract offer has sizes.')
+      const w = num(rest[0])
+      if (!v.sizes.includes(w)) throw new Error(`Sizes on offer: ${v.sizes.join(', ')}`)
+      resizeContracts(s(), v, w)
+      printVerdict(s(), v)
+      break
+    }
     case 'option': {
       const v = needVerdict()
       if (!('options' in v)) throw new Error('This verdict has no options.')
@@ -727,11 +746,10 @@ async function run(args: string[], slot: string): Promise<number> {
       if (!save.offer) throw new Error('No upgrade options waiting. Try: upgrade <unit|mind> <id>')
       const offer = save.offer
       const index = num(rest[0]) - 1
-      const step = rest[1] ? num(rest[1]) : undefined
-      const result = acceptUpgrade(s(), offer, index, step)
+      const result = acceptUpgrade(s(), offer, index)
       adopt(save, result.state)
       save.offer = null
-      await log(save.state, 'accept', { kind: 'upgrade', option: offer.options[index]?.key, step, outcome: result.outcome })
+      await log(save.state, 'accept', { kind: 'upgrade', option: offer.options[index]?.key, step: offer.options[index]?.step, outcome: result.outcome })
       if (result.outcome.kind === 'research') say(`research: ${result.outcome.research.id} needs IQ ${result.outcome.research.minIQ}`)
       break
     }

@@ -48,8 +48,8 @@ export interface DepotOption {
   tier: number
   /** Index into UNIT_VALUE: what one is worth. */
   band: number
-  /** Index into DEPOT_HOLDS. */
-  holdsLevel: number
+  /** Index into DEPOT_RATIO: what it holds for its worth. */
+  ratioLevel: number
   /** Of the resource, per depot, after its traits (Cryogenic and Contraband hold twice as much). */
   holds: number
   /** What building one uses. */
@@ -131,10 +131,12 @@ export async function judgeDepot(state: GameState, judge: Judge, raw: DepotSpec)
           } satisfies JevQuestion
         }
       : {}),
-    holds: {
+    ratio: {
       type: 'score',
-      instructions: `Realistically, how many ${r.name} could one ${spec.name} hold? Think about how big one is and what keeping it takes.`,
-      criteria: scale(B.DEPOT_HOLDS)
+      instructions:
+        `Is one ${spec.name} expensive next to the ${r.name} it holds, or cheap? Compare what one costs with what the ${r.name} ` +
+        `in it is worth. One ${r.name} is worth about $${fmt(r.value)}: think about how much room that much of it takes, and what keeping it takes.`,
+      criteria: scale(B.DEPOT_RATIO)
     },
     value: {
       type: 'score',
@@ -185,30 +187,25 @@ export async function judgeDepot(state: GameState, judge: Judge, raw: DepotSpec)
 }
 
 /**
- * Up to three takes, Jev's own first, never two alike: they differ in tier, worth and how many one
- * holds. Each says how many it takes to hold the target.
+ * Up to three takes, Jev's own first: the same kind of depot at the sizes Jev weighed. Each holds
+ * its worth times Jev's ratio, so a smaller one is as good a deal, only built in more pieces, and
+ * can be built from stock that a big one's parts wouldn't fit in. Each says how many it takes to
+ * hold the target.
  */
 export function depotOptions(state: GameState, v: Pick<DepotVerdict, 'answers' | 'picks' | 'spec' | 'target' | 'risk' | 'plausibility' | 'bar'>): DepotOption[] {
   const r = findResource(state, v.spec.resourceId)!
-  const tiers = levelsByOdds(v.answers.tier, B.MAX_UNIT_TIER + 1)
+  const tier = levelsByOdds(v.answers.tier, B.MAX_UNIT_TIER + 1)[0]!
   const bands = levelsByOdds(v.answers.value, B.UNIT_VALUE.length)
-  const holds = levelsByOdds(v.answers.holds, B.DEPOT_HOLDS.length)
-  const candidates = tiers
-    .slice(0, 2)
-    .flatMap((tier, t) => bands.slice(0, 2).flatMap((band, b) => holds.slice(0, 2).map((h, k) => ({ tier, band, h, score: t + b + k }))))
-    .sort((x, y) => x.score - y.score)
-  const chosen: typeof candidates = []
-  for (const c of candidates) {
-    if (chosen.length >= B.UNIT_OPTIONS) break
-    // Each take differs in how many it holds or in what one is worth.
-    if (!chosen.some((o) => o.h === c.h && o.band === c.band)) chosen.push(c)
-  }
+  const level = levelsByOdds(v.answers.ratio, B.DEPOT_RATIO.length)[0]!
+  // What one holds for each dollar it's worth.
+  const perDollar = B.pick(B.DEPOT_RATIO, level)[1]
+  const chosen = bands.slice(0, B.UNIT_OPTIONS)
   const pay = payerPerTake(v.answers, chosen.length)
   const room = Math.max(0, v.target.amount - capOf(state, r))
   const risk = tracedRisk(r, v.risk)
-  return chosen.map(({ tier, band, h }, i) => {
+  return chosen.map((band, i) => {
     const value = B.pick(B.UNIT_VALUE, band)[1]
-    const each = B.pick(B.DEPOT_HOLDS, h)[1] * capFactor(r) * expansionFactor(r)
+    const each = B.nice(((perDollar * value) / Math.max(1e-9, r.value)) * capFactor(r) * expansionFactor(r))
     const pool = rankedIds(v.answers, 'parts', partPool(state, tier))
     const parts = priceParts(state, pool.slice(0, B.PARTS_BY_TIER[tier] ?? 1), value)
     const needed = Math.ceil(room / Math.max(1e-9, each) - 1e-9)
@@ -216,7 +213,7 @@ export function depotOptions(state: GameState, v: Pick<DepotVerdict, 'answers' |
     return {
       tier,
       band,
-      holdsLevel: h,
+      ratioLevel: level,
       holds: each,
       parts,
       needed,

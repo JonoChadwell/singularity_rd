@@ -163,13 +163,18 @@ one adds `holds.amount` of its resource to the cap.
 - **Fit, not cleverness.** Jev's `plausible` question asks whether the place suits the resource:
   the kind of space, conditions and security it needs. The wrong kind of place fails, however
   inventive (a yard won't hold Encoded Transmissions). There is no efficiency question.
-- **How many one holds is realism.** `holds` is one of `DEPOT_HOLDS`, a power of ten from one to
-  a trillion: a 50-gallon drum might hold a billion nanobots, a warehouse ten thousand engines.
-  Cap traits (Renewable, Liquid) and expansion traits (Cryogenic, Contraband) scale it.
+- **Cheap or dear next to its contents.** Jev's `ratio` question asks whether the depot is
+  expensive next to the resource it holds, or cheap (`DEPOT_RATIO`, from "costs ten times its
+  contents" to "holds a million times what it costs"). A depot holds its own worth times that, in
+  the resource: a scrapyard is dear next to scrap, a drum is next to nothing next to nanobots. Cap
+  traits (Renewable, Liquid) and expansion traits (Cryogenic, Contraband) scale it. Asking for a
+  count failed: Jev judges an abstract unit's size badly (it put ten thousand Scrap Steel, $5k of
+  it, in a $35k scrapyard). Jev's API allows at most ten rungs on a score.
 - **Jev also judges** `value` (what one is worth, `UNIT_VALUE`), `tier` (how advanced, `UNIT_TIERS`),
   `parts` (what one is built from), the icon, who pays for the design, Jev's alarm, and `same_as`
   against the resource's other depots.
-- **Up to three takes**, Jev's own first, differing in tier, worth and how many one holds. Each
+- **Up to three takes**, Jev's own first: the same depot at the sizes Jev weighed, each holding
+  its worth times the ratio, so a small one is as good a deal, only built in more pieces. Each
   shows how many it takes to hold the **target** and their parts' worth. The target is worked out,
   never typed: the dearest waiting cost in the resource (the goal included), else
   `DEPOT_TARGET_WEEKS` (4) weeks of what you make, else ten times the room you have, never past
@@ -183,5 +188,5 @@ one adds `holds.amount` of its resource to the cap.
   be Procured, and don't count towards Industry. Their only upgrade is cheaper parts.
 
 The bots (`econBots.ts`) assume Jev's depot holds about `DEPOT_BOT_RATIO` (10) times its own
-worth of the resource, rounded to a power of ten; at that, holding the Phase 2 goal costs 3–30% of
+worth of the resource; at that, holding the Phase 2 goal costs 3–30% of
 what it holds (`balance.spec.ts`).
