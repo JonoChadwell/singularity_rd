@@ -1187,6 +1187,12 @@ describe('storage', () => {
     }
   })
 
+  it('is never more advanced than what it holds', async () => {
+    const s = world()
+    // Steel is tier 0: Jev's tier 3 is cut to 0.
+    expect((await drum(s, { tier: score(3) })).options.every((o) => o.tier === 0)).toBe(true)
+  })
+
   it('holds twice as much of a Cryogenic resource', async () => {
     const s = world()
     findResource(s, 'steel')!.traits = ['cryogenic']

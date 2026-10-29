@@ -194,7 +194,8 @@ export async function judgeDepot(state: GameState, judge: Judge, raw: DepotSpec)
  */
 export function depotOptions(state: GameState, v: Pick<DepotVerdict, 'answers' | 'picks' | 'spec' | 'target' | 'risk' | 'plausibility' | 'bar'>): DepotOption[] {
   const r = findResource(state, v.spec.resourceId)!
-  const tier = levelsByOdds(v.answers.tier, B.MAX_UNIT_TIER + 1)[0]!
+  // Never more advanced than what it holds: Jev tends to rate a store a tier above its contents.
+  const tier = Math.min(r.tier, levelsByOdds(v.answers.tier, B.MAX_UNIT_TIER + 1)[0]!)
   const bands = levelsByOdds(v.answers.value, B.UNIT_VALUE.length)
   const level = levelsByOdds(v.answers.ratio, B.DEPOT_RATIO.length)[0]!
   // What one holds for each dollar it's worth.

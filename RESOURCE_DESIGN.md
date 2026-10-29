@@ -171,7 +171,7 @@ one adds `holds.amount` of its resource to the cap.
   count failed: Jev judges an abstract unit's size badly (it put ten thousand Scrap Steel, $5k of
   it, in a $35k scrapyard). Jev's API allows at most ten rungs on a score.
 - **Jev also judges** `value` (what one is worth, `UNIT_VALUE`), `tier` (how advanced, `UNIT_TIERS`),
-  `parts` (what one is built from), the icon, who pays for the design, Jev's alarm, and `same_as`
+  `parts` (what one is built from, never what it stores), the icon, who pays for the design, Jev's alarm, and `same_as`
   against the resource's other depots.
 - **Up to three takes**, Jev's own first: the same depot at the sizes Jev weighed, each holding
   its worth times the ratio, so a small one is as good a deal, only built in more pieces. Each
@@ -179,6 +179,9 @@ one adds `holds.amount` of its resource to the cap.
   never typed: the dearest waiting cost in the resource (the goal included), else
   `DEPOT_TARGET_WEEKS` (4) weeks of what you make, else ten times the room you have, never past
   the ceiling.
+- **A depot is never more advanced than what it holds:** Jev's tier is cut to the resource's (it
+rated a reactor hangar tier 4). The design is never paid in the resource it stores, nor past
+what a payer can hold.
 - **The design is research**, priced by tier like a unit's (`TIERS`), and uses the week's action.
   Its clock weeks are Jev's alarm × the resource's clock traits. It can be banked like any design.
 - **Building is free of actions.** A designed depot comes with a build contract, "Build <depot>",
