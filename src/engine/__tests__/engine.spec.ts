@@ -977,7 +977,7 @@ describe('procuring units', () => {
     const by = (label: string) => v.options.find((o) => o.label === label)!
     // Sized in dollars: the band's worth, in units worth 200 each.
     expect(by('Jev’s take').total).toBe(units(2))
-    expect(by('Quiet').total).toBe(units(1))
+    expect(by('Quiet').total).toBe(Math.floor((B.SOURCING_LIMITS[2]![1] * B.QUIET_SHARE) / 200))
     expect(by('Cut corners')).toMatchObject({ total: units(2) * B.RISK_SOURCING, risky: true })
     // No fee: each one costs about what the unit is worth.
     const worth = (o: ContractOption) => o.parts.reduce((n, p) => n + p.amount * findResource(s, p.resourceId)!.value, 0)
@@ -1000,31 +1000,33 @@ describe('procuring units', () => {
     expect(unitCap(s, 'bot')).toBe(2 * units(1))
   })
 
-  it('lets you pick the size up to Jev’s limit, the biggest you can sign by default; signing creates the first quarter', async () => {
+  it('caps the size at ten times what you own, under Jev’s limit, and offers 1-2-5 steps down from it', async () => {
     const s = world()
-    // $4M of Bots (band 2) needs $1M of parts to sign; $500k (band 1) needs $125k.
-    findResource(s, MONEY_ID)!.amount = 3e5
-    findResource(s, 'steel')!.amount = 3e5
+    // $1M of Money and $1M of Steel: up to $20M, well under Jev's $400M.
+    const big = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(4), efficiency: score(2) }), spec)
+    expect(big).toMatchObject({ sizes: [2e7, 1e7, 5e6, 2e6, 1e6, 5e5], sizeLimit: 'owned', size: 2e7 })
+    expect((big.options[0] as ContractOption).total).toBe(2e7 / 200)
+    // Jev's limit is smaller: $4M.
     const v = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(2), efficiency: score(2) }), spec)
-    const plain = () => v.options[0] as ContractOption
-    expect(plain().label).toBe('Jev’s take')
-    expect(v).toMatchObject({ maxSize: 2, size: 1 })
-    expect(plain()).toMatchObject({ total: units(1), upfront: units(1) / 4 })
-    expect(optionBlocker(s, plain())).toBeNull()
-    // Nothing past Jev's limit is offered, and the next size up can't be signed yet.
-    resizeContracts(s, v, 5)
-    expect(v.size).toBe(2)
-    expect(optionBlocker(s, plain())).toMatch(/Signing creates .* at once: you need/)
-    resizeContracts(s, v, 1)
+    expect(v).toMatchObject({ sizes: [4e6, 2e6, 1e6, 5e5, 2e5, 1e5], sizeLimit: 'jev', size: 4e6 })
+    // Picking a smaller size redoes the offers; a size not on offer goes back to the biggest.
+    resizeContracts(s, v, 1e6)
+    expect((v.options[0] as ContractOption).total).toBe(1e6 / 200)
+    resizeContracts(s, v, 3e6)
+    expect(v.size).toBe(4e6)
+    // Owning nothing still allows the floor.
+    const poor = world()
+    findResource(poor, MONEY_ID)!.amount = 0
+    findResource(poor, 'steel')!.amount = 0
+    expect((await judgeCreate(poor, new FakeJudge({ mode: supply, limit: score(4) }), spec)).sizes![0]).toBe(B.CONTRACT_FLOOR)
+    // Nothing is paid as you sign, and the next contract is the same size: no penalty for reloading.
+    resizeContracts(s, v, 1e6)
     v.choice = 0
     const after = acceptCreate(s, v).state
-    expect(unit(after, 'bot').count).toBe(units(1) / 4)
-    expect(after.sourcing[0]).toMatchObject({ total: units(1), used: units(1) / 4 })
-    const spent = (id: string) => findResource(s, id)!.amount - findResource(after, id)!.amount
-    expect(spent(MONEY_ID) + spent('steel')).toBeCloseTo((units(1) / 4) * 200, -2)
-    // The same size again next time: no penalty for reloading.
+    expect(unit(after, 'bot').count).toBe(0)
+    expect(money(after)).toBe(money(s))
     const again = await judgeCreate(runWeek(after), new FakeJudge({ mode: supply, limit: score(2), efficiency: score(2) }), { ...spec, name: 'Contract a factory' })
-    expect(again.maxSize).toBe(2)
+    expect(again.sizes![0]).toBe(4e6)
   })
 
   it('is cheaper for a mind well above the unit’s tier, and says so', async () => {

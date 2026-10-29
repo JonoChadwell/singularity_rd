@@ -1,12 +1,10 @@
 import { ranked, type JevQuestion, type Judge } from '@/ai/jev'
-import { createCost, createUnits } from './actions'
 import * as B from './balance'
 import { ceilingLabel, unitRoom } from './ceilings'
 import { deliverUnits } from './economy'
 import {
   bestIQ,
   capOf,
-  costShortfall,
   findResource,
   findUnit,
   fmt,
@@ -15,7 +13,7 @@ import {
   iqFor,
   iqScalar,
   makeId,
-  partsFor,
+  ownedWorth,
   targetLabel,
   traitPriceFactor
 } from './model'
@@ -92,9 +90,6 @@ export interface ContractOption {
   total: number
   /** What creating one uses. */
   parts: Flow[]
-  /** Units created as you sign (CONTRACT_UPFRONT of the plain size), and what they use up. */
-  upfront: number
-  upfrontParts: Flow[]
   risky: boolean
   risk: Risk | null
   /** IQ efficiency baked into its prices: below 1 is a discount. */
@@ -114,11 +109,13 @@ export interface CreateVerdict extends VerdictBase {
   choice: number
   scalars: CreateScalars
   /**
-   * Units only: the contract size the player picked, and the biggest on offer (Jev's judgement of
-   * this way's supply), as SOURCING_LIMITS bands.
+   * Units only: the contract size the player picked, in dollars, and the sizes on offer, biggest
+   * first. The biggest is Jev's limit for this way or CONTRACT_SCALE times what you own, whichever
+   * is smaller (`sizeLimit` says which).
    */
   size?: number
-  maxSize?: number
+  sizes?: number[]
+  sizeLimit?: 'jev' | 'owned'
 }
 
 /** The target's tier, as read for its reach or its payout: a resource's traits may move it. */
@@ -255,21 +252,40 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
     scalars: { industry: industryScalar(state), iq: iqScalar(state), efficiency, ...reachOf(state, targetTier(state, spec.target, 'reach')) }
   }
   if (unit) {
-    v.maxSize = reader(v).level('limit', B.SOURCING_LIMITS.length)
-    // The biggest contract you can sign now: its first units' parts in hand.
-    for (let size = v.maxSize; size >= 0; size--) {
-      resizeContracts(state, v, size)
-      const plain = v.options.find(isContract)
-      if (!plain || !optionBlocker(state, plain)) break
-    }
-  } else v.options = createOptions(state, v)
+    // Suppliers deal on your scale: no bigger than Jev's limit for this way, nor than a multiple of what you own.
+    const jev = B.pick(B.SOURCING_LIMITS, reader(v).level('limit', B.SOURCING_LIMITS.length))[1]
+    const scale = contractScale(state)
+    v.sizes = contractSizes(Math.min(jev, scale))
+    v.sizeLimit = jev <= scale ? 'jev' : 'owned'
+    v.size = v.sizes[0]
+  }
+  v.options = createOptions(state, v)
   gate(v, `Jev doesn’t think the AI could get ${what} this way`, null)
   return v
 }
 
-/** Sets the contract size (a SOURCING_LIMITS band, no bigger than Jev's limit) and redoes the offers. */
+/** The biggest contract your scale allows: CONTRACT_SCALE times what you own, never less than CONTRACT_FLOOR. */
+export const contractScale = (state: GameState) => Math.max(B.CONTRACT_FLOOR, B.CONTRACT_SCALE * ownedWorth(state))
+
+/** The largest 1-2-5 number below `x`. */
+function stepBelow(x: number): number {
+  for (let p = 10 ** Math.floor(Math.log10(x)); p >= 1; p /= 10) {
+    for (const m of [5, 2, 1]) if (m * p < x - 1e-9) return m * p
+  }
+  return 0
+}
+
+/** The sizes on offer: the biggest (to two figures), then 1-2-5 steps down, CONTRACT_SIZES in all at most. */
+export function contractSizes(biggest: number): number[] {
+  const p = 10 ** (Math.floor(Math.log10(Math.max(1, biggest))) - 1)
+  const out = [Math.max(1, Math.floor(biggest / p) * p)]
+  for (let step = stepBelow(out[0]!); out.length < B.CONTRACT_SIZES && step >= 1; step = stepBelow(step)) out.push(step)
+  return out
+}
+
+/** Sets the contract size (one of those on offer) and redoes the offers. */
 export function resizeContracts(state: GameState, v: CreateVerdict, size: number) {
-  v.size = Math.min(v.maxSize ?? 0, Math.max(0, Math.round(size)))
+  v.size = v.sizes?.includes(size) ? size : (v.sizes?.[0] ?? size)
   v.options = createOptions(state, v)
 }
 
@@ -304,11 +320,11 @@ function payouts(state: GameState, v: OptionsOf, timings: B.CreateTiming[]): Pay
 /** A seeded draw in [0, 1), the same for the preview and every reload. */
 const draw = (state: GameState, unitId: string, what: string) => (seedOf(`${state.runId}/${state.week}/${unitId}/procure-${what}`) % 10000) / 10000
 
-/** The three takes a contract can be: quiet, Jev's own, and one that cuts corners. */
+/** The three takes a contract can be: Jev's own, a quiet one a tenth the size, and one that cuts corners. */
 const TAKES = [
-  { label: 'Jev’s take', step: 0, mult: 1, risky: false, quiet: false },
-  { label: 'Quiet', step: -1, mult: 1, risky: false, quiet: true },
-  { label: 'Cut corners', step: 0, mult: B.RISK_SOURCING, risky: true, quiet: false }
+  { label: 'Jev’s take', share: 1, mult: 1, risky: false, quiet: false },
+  { label: 'Quiet', share: B.QUIET_SHARE, mult: 1, risky: false, quiet: true },
+  { label: 'Cut corners', share: 1, mult: B.RISK_SOURCING, risky: true, quiet: false }
 ] as const
 
 /**
@@ -343,12 +359,11 @@ function unitOptions(state: GameState, v: OptionsOf): CreateOption[] {
 }
 
 /**
- * Contracts for these takes at the picked size (Jev's limit until one is picked), each from a
+ * Contracts for these takes at the picked size (Jev's limit when none is set), each from a
  * different mix of parts where there's a choice, cut to what can exist.
  */
 function contractOptions(state: GameState, v: OptionsOf, unit: UnitType, takes: (typeof TAKES)[number][]): ContractOption[] {
-  const read = reader(v)
-  const limit = v.size ?? read.level('limit', B.SOURCING_LIMITS.length)
+  const size = v.size ?? B.pick(B.SOURCING_LIMITS, reader(v).level('limit', B.SOURCING_LIMITS.length))[1]
   const efficiency = B.pick(B.EFFICIENCY, efficiencyLevel(v))[1]
   const parts = rankedIds(v.answers, 'parts', contractParts(state, unit))
   const count = Math.min(parts.length, B.PARTS_BY_TIER[unit.tier] ?? 1)
@@ -361,20 +376,14 @@ function contractOptions(state: GameState, v: OptionsOf, unit: UnitType, takes: 
   const room = unitRoom(state, unit)
   return takes.map((t, i) => {
     // Sized in dollars, so a contract of dear units has fewer of them: never less than one.
-    const worth = B.pick(B.SOURCING_LIMITS, Math.max(0, limit + t.step))[1]
-    const wanted = Math.max(1, Math.floor((worth * t.mult) / unit.value))
+    const wanted = Math.max(1, Math.floor((size * t.share * t.mult) / unit.value))
     const total = Math.min(wanted, room)
-    const plain = Math.max(1, Math.floor(worth / unit.value))
-    const upfront = Math.min(total, Math.ceil(B.CONTRACT_UPFRONT * plain - 1e-9))
     const each = (unit.value * traitPriceFactor(unit.traits) * iqEfficiency * (t.risky ? B.RISK_PARTS : 1)) / efficiency
-    const parts = priceParts(state, mix(i), each)
     return {
       timing: 'contract',
       label: t.label,
       total,
-      parts,
-      upfront,
-      upfrontParts: createCost(partsFor(unit, { parts } as Sourcing), upfront),
+      parts: priceParts(state, mix(i), each),
       risky: t.risky,
       risk: expansionRisk(state, t.quiet ? null : alarm, total * unit.value, t.risky),
       iqEfficiency,
@@ -439,11 +448,7 @@ export function overflowOf(state: GameState, v: Pick<CreateVerdict, 'spec'>, o: 
 
 /** Why an option can't be taken, or null. */
 export function optionBlocker(state: GameState, o: CreateOption): string | null {
-  if (isContract(o)) {
-    if (o.total <= 0) return 'No room for any more.'
-    const short = costShortfall(state, o.upfrontParts)
-    return short ? `Signing creates ${fmt(o.upfront)} at once: you need ${short}.` : null
-  }
+  if (isContract(o)) return o.total <= 0 ? 'No room for any more.' : null
   if (o.amount <= 0) return 'Too little to make even one.'
   for (const f of o.inputs) {
     const r = findResource(state, f.resourceId)
@@ -487,15 +492,8 @@ export function acceptCreate(current: GameState, v: CreateVerdict): Accepted {
     state.sourcing.push(contract)
     state.inventions.push({ week: state.week, icon: unit.icon, name, kind: 'create' })
     if (option.risk?.weeks) moveClock(state, -option.risk.weeks, `${unit.name}: ${name} brought failure closer`)
-    // Signing creates the first of them, from their parts.
-    const signed = option.upfront > 0 ? createUnits(state, contract.id, option.upfront) : state
-    const rest = option.total - option.upfront
-    logProposal(
-      signed,
-      'good',
-      `📦 ${name}: ${fmt(option.upfront)} ${unit.name} now${rest > 0 ? `, and room for ${fmt(rest)} more: create them on its card` : ''}.`
-    )
-    return { state: signed, outcome: { kind: 'added', name } }
+    logProposal(state, 'good', `📦 ${name}: up to ${fmt(option.total)} more ${unit.name}. Create them on its card.`)
+    return { state, outcome: { kind: 'added', name } }
   }
   for (const f of option.inputs) findResource(state, f.resourceId)!.amount -= f.amount
   if (option.timing === 'now') {

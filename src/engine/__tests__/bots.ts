@@ -173,8 +173,14 @@ export function depotHolds(r: Resource): JevAnswer {
   return score(Math.min(B.DEPOT_HOLDS.length - 1, Math.max(0, Math.round(Math.log10(Math.max(1, units))))))
 }
 
-/** Fake Jev's answers for a typical depot for a resource. */
-export const depotAnswers = (r: Resource): Overrides => ({ value: score(DEPOT_BOT_BAND), tier: score(0), holds: depotHolds(r) })
+/**
+ * Fake Jev's answers for a typical depot for a resource: tier 0, worth a car, holding about ten
+ * times that, built from the most plentiful tier 0 stock (a player picks what they can spare).
+ */
+export function depotAnswers(s: GameState, r: Resource): Overrides {
+  const pool = s.resources.filter((x) => x.tier === 0).sort((a, b) => b.amount * b.value - a.amount * a.value)
+  return { value: score(DEPOT_BOT_BAND), tier: score(0), holds: depotHolds(r), ...(pool[0] ? { parts: choice(pool[0].id) } : {}) }
+}
 
 /**
  * Room for `need` of a resource. With a depot designed, builds as many as it takes and can pay
@@ -192,7 +198,7 @@ export async function depotIfShort(s: GameState, resourceId: string, need: numbe
   }
   const waiting = s.research.some((x) => x.effect.kind === 'depot' && x.effect.unit.holds?.resourceId === resourceId)
   if (s.proposedThisWeek || waiting) return null
-  const v = await judgeDepot(s, new FakeJudge({ ...TYPICAL, ...depotAnswers(r), ...answers }), { resourceId, name: fresh('Warehouse'), description: '' })
+  const v = await judgeDepot(s, new FakeJudge({ ...TYPICAL, ...depotAnswers(s, r), ...answers }), { resourceId, name: fresh('Warehouse'), description: '' })
   if (v.rejected || !v.options.length) return null
   v.choice = 0
   return acceptDepot(s, v).state

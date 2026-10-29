@@ -17,7 +17,7 @@ import {
 } from '../actionValue'
 import { applyBlocker, applyVerdict } from '../banking'
 import { judgeCover } from '../coverProposal'
-import { acceptCreate, isContract, judgeCreate, optionBlocker, resizeContracts } from '../createProposal'
+import { acceptCreate, isContract, judgeCreate, optionBlocker } from '../createProposal'
 import { runWeek } from '../cycle'
 import { previewWeek } from '../economy'
 import { acceptMind, judgeMind } from '../mindProposal'
@@ -78,7 +78,7 @@ const TYPICAL: Overrides = {
 const FRESH_USES = 3
 /**
  * Jev's sourcing limit the bots assume: Industrial scale, $400M. Playtest 1's four contracts
- * scored 1.9, 3.8, 3.6 and 3.2; the size you sign is then what you can start.
+ * scored 1.9, 3.8, 3.6 and 3.2; what the bot owns usually caps it well below that.
  */
 export const CONTRACT_LIMIT = 4
 
@@ -179,23 +179,15 @@ export const contract = (unitId: string): Move => ({
   run: (s, ctx) =>
     attempt(async () => {
       const key = `contract:${unitId}`
-      // Jev's limit is the biggest size on offer; the bot signs the biggest whose first quarter it
-      // can pay from what isn't kept back for running and waiting research.
+      // The biggest size on offer: Jev's limit, or ten times what the bot owns.
       const v = await judgeCreate(s, judge(ctx, key, { limit: score(CONTRACT_LIMIT) }), {
         target: { kind: 'unit', id: unitId },
         name: fresh(ctx, 'Contract'),
         description: ''
       })
       if (v.rejected) return null
-      const reserve = reserveOf(s)
-      const plain = () => v.options.findIndex((o) => isContract(o) && !o.risky && o.total > 0)
-      for (let size = v.size ?? 0; size > 0; size--) {
-        resizeContracts(s, v, size)
-        const o = v.options[plain()]
-        if (o && isContract(o) && o.upfrontParts.every((f) => (findResource(s, f.resourceId)?.amount ?? 0) - (reserve[f.resourceId] ?? 0) >= f.amount)) break
-      }
-      const i = plain()
-      if (i < 0 || optionBlocker(s, v.options[i]!)) return null
+      const i = v.options.findIndex((o) => isContract(o) && !o.risky && o.total > 0)
+      if (i < 0) return null
       v.choice = i
       const after = acceptCreate(s, v).state
       used(ctx, key)
@@ -359,7 +351,7 @@ export const storage = (resourceId: string, need = 0): Move => ({
     attempt(async () => {
       const r = findResource(s, resourceId)
       if (!r || hasDepot(s, resourceId)) return null
-      const v = await judgeDepot(s, judge(ctx, `storage:${resourceId}`, depotAnswers(r)), { resourceId, name: fresh(ctx, 'Warehouse'), description: '' })
+      const v = await judgeDepot(s, judge(ctx, `storage:${resourceId}`, depotAnswers(s, r)), { resourceId, name: fresh(ctx, 'Warehouse'), description: '' })
       if (v.rejected || !v.options.length) return null
       v.choice = 0
       const after = acceptDepot(s, v).state
@@ -580,13 +572,25 @@ export function grow(state: GameState, ctx: Ctx): GameState {
       ctx.spend.units += Math.max(0, before - worthOf(s).stock)
     }
   }
-  // Depots: only as many as it takes to hold what's coming.
-  for (const u of s.units.filter((x) => x.holds)) {
+  // Depots: only as many as it takes to hold what's coming, paid from what would overflow this
+  // week plus a share of the rest, so building them never starves what runs.
+  const keep = reserved(s)
+  const wasted = previewWeek(s).wasted
+  const budget: Record<string, number> = {}
+  for (const r of s.resources) {
+    const spare = Math.max(0, r.amount - (keep[r.id] ?? 0))
+    budget[r.id] = Math.min(spare, (wasted[r.id] ?? 0) + DEPOT_SHARE * spare)
+  }
+  // The worst overflow first.
+  const lost = (u: (typeof s.units)[number]) => (wasted[u.holds!.resourceId] ?? 0) * (findResource(s, u.holds!.resourceId)?.value ?? 0)
+  for (const u of s.units.filter((x) => x.holds).sort((a, b) => lost(b) - lost(a))) {
     const r = findResource(s, u.holds!.resourceId)
     const c = contractsFor(s, u.id)[0]
     if (!r || !c || !openSlots(c)) continue
     const want = Math.ceil((depotNeed(s, r) - capOf(s, r)) / u.holds!.amount - 1e-9)
-    const n = Math.min(want, creatable(s, c, reserve))
+    const held = Object.fromEntries(s.resources.map((x) => [x.id, x.amount - (budget[x.id] ?? 0)]))
+    const n = Math.min(want, creatable(s, c, held))
+    for (const p of c.parts) budget[p.resourceId] = Math.max(0, (budget[p.resourceId] ?? 0) - Math.max(0, n) * p.amount)
     if (n <= 0) continue
     const before = worthOf(s).stock
     s = createUnits(s, c.id, n)
@@ -594,6 +598,9 @@ export function grow(state: GameState, ctx: Ctx): GameState {
   }
   return assignBest(s)
 }
+
+/** Share of a stock, past what would overflow and what research needs, that may go on depots in a week. */
+const DEPOT_SHARE = 0.25
 
 /** Units that work: everything but depots. */
 const workers = (s: GameState) => s.units.filter((u) => !u.holds)

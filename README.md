@@ -82,9 +82,9 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
   resource your units make, of a high enough tier.
 - **Industry units** are anything you own many of. A new design has room for none: Procure it
   for units now (with room to match) or a **sourcing contract** (Jev says how big a supply could be had, in
-  dollars, and from what: its own take, a quiet one or a risky one; you pick the size up to that, and
-  signing creates the first quarter from their parts), which sets how many more you may own. You
-  **create** the rest from a contract's parts at no action. A unit's value
+  dollars, and from what: its own take, a quiet one or a risky one; suppliers deal on your scale, so
+  it's never more than ten times what you own, and you pick the size up to that), which sets how
+  many more you may own. You **create** them from a contract's parts at no action. A unit's value
   is only how big one is (ten mills or one workshop); its **tier** sets how much a dollar of it
   earns. Each has upkeep and up to three **traits** from a fixed list of 14. Split a type across
   its strategies by count; the strategy marked **rest** takes every unit not counted elsewhere.

@@ -311,6 +311,10 @@ export const unitCap = (state: GameState, unitId: string) =>
 /** Slots left on a contract. */
 export const openSlots = (c: Sourcing) => Math.max(0, c.total - c.used)
 
+/** What you own, at value: the stock you can hold, and every unit (depots too). */
+export const ownedWorth = (state: GameState) =>
+  state.resources.reduce((n, r) => n + Math.min(r.amount, capOf(state, r)) * r.value, 0) + state.units.reduce((n, u) => n + owned(u) * u.value, 0)
+
 /** Worth of every unit you own that works (not depots): what the Industry scalar grows with. */
 export const industryWorth = (state: GameState) => state.units.reduce((n, u) => n + (u.holds ? 0 : owned(u) * u.value), 0)
 

@@ -225,11 +225,11 @@ export const FIRST_UNIT_MAX_BAND = 2
 // ---------------------------------------------------------------- caps
 
 /**
- * Sourcing contract sizes, in dollars, [label, worth]. Jev judges how big a supply could be had one
- * way: that is the biggest size on offer, and the player picks the size. The units are that worth
- * ÷ one's value (at least one), so ten cheap units and one dear one make the same contract,
- * whatever their tier. A contract is a lease on that many: you create them from its parts, at no
- * action, the first CONTRACT_UPFRONT of them as you sign.
+ * Sourcing contract limits, in dollars, [label, worth]: how big a supply Jev thinks could be had
+ * one way. That, or CONTRACT_SCALE times what you own if smaller, is the biggest size on offer, and
+ * the player picks the size. The units are that worth ÷ one's value (at least one), so ten cheap
+ * units and one dear one make the same contract, whatever their tier. A contract is a lease on
+ * that many: you create them later, from its parts, at no action.
  */
 export const SOURCING_LIMITS: [string, number][] = [
   ['A handful: what a small shop could supply, tens of thousands of dollars', 6e4],
@@ -240,10 +240,17 @@ export const SOURCING_LIMITS: [string, number][] = [
   ["Global supply: the world's supply, billions of dollars", 5e9]
 ]
 /**
- * Signing a sourcing contract creates this share of its units at once, from their parts: the size
- * you can sign follows the stock you've built up. Cutting corners counts the share of the plain size.
+ * Suppliers deal on your scale: a contract is worth at most this many times what you own (stock
+ * you can hold and units, at value), however big a supply Jev thinks the way could give. Bigger
+ * industry unlocks bigger contracts; a full one takes an action to reload.
  */
-export const CONTRACT_UPFRONT = 0.25
+export const CONTRACT_SCALE = 10
+/** …and never less than this, so a first contract is always worth signing. */
+export const CONTRACT_FLOOR = 1e5
+/** At most this many sizes on offer: the biggest, then 1-2-5 steps down. */
+export const CONTRACT_SIZES = 6
+/** A quiet contract is this share of the size, and raises no alarm. */
+export const QUIET_SHARE = 0.1
 /** A risky contract cuts corners for this many times the units. */
 export const RISK_SOURCING = 10
 /**

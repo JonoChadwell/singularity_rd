@@ -108,7 +108,7 @@ describe('balance', () => {
       const r = findResource(s, goal.cost[0]!.resourceId)!
       // Nothing to hold it in at first: tier 3 starts with no storage.
       expect(capOf(s, r)).toBeLessThan(goal.cost[0]!.amount)
-      const v = await judgeDepot(s, new FakeJudge({ plausible: noul(0.7), ...depotAnswers(r) }), { resourceId: r.id, name: 'Vat', description: '' })
+      const v = await judgeDepot(s, new FakeJudge({ plausible: noul(0.7), ...depotAnswers(s, r) }), { resourceId: r.id, name: 'Vat', description: '' })
       expect(v.target.amount).toBe(goal.cost[0]!.amount)
       // One design holds it all; building them costs 3–30% of what they hold (Jev's answer is a power of ten).
       const share = v.options[0]!.neededWorth / (goal.cost[0]!.amount * r.value)

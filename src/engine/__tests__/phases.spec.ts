@@ -425,8 +425,8 @@ describe('expansions', () => {
   })
 
   it('make big sourcing contracts cost weeks when they’re signed, the risky one most', async () => {
-    // Enough Money to sign the biggest: its first quarter, $1.25B of robots.
-    const s = phase2(2e9)
+    // Enough owned for the biggest: ten times $1B.
+    const s = phase2(1e9)
     const u = addRobots(s, 1)
     u.built = 1
     u.value = 1000
@@ -441,7 +441,7 @@ describe('expansions', () => {
     const by = (label: string) => (v.options as ContractOption[]).find((o) => o.label === label)!
     const [quiet, own, risky] = [by('Quiet'), by('Jev’s take'), by('Cut corners')]
     // Jev's own take is the global band: $5B of robots worth 1,000 each, so 1 week; the quiet one a
-    // band smaller ($400M) goes unnoticed, and the risky one is ten times the size, at double.
+    // tenth of that ($500M) goes unnoticed, and the risky one is ten times the size, at double.
     expect(own.risk?.weeks).toBe(expansionWeeks(own.total * 1000, false))
     expect(quiet.risk?.weeks ?? 0).toBeLessThan(own.risk!.weeks)
     expect(risky.risk!.weeks).toBeGreaterThan(own.risk!.weeks * 2)

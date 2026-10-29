@@ -64,25 +64,28 @@ something else.
 
 - **Size:** Jev says how big a supply could realistically be had the player's way, in dollars
   (`SOURCING_LIMITS`, from tens of thousands up to billions), and what each would take to make.
-  That is the **biggest size on offer**: the player picks any band up to it, and the dialog
-  starts at the biggest one they can sign now. The contract holds that worth ÷ one unit's value,
-  at least one, so ten cheap units and one dear one make the same contract.
-- **Signing creates the first quarter** (`CONTRACT_UPFRONT`) at once, paying their parts. So the
-  size you can sign follows the stock you've built: getting many of one thing takes production
-  and the storage to hold its parts. Reloading a unit gets the same size each time, with no
-  penalty: in an exponential game, a fixed-size reload already shrinks next to the economy.
-  (Playtest 1 had Jev's limits at 1.9–3.8, so a $5B contract in Phase 2 week 8, against a $35k
-  fleet, lasted the whole game; signing it now needs $1.25B of parts.)
+  **Suppliers deal on your scale:** the biggest size on offer is that, or `CONTRACT_SCALE` (10)
+  times what you own (stock you can hold and units, at value), whichever is smaller, and never
+  less than `CONTRACT_FLOOR` ($100k). The player picks it or a 1-2-5 step below it (at most
+  `CONTRACT_SIZES`, 6, sizes). The contract holds that worth ÷ one unit's value, at least one, so
+  ten cheap units and one dear one make the same contract.
+- **Why:** bigger industry unlocks bigger contracts, and a full one takes an action to reload.
+  Reloading a unit gets the same size each time, with no penalty: in an exponential game, a
+  fixed-size reload already shrinks next to the economy. (Playtest 1 had Jev's limits at 1.9–3.8,
+  so a $5B contract in Phase 2 week 8, against a $35k fleet, lasted the whole game; now it would be
+  at most about $1M.) A first try that made you build a quarter of a contract as you signed it
+  failed: at the start of Phase 2 you rarely hold the parts Jev picks, and you only learn which
+  from its answer.
 - **Three takes:**
   - **Jev's take.**
-  - **Quiet:** one limit band smaller, with no alarm.
+  - **Quiet:** a tenth of the size (`QUIET_SHARE`), with no alarm.
   - **Cut corners:** risky, with ten times the units and half the parts, but twice the clock
-    weeks. Signing creates the same first share as the plain size.
+    weeks.
 - **Parts:** each contract uses a different mix of parts where there's a choice, with more kinds
   of part at higher tiers (`PARTS_BY_TIER`).
 - **No research:** a contract takes effect as soon as you pick it, with no IQ gate or fee. It
   still uses the week's action, and its risk weeks come off the clock at once. Its only cost is
-  the parts, paid per unit created (the first quarter as you sign).
+  the parts, paid per unit created.
 - **Creating units:** this takes no action. You pay the contract's parts, up to its open slots.
   Several contracts can be open for one unit type, and lost units give their slots back.
 - **Ceiling:** a contract is cut to the room left under the unit's ceiling, and flagged.
@@ -198,9 +201,12 @@ what it does for Procurements.
 `src/engine/__tests__/econBots.ts` plays Phase 2 through the real engine from a real Phase 1 win
 (the bribe plan's three resources and the nanotech plan's five). Jev's answers are held at their
 typical values (plausibility 0.7; an action is Reasonable its first three times and Wasteful
-after; contracts a band bigger each time and at least four weeks' income, then one band more,
-on the assumption that real Jev sizes them that much larger, still to check; alarm "a little
-closer"). They take IQ steps nearest +50 (`IQ_STEP`) and take cover before anything else with
+after; a sourcing limit of "Industrial scale", $400M (`CONTRACT_LIMIT`; playtest 1 scored
+1.9–3.8), and the biggest size on offer; depots worth a car that hold about ten times their worth
+(`DEPOT_BOT_RATIO`), made of the most plentiful tier 0 stock; alarm "a little closer"). They
+design a depot for a resource when a waiting cost or overflow calls for one, then build depots
+(at no action) up to the dearest waiting cost or four weeks of what's made, paying from what
+would overflow plus a quarter of the rest (`DEPOT_SHARE`). They take IQ steps nearest +50 (`IQ_STEP`) and take cover before anything else with
 three weeks or fewer left (`COVER_AT`). Resource, unit and compute traits are out of scope. The roster:
 
 | Bot | Plays |
@@ -220,11 +226,12 @@ fleet by tier, IQ, clock, goal progress, spend and action mix per bot, by approa
 game beside the bots, run `PLAYER_LOG=logs/runs/<id>/game.jsonl npx vitest run playerecon`, then
 chart with `PLAYER=logs/econ/player.json`.
 
-**Status (2026-10-28): Phase 2 is not tuned yet.** With cover, greedy wins every approach
-(weeks 78–90 of the phase), and the climber, brain, scale and no-upgrades bots win some; the tier 0
-bot loses every one. The climbing economies beat the income anchors by a wide margin ($0.4–4.8B a
-week by week 45), wins need all or most of the three covers, and the 350→425 stretch of
-`HARDWARE_COSTS` and storing the goal resource still take most of the time.
+**Status (2026-10-29): Phase 2 is not tuned yet.** After depots and contracts capped by what you
+own (save version 19), no-upgrades wins all three approaches (weeks 93–101) and greedy wins the
+balanced one (week 92); the climber, brain and tier 0 bots lose. On the balanced approach the
+climbing bots sign 8–27 contracts, most filling in 1–16 weeks, and their depots end up worth
+$2–54B, which is too much: they build up to every waiting cost. The scale bot reloads $400M
+contracts almost every week once its economy passes that. The climber stalls at IQ 325.
 
 ## Costs and values
 

@@ -122,19 +122,21 @@
             <span class="lbl">Reach −{{ verdict.scalars.short.toFixed(1) }} tiers</span><b class="num">×{{ sig(verdict.scalars.reach) }}</b>
           </span>
         </div>
-        <template v-if="verdict.maxSize !== undefined && verdict.options.some(isContract)">
-          <p class="lbl">Contract size: up to what Jev thinks this way could supply. Signing creates the first quarter.</p>
+        <template v-if="verdict.sizes && verdict.options.some(isContract)">
+          <p class="lbl">
+            Contract size: up to ${{ fmt(verdict.sizes[0]!) }},
+            {{ verdict.sizeLimit === 'jev' ? 'what Jev thinks this way could supply' : `${CONTRACT_SCALE}× what you own: suppliers deal on your scale` }}.
+          </p>
           <div class="sizes">
             <button
-              v-for="b in verdict.maxSize + 1"
-              :key="b"
+              v-for="w in verdict.sizes"
+              :key="w"
               type="button"
               class="small"
-              :class="{ primary: verdict.size === b - 1 }"
-              :title="SOURCING_LIMITS[b - 1]![0]"
-              @click="resizeContracts(game.state, verdict, b - 1)"
+              :class="{ primary: verdict.size === w }"
+              @click="resizeContracts(game.state, verdict, w)"
             >
-              ${{ fmt(SOURCING_LIMITS[b - 1]![1]) }}
+              ${{ fmt(w) }}
             </button>
           </div>
         </template>
@@ -155,9 +157,7 @@
                 <span v-if="o.risky" class="chip bad">risky</span>
                 <span v-if="iqTag(o.iqEfficiency)" class="chip good">{{ iqTag(o.iqEfficiency) }}</span>
               </p>
-              <p class="muted">
-                Signing creates {{ fmt(o.upfront) }} now, from {{ describeFlows(game.state, o.upfrontParts) }}<template v-if="o.total > o.upfront">; create the rest later, each from {{ describeFlows(game.state, o.parts) }}</template>.
-              </p>
+              <p class="muted">Create them later, each from {{ describeFlows(game.state, o.parts) }}.</p>
               <p :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</p>
             </template>
             <p v-else class="muted">uses {{ o.inputs.length ? describeFlows(game.state, o.inputs) : 'nothing' }}</p>
@@ -303,7 +303,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { SOURCING_LIMITS, UNIT_VALUE, type CreateTiming } from '@/engine/balance'
+import { CONTRACT_SCALE, UNIT_VALUE, type CreateTiming } from '@/engine/balance'
 import { ceilingLabel } from '@/engine/ceilings'
 import { describeOption, iqTag, isContract, optionBlocker, overflowOf, resizeContracts } from '@/engine/createProposal'
 import { bandText, byTier, capOf, describeFlows, efficiencyWord, findResource, findUnit, fmt, labour, tierFit, tierLabel, tierText } from '@/engine/model'

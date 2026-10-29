@@ -17,7 +17,13 @@ if (process.env.PLAYER) {
   const goalIQ = rows[rows.length - 1].goalIQ
   const approach = run.runs.find((r) => r.goalIQ === goalIQ)?.approach ?? 1
   const won = rows[rows.length - 1].weeksLeft > 0 ? rows[rows.length - 1].week : null
-  run.runs.unshift({ bot: 'you', approach, goalIQ, won, lost: won ? null : rows[rows.length - 1].week, mix: {}, rows: rows.map((w) => ({ ...w, action: 'none', spend: {} })) })
+  const contracts = JSON.parse(readFileSync(process.env.PLAYER, 'utf8')).contracts ?? []
+  run.runs.unshift({ bot: 'you', approach, goalIQ, won, lost: won ? null : rows[rows.length - 1].week, mix: {}, contracts, depots: null, rows: rows.map((w) => ({ ...w, action: 'none', spend: {} })) })
+}
+
+const median = (xs) => {
+  const s = [...xs].sort((a, b) => a - b)
+  return s.length ? s[Math.floor(s.length / 2)] : null
 }
 
 // Only what the page draws, so the file stays small.
@@ -31,6 +37,10 @@ const slim = {
     won: r.won,
     lost: r.lost,
     mix: r.mix,
+    // Contracts signed and the median weeks one took to fill; depot designs.
+    contracts: r.contracts ? r.contracts.length : null,
+    fill: r.contracts ? median(r.contracts.filter((c) => c.filled !== null).map((c) => c.filled - c.week)) : null,
+    depots: r.depots ?? null,
     rows: r.rows.map((w) => ({
       week: w.week,
       income: Math.round(w.income),
@@ -42,6 +52,8 @@ const slim = {
       hw: w.hardwareIQ,
       left: w.weeksLeft,
       goal: w.goalCost ? w.goalHeld / w.goalCost : 0,
+      share: w.largestShare ?? null,
+      depot: Math.round(w.depotWorth ?? 0),
       action: w.action,
       spend: w.spend,
       ...(w.values ? { values: w.values } : {})
@@ -205,7 +217,7 @@ function controls() {
 function results() {
   const t = document.getElementById('results');
   const head = el('tr');
-  for (const [h, num] of [['Bot'], ['Outcome'], ['Income / wk', 1], ['Net worth', 1], ['Fleet', 1], ['IQ', 1], ['Clock, net', 1], ['Actions']]) head.append(el('th', num ? { class: 'num' } : {}, h));
+  for (const [h, num] of [['Bot'], ['Outcome'], ['Income / wk', 1], ['Net worth', 1], ['Fleet', 1], ['IQ', 1], ['Clock, net', 1], ['Contracts', 1], ['Fill, wks', 1], ['Depots', 1], ['Actions']]) head.append(el('th', num ? { class: 'num' } : {}, h));
   const rows = runsFor(state.approach).map((r) => {
     const last = r.rows[r.rows.length - 1] ?? {};
     const tr = el('tr');
@@ -213,7 +225,7 @@ function results() {
     const out = el('td'); out.append(el('span', { class: 'pill ' + (r.won ? 'won' : 'lost') }, r.won ? 'Won wk ' + r.won : r.lost ? 'Lost wk ' + r.lost : 'Ran out'));
     const lost = r.rows.length ? 80 - (r.rows[r.rows.length - 1].left + r.rows[r.rows.length - 1].week - 1) : 0;
     const mix = Object.entries(r.mix).filter(([k]) => k !== 'none').sort((a, b) => b[1] - a[1]).map(([k, n]) => k + ' ' + n).join(', ');
-    tr.append(name, out, el('td', { class: 'num' }, fmt(last.income)), el('td', { class: 'num' }, fmt(last.net)), el('td', { class: 'num' }, fmt(last.fleet)), el('td', { class: 'num' }, String(Math.round(last.iq ?? 0))), el('td', { class: 'num' }, lost > 0 ? '−' + lost + ' wk' : lost < 0 ? '+' + -lost + ' wk' : '0'), el('td', {}, mix));
+    tr.append(name, out, el('td', { class: 'num' }, fmt(last.income)), el('td', { class: 'num' }, fmt(last.net)), el('td', { class: 'num' }, fmt(last.fleet)), el('td', { class: 'num' }, String(Math.round(last.iq ?? 0))), el('td', { class: 'num' }, lost > 0 ? '−' + lost + ' wk' : lost < 0 ? '+' + -lost + ' wk' : '0'), el('td', { class: 'num' }, r.contracts ?? '–'), el('td', { class: 'num' }, r.fill ?? '–'), el('td', { class: 'num' }, last.depot ? fmt(last.depot) : '–'), el('td', {}, mix));
     return tr;
   });
   t.replaceChildren(el('thead'), el('tbody'));
@@ -390,6 +402,8 @@ function draw() {
       lineChart(c, { series: [0, 1, 2, 3, 4].map((t) => ({ name: 'Tier ' + t, color: 'var(--t' + t + ')', points: r.rows.map((w) => [w.week, w.tiers[t]]) })), log: true })
     });
   }
+  add('Largest unit’s share', 'The biggest working unit type’s share of the working fleet. Contracts should spread growth across units.', (c) => lineChart(c, { series: perBot('share'), yFmt: (v) => Math.round(v * 100) + '%' }));
+  add('Depot worth', 'Worth of the depots owned: what storage has cost (log scale).', (c) => lineChart(c, { series: perBot('depot'), log: true }));
   add('Best IQ', 'The goal needs IQ ' + goalIQ + '.', (c) => lineChart(c, { series: perBot('iq'), hline: { y: goalIQ, label: 'Goal IQ ' + goalIQ }, yFmt: (v) => String(Math.round(v)) }));
   add('Hardware IQ', 'The platform alone, without software: each step is a new platform.', (c) => lineChart(c, { series: perBot('hw'), step: true, yFmt: (v) => String(Math.round(v)) }));
   add('Clock', 'Weeks left. Expansions take weeks off; cover adds them back.', (c) => lineChart(c, { series: perBot('left'), yFmt: (v) => String(Math.round(v)) }));
