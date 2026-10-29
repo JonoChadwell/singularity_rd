@@ -15,7 +15,7 @@
       <div class="req" :title="iqTitle">
         <Led :tone="iq >= r.minIQ ? 'good' : 'bad'" />
         <span class="lbl">IQ</span>
-        <Gauge :value="Math.max(0, Math.min(iq, r.minIQ) - IQ_FLOOR)" :max="Math.max(1, r.minIQ - IQ_FLOOR)":segments="10" :tone="iq >= r.minIQ ? 'good' : 'bad'" />
+        <Gauge :value="iq >= r.minIQ ? Math.max(1, r.minIQ - IQ_FLOOR) : Math.max(0, iq - IQ_FLOOR)" :max="Math.max(1, r.minIQ - IQ_FLOOR)" :segments="10" :tone="iq >= r.minIQ ? 'good' : 'bad'" />
         <span class="num">{{ Math.round(iq) }}/{{ r.minIQ }}</span>
       </div>
       <div v-for="c in r.cost" :key="c.resourceId" class="req">
