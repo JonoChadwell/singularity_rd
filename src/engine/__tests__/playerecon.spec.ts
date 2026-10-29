@@ -2,6 +2,7 @@ import { it } from 'vitest'
 import { grossIncome, runningNet, worthOf } from '../actionValue'
 import { previewWeek } from '../economy'
 import { bestIQ, findResource } from '../model'
+import { fleetShape, trackContracts, type ContractRecord } from './econBots'
 import type { GameState } from '../types'
 
 // Turns a played game's run log into the balance bots' weekly series, so a real game can be set
@@ -41,8 +42,17 @@ it.skipIf(!env.PLAYER_LOG)('turns a run log into weekly economy rows', async () 
     if (what) acts.set(l.week, [...(acts.get(l.week) ?? []), what])
   }
   const rows = []
+  const seen = new Map<string, ContractRecord>()
   for (const [week, s] of [...snaps].sort((a, b) => a[0] - b[0])) {
     if (s.phase.n !== 2) continue
+    // Logs from before save version 19 have no depots, and storage expansions instead: count them in the cap.
+    for (const u of s.units) u.holds ??= null
+    for (const r of s.resources) {
+      const old = r as typeof r & { expansions?: { added: number }[] }
+      r.cap += (old.expansions ?? []).reduce((n, e) => n + e.added, 0)
+      delete old.expansions
+    }
+    trackContracts(s, week - s.phase.start + 1, seen)
     const report = previewWeek(s)
     const w = worthOf(s)
     const goal = s.research.find((r) => r.effect.kind === 'goal')
@@ -62,10 +72,11 @@ it.skipIf(!env.PLAYER_LOG)('turns a run log into weekly economy rows', async () 
       goalHeld: goalId ? (findResource(s, goalId)?.amount ?? 0) : 0,
       goalCost: goal?.cost[0]?.amount ?? 0,
       covers: s.covers,
+      ...fleetShape(s),
       units: s.units.map((u) => ({ name: u.name, tier: u.tier, count: u.count, value: u.value })),
       acts: acts.get(week - 1) ?? []
     })
   }
-  writeFileSync('logs/econ/player.json', JSON.stringify({ log: env.PLAYER_LOG, rows }))
+  writeFileSync('logs/econ/player.json', JSON.stringify({ log: env.PLAYER_LOG, rows, contracts: [...seen.values()] }))
   console.log(`Wrote ${rows.length} rows to logs/econ/player.json`)
 })

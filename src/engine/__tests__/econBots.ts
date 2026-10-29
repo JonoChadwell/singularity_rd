@@ -17,7 +17,7 @@ import {
 } from '../actionValue'
 import { applyBlocker, applyVerdict } from '../banking'
 import { judgeCover } from '../coverProposal'
-import { acceptCreate, isContract, judgeCreate, optionBlocker } from '../createProposal'
+import { acceptCreate, isContract, judgeCreate, optionBlocker, resizeContracts } from '../createProposal'
 import { runWeek } from '../cycle'
 import { previewWeek } from '../economy'
 import { acceptMind, judgeMind } from '../mindProposal'
@@ -76,6 +76,11 @@ const TYPICAL: Overrides = {
 
 /** Uses of an action that Jev still rates Reasonable. */
 const FRESH_USES = 3
+/**
+ * Jev's sourcing limit the bots assume: Industrial scale, $400M. Playtest 1's four contracts
+ * scored 1.9, 3.8, 3.6 and 3.2; the size you sign is then what you can start.
+ */
+export const CONTRACT_LIMIT = 4
 
 export type Category = 'procure' | 'units' | 'design' | 'strategy' | 'upgrade' | 'iq' | 'storage' | 'cover' | 'goal'
 export const CATEGORIES: Category[] = ['procure', 'units', 'design', 'strategy', 'upgrade', 'iq', 'storage', 'cover', 'goal']
@@ -174,20 +179,23 @@ export const contract = (unitId: string): Move => ({
   run: (s, ctx) =>
     attempt(async () => {
       const key = `contract:${unitId}`
-      // A band bigger with each contract for the unit, and never less than about four weeks of
-      // income: a player asks for supplies on the scale of their economy. Then one band more: the
-      // assumption is that real Jev sizes contracts a band larger than this (to check with the
-      // contract limits).
-      const scale = B.SOURCING_LIMITS.findIndex(([, worth]) => worth >= 4 * grossIncome(s))
-      const asked = Math.max(1 + (ctx.uses.get(key) ?? 0), scale < 0 ? B.SOURCING_LIMITS.length - 1 : scale)
-      const band = Math.min(B.SOURCING_LIMITS.length - 1, asked + 1)
-      const v = await judgeCreate(s, judge(ctx, key, { limit: score(band) }), {
+      // Jev's limit is the biggest size on offer; the bot signs the biggest whose first quarter it
+      // can pay from what isn't kept back for running and waiting research.
+      const v = await judgeCreate(s, judge(ctx, key, { limit: score(CONTRACT_LIMIT) }), {
         target: { kind: 'unit', id: unitId },
         name: fresh(ctx, 'Contract'),
         description: ''
       })
-      const i = v.options.findIndex((o) => isContract(o) && !o.risky && o.total > 0)
-      if (v.rejected || i < 0) return null
+      if (v.rejected) return null
+      const reserve = reserveOf(s)
+      const plain = () => v.options.findIndex((o) => isContract(o) && !o.risky && o.total > 0)
+      for (let size = v.size ?? 0; size > 0; size--) {
+        resizeContracts(s, v, size)
+        const o = v.options[plain()]
+        if (o && isContract(o) && o.upfrontParts.every((f) => (findResource(s, f.resourceId)?.amount ?? 0) - (reserve[f.resourceId] ?? 0) >= f.amount)) break
+      }
+      const i = plain()
+      if (i < 0 || optionBlocker(s, v.options[i]!)) return null
       v.choice = i
       const after = acceptCreate(s, v).state
       used(ctx, key)
@@ -549,12 +557,18 @@ function reserved(s: GameState): Record<string, number> {
  * Creates every unit the open contracts allow, highest tier first, keeping back a week's running
  * and what waiting research needs; then assigns them.
  */
-export function grow(state: GameState, ctx: Ctx): GameState {
-  let s = state
+/** What the bots keep back: a week's running and the research due soon. */
+function reserveOf(s: GameState): Record<string, number> {
   const keep = reserved(s)
   const use = weeklyUse(previewWeek(s))
   const reserve: Record<string, number> = {}
   for (const id of new Set([...Object.keys(keep), ...Object.keys(use)])) reserve[id] = (keep[id] ?? 0) + (use[id] ?? 0)
+  return reserve
+}
+
+export function grow(state: GameState, ctx: Ctx): GameState {
+  let s = state
+  const reserve = reserveOf(s)
   const byTier = workers(s).sort((a, b) => b.tier - a.tier)
   for (const u of byTier) {
     for (const c of contractsFor(s, u.id)) {
@@ -1120,8 +1134,48 @@ export interface WeekRow {
   action: ActionKind
   label: string
   spend: Record<Category, number>
+  /** The biggest working unit type's share of the working fleet's worth. */
+  largestShare: number
+  /** Worth of the depots owned. */
+  depotWorth: number
+  /** Some waiting research costs more of a resource than it can hold. */
+  capBlocked: boolean
   /** Greedy only, at checkpoints: each kind's best value, fresh and after its third use. */
   values?: { fresh: Weighed[]; stale: Weighed[] }
+}
+
+/** A sourcing contract signed in a run: when, for what, how big, and when it was full. */
+export interface ContractRecord {
+  week: number
+  unit: string
+  name: string
+  worth: number
+  /** The Phase 2 week its last slot was used, or null. */
+  filled: number | null
+}
+
+/** The contracts in a state that aren't depot builds, by id. */
+export const signedContracts = (s: GameState) => s.sourcing.filter((c) => c.parts.length && !findUnit(s, c.unitId)?.holds)
+
+/** Notes the contracts signed or filled this week. */
+export function trackContracts(s: GameState, week: number, seen: Map<string, ContractRecord>) {
+  for (const c of signedContracts(s)) {
+    const u = findUnit(s, c.unitId)
+    let rec = seen.get(c.id)
+    if (!rec) seen.set(c.id, (rec = { week, unit: u?.name ?? c.unitId, name: c.name, worth: c.total * (u?.value ?? 0), filled: null }))
+    if (rec.filled === null && openSlots(c) === 0) rec.filled = week
+  }
+}
+
+/** The biggest working unit type's share of the working fleet, the depots' worth, and whether a cost can't fit. */
+export function fleetShape(s: GameState): Pick<WeekRow, 'largestShare' | 'depotWorth' | 'capBlocked'> {
+  const working = s.units.filter((u) => !u.holds).map((u) => u.count * u.value)
+  const total = working.reduce((n, w) => n + w, 0)
+  return {
+    largestShare: total > 0 ? Math.max(...working) / total : 0,
+    depotWorth: s.units.filter((u) => u.holds).reduce((n, u) => n + u.count * u.value, 0),
+    capBlocked: s.research.some((r) => r.cost.some((c) => { const x = findResource(s, c.resourceId); return !!x && c.amount > capOf(s, x) }))
+  }
 }
 
 export interface RunRecord {
@@ -1133,6 +1187,9 @@ export interface RunRecord {
   lost: number | null
   rows: WeekRow[]
   mix: Partial<Record<ActionKind, number>>
+  /** Contracts signed (depot builds aside), and depot designs. */
+  contracts: ContractRecord[]
+  depots: number
 }
 
 /** Weeks into Phase 2 at which greedy's options are recorded. */
@@ -1163,7 +1220,8 @@ export async function playEcon(bot: Bot, approach: number, limit = 120): Promise
   const policy = bot.policy()
   const start = s.week
   const g = goal(s)!
-  const rec: RunRecord = { bot: bot.name, approach, goalIQ: g.minIQ, won: null, lost: null, rows: [], mix: {} }
+  const rec: RunRecord = { bot: bot.name, approach, goalIQ: g.minIQ, won: null, lost: null, rows: [], mix: {}, contracts: [], depots: 0 }
+  const seen = new Map<string, ContractRecord>()
   const goalId = g.cost[0]!.resourceId
   for (let i = 0; i < limit; i++) {
     const week = s.week - start + 1
@@ -1185,6 +1243,9 @@ export async function playEcon(bot: Bot, approach: number, limit = 120): Promise
     s = grow(s, ctx)
     rec.mix[ctx.action] = (rec.mix[ctx.action] ?? 0) + 1
     rec.rows.push(row(s, ctx, week, goalId, values))
+    trackContracts(s, week, seen)
+    rec.contracts = [...seen.values()]
+    rec.depots = s.units.filter((u) => u.holds).length
     s = runWeek(s)
     if (s.phase.status === 'lost') {
       rec.lost = week
@@ -1226,6 +1287,7 @@ function row(s: GameState, ctx: Ctx, week: number, goalId: string, values?: Week
     action: ctx.action,
     label: ctx.label,
     spend: { ...ctx.spend },
+    ...fleetShape(s),
     ...(values ? { values } : {})
   }
 }
