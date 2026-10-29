@@ -188,6 +188,6 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 
 Tests use a fake `Judge`, so they don't need a key. Balance specs play scripted bots through
 both phases. `ECON_REPORT=1 npx vitest run econreport` plays the Phase 2 balance bots and writes
-`logs/econ/latest.json`; `node scripts/econCharts.mjs` charts it in `logs/econ/charts.html` (see
+`logs/econ/latest.json`; `node scripts/econCharts.mjs` charts it in `logs/econ/charts.html`; `PLAYER_LOG=logs/runs/<id>/game.jsonl npx vitest run playerecon` turns a played game into the same series, and `PLAYER=logs/econ/player.json` adds it to the charts as "you" (see
 "Balance bots" in [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md)). Phase 2's targets, including that it's winnable, are skipped until a retune for
 its 80-week clock (see [ECONOMY_DESIGN.md](ECONOMY_DESIGN.md)). Weeks never call Jev; only proposals and upgrades do.

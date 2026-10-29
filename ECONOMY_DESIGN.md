@@ -203,7 +203,9 @@ three weeks or fewer left (`COVER_AT`). Resource, unit and compute traits are ou
 
 **The tuning loop:** change `balance.ts`; run `ECON_REPORT=1 npx vitest run econreport` (about 25
 seconds); chart it with `node scripts/econCharts.mjs` (`logs/econ/charts.html`: income, worth,
-fleet by tier, IQ, clock, goal progress, spend and action mix per bot, by approach).
+fleet by tier, IQ, clock, goal progress, spend and action mix per bot, by approach). To set a played
+game beside the bots, run `PLAYER_LOG=logs/runs/<id>/game.jsonl npx vitest run playerecon`, then
+chart with `PLAYER=logs/econ/player.json`.
 
 **Status (2026-10-28): Phase 2 is not tuned yet.** With cover, greedy wins every approach
 (weeks 78–90 of the phase), and the climber, brain, scale and no-upgrades bots win some; the tier 0

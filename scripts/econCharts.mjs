@@ -2,6 +2,9 @@
 // econreport`) into one self-contained page of charts: logs/econ/charts.html.
 //
 //   node scripts/econCharts.mjs [run.json] [out.html]
+//
+// Set PLAYER=logs/econ/player.json (written by `PLAYER_LOG=… npx vitest run playerecon`) to add a
+// played game as the bot "you", on the approach its goal IQ matches.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
@@ -9,6 +12,13 @@ import { basename } from 'node:path'
 const input = process.argv[2] ?? 'logs/econ/latest.json'
 const output = process.argv[3] ?? 'logs/econ/charts.html'
 const run = JSON.parse(readFileSync(input, 'utf8'))
+if (process.env.PLAYER) {
+  const rows = JSON.parse(readFileSync(process.env.PLAYER, 'utf8')).rows
+  const goalIQ = rows[rows.length - 1].goalIQ
+  const approach = run.runs.find((r) => r.goalIQ === goalIQ)?.approach ?? 1
+  const won = rows[rows.length - 1].weeksLeft > 0 ? rows[rows.length - 1].week : null
+  run.runs.unshift({ bot: 'you', approach, goalIQ, won, lost: won ? null : rows[rows.length - 1].week, mix: {}, rows: rows.map((w) => ({ ...w, action: 'none', spend: {} })) })
+}
 
 // Only what the page draws, so the file stays small.
 const slim = {
@@ -370,7 +380,7 @@ function draw() {
   add('Net worth', 'Stocks that fit in storage, plus units owned at their value.', (c) => lineChart(c, { series: perBot('net'), log: true }));
   add('Stock worth', 'Resources held, at value.', (c) => lineChart(c, { series: perBot('stock'), log: true }));
   add('Fleet worth', 'Units owned × value: industry.', (c) => lineChart(c, { series: perBot('fleet'), log: true }));
-  for (const bot of ['greedy', 'climber']) {
+  for (const bot of ['you', 'greedy', 'climber']) {
     const r = runsFor(state.approach).find((x) => x.bot === bot);
     if (!r) continue;
     add('Fleet by tier: ' + bot, 'Worth of units owned, by tier. A climber should move up the ladder; tier 0 alone should stall.', (c) => {
