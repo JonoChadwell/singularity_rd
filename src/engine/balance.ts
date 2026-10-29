@@ -225,10 +225,11 @@ export const FIRST_UNIT_MAX_BAND = 2
 // ---------------------------------------------------------------- caps
 
 /**
- * Sourcing contracts, offered by Procuring a unit: how big a supply Jev thinks could be had one
- * way, in dollars, [label, worth]. The units are that worth ÷ one's value (at least one), so ten
- * cheap units and one dear one make the same contract, whatever their tier. A contract is a lease on
- * that many: you create them later, from its parts, at no action.
+ * Sourcing contract sizes, in dollars, [label, worth]. Jev judges how big a supply could be had one
+ * way: that is the biggest size on offer, and the player picks the size. The units are that worth
+ * ÷ one's value (at least one), so ten cheap units and one dear one make the same contract,
+ * whatever their tier. A contract is a lease on that many: you create them from its parts, at no
+ * action, the first CONTRACT_UPFRONT of them as you sign.
  */
 export const SOURCING_LIMITS: [string, number][] = [
   ['A handful: what a small shop could supply, tens of thousands of dollars', 6e4],
@@ -238,6 +239,11 @@ export const SOURCING_LIMITS: [string, number][] = [
   ["Industrial scale: a whole industry's capacity, hundreds of millions of dollars", 4e8],
   ["Global supply: the world's supply, billions of dollars", 5e9]
 ]
+/**
+ * Signing a sourcing contract creates this share of its units at once, from their parts: the size
+ * you can sign follows the stock you've built up. Cutting corners counts the share of the plain size.
+ */
+export const CONTRACT_UPFRONT = 0.25
 /** A risky contract cuts corners for this many times the units. */
 export const RISK_SOURCING = 10
 /**

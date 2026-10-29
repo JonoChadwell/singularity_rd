@@ -10,6 +10,7 @@ import {
   judgeCreate,
   optionBlocker,
   precheckCreate,
+  resizeContracts,
   type ContractOption,
   type CreateSpec,
   type CreateVerdict,
@@ -995,6 +996,33 @@ describe('procuring units', () => {
     s = acceptCreate(s, again).state
     expect(s.sourcing).toHaveLength(2)
     expect(unitCap(s, 'bot')).toBe(2 * units(1))
+  })
+
+  it('lets you pick the size up to Jev’s limit, the biggest you can sign by default; signing creates the first quarter', async () => {
+    const s = world()
+    // $4M of Bots (band 2) needs $1M of parts to sign; $500k (band 1) needs $125k.
+    findResource(s, MONEY_ID)!.amount = 3e5
+    findResource(s, 'steel')!.amount = 3e5
+    const v = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(2), efficiency: score(2) }), spec)
+    const plain = () => v.options[0] as ContractOption
+    expect(plain().label).toBe('Jev’s take')
+    expect(v).toMatchObject({ maxSize: 2, size: 1 })
+    expect(plain()).toMatchObject({ total: units(1), upfront: units(1) / 4 })
+    expect(optionBlocker(s, plain())).toBeNull()
+    // Nothing past Jev's limit is offered, and the next size up can't be signed yet.
+    resizeContracts(s, v, 5)
+    expect(v.size).toBe(2)
+    expect(optionBlocker(s, plain())).toMatch(/Signing creates .* at once: you need/)
+    resizeContracts(s, v, 1)
+    v.choice = 0
+    const after = acceptCreate(s, v).state
+    expect(unit(after, 'bot').count).toBe(units(1) / 4)
+    expect(after.sourcing[0]).toMatchObject({ total: units(1), used: units(1) / 4 })
+    const spent = (id: string) => findResource(s, id)!.amount - findResource(after, id)!.amount
+    expect(spent(MONEY_ID) + spent('steel')).toBeCloseTo((units(1) / 4) * 200, -2)
+    // The same size again next time: no penalty for reloading.
+    const again = await judgeCreate(runWeek(after), new FakeJudge({ mode: supply, limit: score(2), efficiency: score(2) }), { ...spec, name: 'Contract a factory' })
+    expect(again.maxSize).toBe(2)
   })
 
   it('is cheaper for a mind well above the unit’s tier, and says so', async () => {

@@ -6,7 +6,7 @@ import App from '@/App.vue'
 import { bandDial } from '@/components/dialogs/dials'
 import VerdictView from '@/components/dialogs/VerdictView.vue'
 import * as B from '@/engine/balance'
-import type { PayoutOption } from '@/engine/createProposal'
+import type { ContractOption, PayoutOption } from '@/engine/createProposal'
 import { approachValue } from '@/engine/planProposal'
 import { newResource, newUnit, SERVER_ID } from '@/engine/initialState'
 import { newPhase } from '@/engine/phase'
@@ -122,7 +122,11 @@ describe('App', () => {
       const deal = await game.propose({ kind: 'create', spec: { target: { kind: 'unit', id: unit.id }, name: 'Rent them', description: '' } })
       if (deal?.kind !== 'create') throw new Error('expected a create')
       expect(deal.options[0]!.timing).toBe('contract')
+      // Signing creates the first quarter of the contract from its parts.
+      const signed = (deal.options[0] as ContractOption).upfront
+      expect(signed).toBeGreaterThan(0)
       expect(game.accept(deal)?.kind, game.lastError).toBe('added')
+      expect(game.state.units.find((u) => u.id === unit.id)!.count).toBe(signed)
       expect(game.state.research).toEqual([])
       findResource(game.state, MONEY_ID)!.amount = 1e5
       expect(game.createUnits(game.state.sourcing[0]!.id, 2), game.lastError).toBe(true)
@@ -134,7 +138,7 @@ describe('App', () => {
         spec: { name: 'Sell compute time', description: '', unitId: unit.id, outputId: MONEY_ID }
       })
       expect(game.accept(sell!)).toMatchObject({ kind: 'added' })
-      expect(game.preview.runs[game.state.strategies[0]!.id]?.units).toBe(2)
+      expect(game.preview.runs[game.state.strategies[0]!.id]?.units).toBe(signed + 2)
       game.nextWeek()
       expect(game.lastError).toBe('')
       expect(game.state.stats.proposals).toMatchObject({ resource: 1, create: 2, unit: 1, strategy: 1 })

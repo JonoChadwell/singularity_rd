@@ -55,23 +55,32 @@ its costs, what's made and used of it, and what it loses or grows each week: see
 
 ## Sourcing contracts
 
-A contract is a lease on `total` of a unit, each created later from its parts. They come from
-Procuring a unit (below).
+A contract is a lease on `total` of a unit, each created from its parts. They come from
+Procuring a unit (below). A contract is the story of how you got this thing: a reload tells a new
+one, and a full contract is a choice between spending an action on more of the same and doing
+something else.
 
 - **Size:** Jev says how big a supply could realistically be had the player's way, in dollars
   (`SOURCING_LIMITS`, from tens of thousands up to billions), and what each would take to make.
-  The contract holds that worth ÷ one unit's value, at least one, so ten cheap units and one dear
-  one make the same contract.
+  That is the **biggest size on offer**: the player picks any band up to it, and the dialog
+  starts at the biggest one they can sign now. The contract holds that worth ÷ one unit's value,
+  at least one, so ten cheap units and one dear one make the same contract.
+- **Signing creates the first quarter** (`CONTRACT_UPFRONT`) at once, paying their parts. So the
+  size you can sign follows the stock you've built: getting many of one thing takes production
+  and the storage to hold its parts. Reloading a unit gets the same size each time, with no
+  penalty: in an exponential game, a fixed-size reload already shrinks next to the economy.
+  (Playtest 1 had Jev's limits at 1.9–3.8, so a $5B contract in Phase 2 week 8, against a $35k
+  fleet, lasted the whole game; signing it now needs $1.25B of parts.)
 - **Three takes:**
   - **Jev's take.**
   - **Quiet:** one limit band smaller, with no alarm.
   - **Cut corners:** risky, with ten times the units and half the parts, but twice the clock
-    weeks.
+    weeks. Signing creates the same first share as the plain size.
 - **Parts:** each contract uses a different mix of parts where there's a choice, with more kinds
   of part at higher tiers (`PARTS_BY_TIER`).
 - **No research:** a contract takes effect as soon as you pick it, with no IQ gate or fee. It
   still uses the week's action, and its risk weeks come off the clock at once. Its only cost is
-  the parts, paid per unit created.
+  the parts, paid per unit created (the first quarter as you sign).
 - **Creating units:** this takes no action. You pay the contract's parts, up to its open slots.
   Several contracts can be open for one unit type, and lost units give their slots back.
 - **Ceiling:** a contract is cut to the room left under the unit's ceiling, and flagged.

@@ -424,7 +424,8 @@ describe('expansions', () => {
   })
 
   it('make big sourcing contracts cost weeks when they’re signed, the risky one most', async () => {
-    const s = phase2(1e9)
+    // Enough Money to sign the biggest: its first quarter, $1.25B of robots.
+    const s = phase2(2e9)
     const u = addRobots(s, 1)
     u.built = 1
     u.value = 1000
