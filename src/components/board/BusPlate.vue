@@ -158,23 +158,27 @@ const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
 }
 
 .gauge {
-  flex: 0 0 92px;
+  flex: 0 1 92px;
+  min-width: 20px;
 }
 
 .delta {
   font-size: 11px;
   min-width: 44px;
+  white-space: nowrap;
 }
 
 .buttons {
   margin-left: auto;
   display: flex;
+  flex-shrink: 0;
   gap: 2px;
 }
 
 .buttons button {
   padding: 0 4px;
   font-size: 10px;
+  white-space: nowrap;
 }
 
 .probe {
