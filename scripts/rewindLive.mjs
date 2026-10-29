@@ -18,7 +18,9 @@ const snap = {
   log: weeks.slice(0, weeks.length - back).flatMap((w) => w.events ?? []),
   jevCache: {}
 }
-const cmd = `localStorage.setItem('singularity-rd/save/v${snap.version}', ${JSON.stringify(JSON.stringify(snap))}); location.reload()`
+// Escape everything non-ASCII (icons are emoji): `clip` and many consoles mangle them into U+FFFD.
+const ascii = (s) => s.replace(/[^\x00-\x7f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
+const cmd = `localStorage.setItem('singularity-rd/save/v${snap.version}', ${ascii(JSON.stringify(JSON.stringify(snap)))}); location.reload()`
 try { execSync('clip', { input: cmd }) } catch {}
 console.log(cmd)
 console.error(`\nRun ${files[0].split('/')[2]}: rewound to the start of week ${snap.week}. Copied to clipboard if on Windows.`)
