@@ -144,6 +144,9 @@ JSON-lines file per stream:
 - `ui.jsonl`: dialogs, verdicts shown, tab changes, notices and errors shown.
 - `errors.jsonl`: crashes and store actions that threw, with stack traces.
 
+`node scripts/rewindLive.mjs [weeksBack]` prints (and copies) a browser-console command that
+resets the live game to its last end-of-week snapshot, undoing what you did since.
+
 ### Command-line harness
 
 `npm run play -- <command>` plays the game without the browser: same engine, the real Jev (using

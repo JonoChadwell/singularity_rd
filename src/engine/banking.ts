@@ -174,8 +174,8 @@ export function bankUpgrade(current: GameState, offer: UpgradeOffer, only?: numb
   claimProposal(state)
   const picks = (only === undefined ? offer.options.map((_, i) => i) : [only]).filter((i) => offer.options[i])
   if (!picks.length) throw new Error('Choose one of the options.')
-  // A platform has one software upgrade at a time, so its options are alternatives.
-  const group = offer.target.kind === 'mind' ? `upgrade:${state.week}:${offer.target.id}` : undefined
+  // The offered upgrades are alternatives (pick one of three), whatever they target.
+  const group = `upgrade:${state.week}:${offer.target.id}`
   let last: Accepted | undefined
   const taken = new Set<string>()
   for (const i of picks) {

@@ -1,0 +1,19 @@
+// Rewinds the live game to its last end-of-week snapshot (the state just before whatever you did
+// since, e.g. saving research for later). Prints a browser-console command and copies it to the
+// clipboard on Windows. Usage: node scripts/rewindLive.mjs [weeksBack=0]
+import { execSync } from 'node:child_process'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+
+const root = 'logs/runs'
+const files = readdirSync(root)
+  .map((d) => `${root}/${d}/game.jsonl`)
+  .filter((f) => { try { return statSync(f).size > 0 } catch { return false } })
+  .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
+const weeks = readFileSync(files[0], 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((e) => e.event === 'week')
+const back = Number(process.argv[2] ?? 0)
+const snap = weeks[weeks.length - 1 - back]?.state
+if (!snap) throw new Error('No week snapshot to rewind to.')
+const cmd = `localStorage.setItem('singularity-rd/save/v${snap.version}', ${JSON.stringify(JSON.stringify(snap))}); location.reload()`
+try { execSync('clip', { input: cmd }) } catch {}
+console.log(cmd)
+console.error(`\nRun ${files[0].split('/')[2]}: rewound to the start of week ${snap.week}. Copied to clipboard if on Windows.`)
