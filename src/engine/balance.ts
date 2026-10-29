@@ -610,7 +610,7 @@ export const ICONS: Record<string, string> = {
   globe: '🌐',
   lock: '🔒',
   mask: '🎭',
-  rock: '🪨',
+  rock: '⛰️',
   drone: '🛸',
   network: '🕸️',
   fruit: '🍋',

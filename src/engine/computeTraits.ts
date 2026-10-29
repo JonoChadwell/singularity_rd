@@ -63,7 +63,7 @@ export const COMPUTE_TRAITS: ComputeTrait[] = [
   {
     id: 'frugal',
     name: 'Frugal',
-    icon: '🪙',
+    icon: '💵',
     kind: 'perk',
     rule: `Research you propose costs ${Math.round((1 - B.COMPUTE_COST_PERK) * 100)}% less.`,
     family: 'cost',
