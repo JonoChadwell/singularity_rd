@@ -1181,6 +1181,7 @@ describe('storage', () => {
     // Jev would pay in Steel, but Steel is what it's for; Money pays, never more than it holds.
     const v = await drum(s, { pay: choice('steel', { steel: 0.9, [MONEY_ID]: 0.1 }), tier: score(3) })
     for (const o of v.options) {
+      expect(o.parts.map((c) => c.resourceId)).not.toContain('steel')
       expect(o.cost.map((c) => c.resourceId)).not.toContain('steel')
       for (const c of o.cost) expect(c.amount).toBeLessThanOrEqual(500)
     }

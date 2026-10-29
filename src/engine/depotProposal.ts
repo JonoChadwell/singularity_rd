@@ -152,7 +152,7 @@ export async function judgeDepot(state: GameState, judge: Judge, raw: DepotSpec)
     parts: {
       type: 'choice',
       instructions: `Which resource would building one ${spec.name} most naturally take? Advanced things take several kinds, so how likely each is matters too.`,
-      criteria: options(partPool(state, B.MAX_UNIT_TIER))
+      criteria: options(partsFor(state, r, B.MAX_UNIT_TIER))
     },
     icon: iconQuestion,
     ...payQuestion(state, `the design of ${spec.name}`, payableFor(state, r)),
@@ -206,7 +206,7 @@ export function depotOptions(state: GameState, v: Pick<DepotVerdict, 'answers' |
   return chosen.map((band, i) => {
     const value = B.pick(B.UNIT_VALUE, band)[1]
     const each = B.nice(((perDollar * value) / Math.max(1e-9, r.value)) * capFactor(r) * expansionFactor(r))
-    const pool = rankedIds(v.answers, 'parts', partPool(state, tier))
+    const pool = rankedIds(v.answers, 'parts', partsFor(state, r, tier))
     const parts = priceParts(state, pool.slice(0, B.PARTS_BY_TIER[tier] ?? 1), value)
     const needed = Math.ceil(room / Math.max(1e-9, each) - 1e-9)
     const [, minIQ, worth] = B.pick(B.TIERS, tier)
@@ -238,6 +238,9 @@ const withinStorage = (state: GameState, cost: Cost): Cost =>
     const payer = findResource(state, c.resourceId)
     return payer ? { ...c, amount: Math.min(c.amount, Math.floor(capOf(state, payer))) } : c
   })
+
+/** What a depot of this tier may be built from: its tier and below, never what it stores. */
+const partsFor = (state: GameState, r: Resource, tier: number) => partPool(state, tier).filter((x) => x.id !== r.id)
 
 /** Hazardous, Untraceable and Contraband resources scale the clock weeks of designing depots for them. */
 function tracedRisk(r: Resource, risk: Risk | null): Risk | null {
