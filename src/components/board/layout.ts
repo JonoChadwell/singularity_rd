@@ -147,7 +147,7 @@ export function boardLayout(state: GameState, preview: WeekReport): BoardLayout 
         kind: 'vcc',
         taps: [{ busId: f.resourceId, dir: 'in' }],
         tone: unpaid ? 'bad' : used < 0 ? 'ok' : 'off',
-        label: used < 0 ? `${signed(used)}/WK` : 'VCC',
+        label: used < 0 ? `${signed(used)}/WK` : 'Upkeep',
         title: `${u.name} upkeep`
       })
     }
