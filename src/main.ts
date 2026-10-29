@@ -7,7 +7,6 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/600.css'
 import '@fontsource/ibm-plex-sans-condensed/400.css'
 import '@fontsource/ibm-plex-sans-condensed/600.css'
-import '@fontsource/noto-emoji/400.css'
 
 import App from './App.vue'
 import { installLogging } from './logging'

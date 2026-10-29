@@ -55,11 +55,9 @@
   --bad: var(--led-r);
   --ai: var(--led-b);
 
-  /* Emoji: the system's colour font first, then the bundled Noto Emoji for any glyph it lacks. */
-  --font-emoji: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Noto Emoji';
-  --font-label: 'Barlow Condensed', 'Arial Narrow', var(--font-emoji), sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, var(--font-emoji), monospace;
-  --font-paper: 'IBM Plex Sans Condensed', 'Arial Narrow', var(--font-emoji), sans-serif;
+  --font-label: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  --font-paper: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
   --r: 2px;
   color-scheme: dark;
 }
