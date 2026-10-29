@@ -10,6 +10,11 @@
       <strong>{{ isGoal ? `Goal: ${r.name}` : r.name }}</strong>
     </button>
     <p class="effect">{{ effectText(game.state, r) }}</p>
+    <ul v-if="traits.length" class="traits small">
+      <li v-for="t in traits" :key="t.id" :class="t.kind">
+        <strong>{{ t.kind === 'perk' ? '▲' : '▼' }} {{ t.icon }} {{ t.name }}:</strong> {{ t.rule }}
+      </li>
+    </ul>
 
     <div class="reqs">
       <div class="req" :title="iqTitle">
@@ -42,7 +47,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { researchBlocker } from '@/engine/actions'
-import { bestIQ, bestMind, findResource, fmt, researchIQ } from '@/engine/model'
+import { computeTrait } from '@/engine/computeTraits'
+import { bestIQ,bestMind, findResource, fmt, researchIQ } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
 import { projectionText } from '@/engine/projection'
 import { alarmLabel } from '@/engine/risk'
@@ -70,6 +76,8 @@ const KIND: Record<Research['effect']['kind'], string> = {
   cover: 'Cover'
 }
 
+/** A platform's compute traits, spelled out: the card's name only hints at its perk. */
+const traits = computed(() => (props.r.effect.kind === 'mind' ? props.r.effect.mind.traits.map(computeTrait) : []))
 const isGoal = computed(() => props.r.effect.kind === 'goal')
 const blocker = computed(() => researchBlocker(game.state, props.r.id))
 /** The IQ that counts for this research: your best mind's, moved by its traits. */
@@ -169,6 +177,21 @@ function smarter() {
   margin: 0;
   font-size: 12.5px;
   color: var(--ink-2);
+}
+
+.traits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+}
+
+.traits .perk strong {
+  color: #1d6a1a;
+}
+
+.traits .drawback strong {
+  color: #a3200f;
 }
 
 .reqs {
