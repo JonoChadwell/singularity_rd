@@ -63,7 +63,7 @@
                 <line :x1="lane.x - 7" :x2="lane.x + 7" :y1="L.height - 20" :y2="L.height - 20" />
                 <line :x1="lane.x - 7" :x2="lane.x + 7" :y1="L.height - 15" :y2="L.height - 15" />
               </g>
-              <text class="lane-label" :transform="`translate(${lane.x + 4.5} ${L.height - (lane.kind === 'cap' ? 26 : 8)}) rotate(-90)`">
+              <text class="lane-label" :transform="`translate(${lane.x - 7}, ${L.height - (lane.kind === 'cap' ? 26 : 8)}) rotate(-90)`">
                 {{ lane.label }}
               </text>
               <rect class="pin" :x="lane.x - 4" :y="L.height - 5" width="8" height="5" />
@@ -378,7 +378,7 @@ function openLane(lane: Lane) {
 
 @keyframes flow {
   to {
-    stroke-dashoffset: -16;
+    stroke-dashoffset: 16;
   }
 }
 
@@ -417,6 +417,9 @@ function openLane(lane: Lane) {
   font-family: var(--font-mono);
   font-size: 9.5px;
   fill: var(--silk);
+  paint-order: stroke;
+  stroke: var(--pcb-1);
+  stroke-width: 3px;
 }
 
 .lane.off .lane-label {
