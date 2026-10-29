@@ -143,6 +143,10 @@
               <p :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</p>
             </template>
             <p v-else class="muted">uses {{ o.inputs.length ? describeFlows(game.state, o.inputs) : 'nothing' }}</p>
+            <p v-if="!isContract(o) && !o.inputs.length && fromNothingBonus" class="good">
+              🌱 +{{ Math.round((fromNothingBonus - 1) * 100) }}% for using nothing up:
+              <button type="button" class="link" @click.stop="ui.openSheet({ kind: 'rtrait', id: 'renewable' })">Renewable</button>
+            </p>
             <p v-if="o.limitedBy" class="warn">Capped: no more than ~{{ unitCeiling }} can exist yet.</p>
             <p v-if="optionBlocker(game.state, o)" class="bad">{{ optionBlocker(game.state, o) }}</p>
             <p v-else-if="overflowOf(game.state, verdict, o)" class="warn">{{ fmt(overflowOf(game.state, verdict, o)) }} won’t fit in storage</p>
@@ -287,7 +291,7 @@ import { ceilingLabel } from '@/engine/ceilings'
 import { describeOption, iqTag, isContract, optionBlocker, overflowOf } from '@/engine/createProposal'
 import { bandText, byTier, capOf, describeCost, describeFlows, efficiencyWord, findResource, findUnit, fmt, labour, tierFit, tierText } from '@/engine/model'
 import { DESCRIPTION_MAX, NAME_MAX } from '@/engine/proposals'
-import { effectiveTier } from '@/engine/resourceTraits'
+import { effectiveTier, fromNothingFactor } from '@/engine/resourceTraits'
 import { expansionRiskText, riskText } from '@/engine/risk'
 import { QUIRKS, TRAITS } from '@/engine/traits'
 import type { Strategy } from '@/engine/types'
@@ -308,6 +312,15 @@ const props = defineProps<{ request: InventRequest }>()
 const game = useGameStore()
 const ui = useUiStore()
 const nameInput = ref<HTMLInputElement>()
+
+/** Renewable's bonus on a Procurement that uses nothing up (0 when the target has none). */
+const fromNothingBonus = computed(() => {
+  const v = verdict.value
+  const t = v && v.kind === 'create' ? v.spec.target : null
+  const r = t && t.kind === 'resource' ? findResource(game.state, t.id) : undefined
+  const f = r ? fromNothingFactor(r) : 1
+  return f > 1 ? f : 0
+})
 
 const TAG: Record<ProposalKind, string> = {
   resource: 'RES',
