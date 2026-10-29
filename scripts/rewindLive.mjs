@@ -11,8 +11,13 @@ const files = readdirSync(root)
   .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
 const weeks = readFileSync(files[0], 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((e) => e.event === 'week')
 const back = Number(process.argv[2] ?? 0)
-const snap = weeks[weeks.length - 1 - back]?.state
-if (!snap) throw new Error('No week snapshot to rewind to.')
+if (!weeks[weeks.length - 1 - back]) throw new Error('No week snapshot to rewind to.')
+// Snapshots leave out the log and Jev's cache, so rebuild the log from the weeks' events.
+const snap = {
+  ...weeks[weeks.length - 1 - back].state,
+  log: weeks.slice(0, weeks.length - back).flatMap((w) => w.events ?? []),
+  jevCache: {}
+}
 const cmd = `localStorage.setItem('singularity-rd/save/v${snap.version}', ${JSON.stringify(JSON.stringify(snap))}); location.reload()`
 try { execSync('clip', { input: cmd }) } catch {}
 console.log(cmd)
