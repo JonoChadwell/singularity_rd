@@ -131,7 +131,9 @@ The mind gets something directly: a resource, or units of a designed type.
 ## Repeat ideas
 
 The game remembers every Procurement (sourcing contracts included), strategy and storage
-expansion the player accepts. When a new one of the same kind is proposed, Jev is shown up to the last 40 and asked
+expansion the player accepts. A new one of the same kind with the same name (ignoring case and
+punctuation) for the same thing is a repeat, whatever Jev says: in playtest, Jev called "Hide it
+in plain sight" new on all of about 25 uses. Otherwise Jev is shown up to the last 40 and asked
 whether it's the same idea, perhaps under another name. A repeat is one step lower on the
 effectiveness scale (Brilliant becomes Clever, and so on), never below Wasteful. The verdict says
 which earlier idea it repeats.

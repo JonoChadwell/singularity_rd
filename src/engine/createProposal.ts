@@ -10,6 +10,7 @@ import {
   claimProposal,
   cleanText,
   gate,
+  ideaKey,
   logProposal,
   options,
   proposalSlotBlocker,
@@ -217,7 +218,7 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
     questions,
     'create'
   )
-  const base = { ...baseVerdict('create', questions, answers, 'plausible', []), repeatOf: repeatOf(state, answers) }
+  const base = { ...baseVerdict('create', questions, answers, 'plausible', []), repeatOf: repeatOf(state, answers, createIdea(spec)) }
   const efficiency = B.pick(B.EFFICIENCY, efficiencyLevel(base))[1]
   const v: CreateVerdict = {
     ...base,
@@ -231,6 +232,9 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
   gate(v, `Jev doesn’t think the AI could get ${what} this way`, null)
   return v
 }
+
+/** A Procurement's idea key: the same name for the same target is the same idea. */
+const createIdea = (spec: CreateSpec) => ({ kind: 'create' as const, key: ideaKey(`${spec.target.kind}:${spec.target.id}`, spec.name) })
 
 type OptionsOf = Pick<CreateVerdict, 'answers' | 'picks' | 'spec' | 'scalars' | 'risk' | 'plausibility' | 'bar' | 'repeatOf'>
 
@@ -411,7 +415,7 @@ export function acceptCreate(current: GameState, v: CreateVerdict): Accepted {
   claimProposal(state)
   const t = v.spec.target
   const name = v.spec.name
-  recordIdea(state, 'create', name, `${v.spec.description} (makes ${targetLabel(state, t)})`)
+  recordIdea(state, 'create', name, `${v.spec.description} (makes ${targetLabel(state, t)})`, createIdea(v.spec).key)
   state.decidedThisWeek = true
   if (isContract(option)) {
     // A contract takes effect at once: no research, and its parts are paid per unit created.

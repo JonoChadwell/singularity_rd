@@ -75,7 +75,7 @@ export function createInitialState(): GameState {
     starting: true
   })
   return {
-    version: 18,
+    version: 19,
     runId: newRunId(),
     week: 1,
     phase: {
@@ -100,6 +100,7 @@ export function createInitialState(): GameState {
     research: [],
     deliveries: [],
     ideas: [],
+    claimed: [],
     upgrades: [],
     proposedThisWeek: false,
     inventions: [],

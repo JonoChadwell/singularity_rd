@@ -25,6 +25,10 @@ Items marked **(Claude's default)** were left to Claude and can be changed.
   research or contract is **priced**, so the number shown is the number paid. Procurement inputs and a
   phase goal's cost are never changed by these traits **(Claude's default)**: the goal stays the
   size the phase was tuned for, and a Procurement always gives back more than it uses.
+- **No cost asks for more than can exist.** A research cost never asks for more than
+  `COST_CEILING_SHARE` (half) of its payer's ceiling; the rest of that payer's share moves to the
+  next resource Jev ranked, then to the most valuable one that can pay. (In playtest, a software
+  upgrade asked for 160M Unsupervised Minutes when only 90M could exist.)
 - **Phase 1 goal cost follows income.** Procurements are Phase 1's only income, so the goal's cost in
   its resource is scaled by what Procurements make of it (Untraceable halves the goal, Staple and
   Prestigious cut it 25%, Exotic's +50% scales it up) and by the weekly loss (a 50% loss

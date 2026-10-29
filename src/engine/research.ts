@@ -35,9 +35,14 @@ export function spendable(state: GameState, allow: (r: Resource) => boolean = ()
   return state.resources.filter((r) => allow(r) && plan.has(r.id))
 }
 
+/** The most of a resource a single cost may ask for: a share of how many can exist, so it can be held. */
+const costLimit = (r: Resource) => (r.ceiling === null ? Infinity : B.COST_CEILING_SHARE * r.ceiling)
+
 /**
  * Prices a research worth `value` in the resources Jev ranked, most fitting first: the first,
- * and a second if Jev liked it nearly as much. With one stock, it pays; with none, it's free.
+ * and a second if Jev liked it nearly as much. With one stock, it pays; with none, it's free. No
+ * payer is asked for more than COST_CEILING_SHARE of its ceiling: the rest of its share moves on
+ * to the next resource Jev ranked, then to the most valuable that can pay.
  */
 export function priceCost(
   state: GameState,
@@ -56,12 +61,33 @@ export function priceCost(
     : only.length === 1
       ? [{ resourceId: only[0]!.id, p: 1 }]
       : []
-  return chosen.map((p) => {
-    const r = findResource(state, p.resourceId)
+  if (!chosen.length) return []
+  const share = value / chosen.length
+  const shares = new Map(chosen.map((p) => [p.resourceId, share]))
+  const order = [
+    ...new Set([...chosen, ...ranked].map((p) => p.resourceId).concat([...only].sort((a, b) => b.value - a.value).map((r) => r.id)))
+  ]
+  const amounts = new Map<string, number>()
+  let carry = 0
+  for (const id of order) {
+    const worth = (shares.get(id) ?? 0) + carry
+    if (worth <= 0) continue
+    const r = findResource(state, id)
+    const each = Math.max(1e-9, r?.value ?? 1)
     // The payer's own traits (Energetic, Staple, Speculative...) make it cheaper or dearer.
     const f = r ? costFactor(state, r, true) : 1
-    return { resourceId: p.resourceId, amount: B.nice((value / chosen.length / Math.max(1e-9, r?.value ?? 1)) * f) }
-  })
+    const want = (worth / each) * f
+    const amount = Math.min(want, r ? costLimit(r) : Infinity)
+    carry = ((want - amount) * each) / f
+    if (amount > 0) amounts.set(id, amount)
+  }
+  // Nothing could take the rest: the first payer carries it, too big to hold.
+  if (carry > 0) {
+    const first = chosen[0]!.resourceId
+    const r = findResource(state, first)
+    amounts.set(first, (amounts.get(first) ?? 0) + (carry / Math.max(1e-9, r?.value ?? 1)) * (r ? costFactor(state, r, true) : 1))
+  }
+  return [...amounts].map(([resourceId, amount]) => ({ resourceId, amount: B.nice(amount) }))
 }
 
 // ---------------------------------------------------------------- strategy rates
@@ -115,11 +141,16 @@ const scaled = (flows: Flow[], resourceId: string, factor: number) =>
     .map((f) => (f.resourceId === resourceId ? { ...f, amount: B.nice(f.amount * factor) } : f))
     .filter((f) => f.amount > 0)
 
-/** A trait arriving on a platform: a clock trait moves the Phase 2 clock, once. */
+/**
+ * A trait arriving on a platform: a clock trait moves the clock when it arrives. A perk that buys
+ * time (Discreet) pays out once a run, on the first platform to have it.
+ */
 function gainTrait(state: GameState, mind: Mind, trait: string) {
   if (mind.traits.includes(trait)) return
   mind.traits.push(trait)
   const weeks = clockOf(trait)
+  if (weeks > 0 && state.claimed.includes(trait)) return
+  if (weeks > 0) state.claimed.push(trait)
   if (weeks) moveClock(state, weeks, `${mind.name} is ${computeTrait(trait).name}`)
 }
 

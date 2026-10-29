@@ -205,7 +205,7 @@ describe('formatting', () => {
 describe('the start', () => {
   it('has only the Starting Server, and waits for a Phase 1 plan', () => {
     const s = createInitialState()
-    expect(s.version).toBe(18)
+    expect(s.version).toBe(19)
     expect(s.phase).toMatchObject({ n: 1, status: 'planning', deadline: null, goalId: null })
     expect(s.resources).toEqual([])
     expect(s.minds).toHaveLength(1)
@@ -319,6 +319,20 @@ describe('create', () => {
     const strategy = new FakeJudge({ advancement: score(0) })
     await judgeStrategy(powerWorld(), strategy, { name: 'Coding', description: '', unitId: 'gpu', outputId: MONEY_ID })
     expect(Object.keys(strategy.calls[0]!.questions)).not.toContain('repeat')
+  })
+
+  it('counts the same name for the same thing as a repeat, whatever Jev says', async () => {
+    let s = moneyWorld()
+    s = acceptCreate(s, await judgeCreate(s, new FakeJudge({ efficiency: score(2), timing: choice('now') }), createSpec())).state
+    s = runWeek(s)
+    // Jev calls it new, but it has the same name (case and punctuation aside) and target.
+    const again = await judgeCreate(s, new FakeJudge({ efficiency: score(2), repeat: choice('none') }), createSpec({ name: 'freelance  Coding!' }))
+    expect(again.repeatOf).toBe('Freelance coding')
+    expect(again.scalars.efficiency).toBe(B.EFFICIENCY[1]![1])
+    // The same name for something else is a new idea.
+    s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 2 }))
+    const other = await judgeCreate(s, new FakeJudge({ efficiency: score(2), repeat: choice('none') }), createSpec({ name: 'Freelance coding', target: { kind: 'resource', id: 'steel' } }))
+    expect(other.repeatOf).toBeNull()
   })
 
   it('makes a repeated strategy one step less effective', async () => {
@@ -1413,6 +1427,45 @@ describe('compute traits', () => {
     const after = doResearch(acceptMind(s, v).state, 'design-custom-ai-server')
     expect(after.phase.deadline).toBe(106)
     expect(after.clock.map((c) => c.weeks)).toEqual([6])
+    expect(after.claimed).toEqual(['discreet'])
+  })
+
+  it('pay out Discreet once a run: after that it is neither asked about nor offered, and pays nothing', async () => {
+    const s = freeState()
+    s.phase = { ...newPhase(2, 1), status: 'playing', deadline: 100 }
+    s.units.push(newUnit({ id: 'first', name: 'First', built: 1 }))
+    const first = new FakeJudge({ perk: choice('discreet'), drawback: choice('noisy') })
+    const v = await judgeMind(s, first, mindSpec())
+    // Banked before the first is done, a second Discreet platform still pays nothing more.
+    const banked = acceptMind(s, v).state
+    banked.proposedThisWeek = false
+    const before = await judgeMind(banked, new FakeJudge({ perk: choice('discreet'), drawback: choice('noisy') }), mindSpec({ name: 'Second Server' }))
+    let after = doResearch(banked, 'design-custom-ai-server')
+    expect(after.claimed).toEqual(['discreet'])
+    const later = new FakeJudge({ perk: choice('discreet'), drawback: choice('noisy') })
+    after.proposedThisWeek = false
+    const w = await judgeMind(after, later, mindSpec({ name: 'Third Server' }))
+    const perks = later.calls[0]!.questions.perk
+    expect(perks?.type === 'choice' && Object.keys(perks.criteria)).not.toContain('discreet')
+    expect(w.options.map((o) => o.perk)).not.toContain('discreet')
+    // The one proposed before it paid out keeps the trait but not the weeks.
+    expect(before.options[0]!.perk).toBe('discreet')
+    after = doResearch(acceptMind(after, before).state, 'design-second-server')
+    expect(after.clock.map((c) => c.weeks)).toEqual([6])
+  })
+
+  it('never price a cost at more than half of what can exist of its payer: the rest moves on', () => {
+    const s = moneyWorld(1e6)
+    s.resources.push(newResource({ id: 'minutes', name: 'Minutes', value: 10, amount: 100, ceiling: 1000 }))
+    s.resources.push(newResource({ id: 'gold', name: 'Gold', value: 1000, amount: 1, ceiling: 1e6 }))
+    // 20,000 of worth is 2,000 Minutes, but only 1,000 can exist: 500 of them, the rest in Gold.
+    const cost = priceCost(s, 20_000, [{ resourceId: 'minutes', p: 1 }, { resourceId: 'gold', p: 0.1 }])
+    expect(cost).toEqual([
+      { resourceId: 'minutes', amount: 500 },
+      { resourceId: 'gold', amount: 15 }
+    ])
+    // Under the limit, nothing changes.
+    expect(priceCost(s, 2_000, [{ resourceId: 'minutes', p: 1 }])).toEqual([{ resourceId: 'minutes', amount: 200 }])
   })
 })
 

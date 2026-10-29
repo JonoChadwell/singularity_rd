@@ -469,6 +469,8 @@ export const UPGRADE_OPTIONS = 3
 export const UNIT_OPTIONS = 3
 /** A second resource shares the cost when Jev likes it at least this share as much. */
 export const SECOND_PAYER = 0.5
+/** A cost never asks for more than this share of what can exist of its payer; the rest moves to another. */
+export const COST_CEILING_SHARE = 0.5
 
 /** A repeat of an idea already accepted is this many steps lower on the EFFICIENCY scale, never below Wasteful. */
 export const REPEAT_PENALTY = 1

@@ -12,6 +12,7 @@ import {
   efficiencyLevel,
   floorIQ,
   gate,
+  ideaKey,
   logProposal,
   newResearch,
   options as criteriaOf,
@@ -164,7 +165,7 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
     spec,
     options: [],
     choice: 0,
-    repeatOf: repeatOf(state, answers)
+    repeatOf: repeatOf(state, answers, { kind: 'strategy', key: strategyKey(spec) })
   }
   v.options = strategyOptions(state, v)
   gate(v, `Jev doesn’t think ${unit.name} could do this`, null)
@@ -236,13 +237,17 @@ export function draftStrategy(state: GameState, v: StrategyVerdict): { strategy:
   return { strategy, minIQ: minIQ ? floorIQ(minIQ) : 0, cost }
 }
 
+/** A strategy's idea key: the same name for the same unit and output is the same idea. */
+const strategyKey = (spec: StrategySpec) => ideaKey(`${spec.unitId}>${spec.outputId}`, spec.name)
+
 /** What a strategy adds to the list of past ideas, so a repeat can be spotted. */
-export function strategyIdea(state: GameState, v: StrategyVerdict): { name: string; description: string } {
+export function strategyIdea(state: GameState, v: StrategyVerdict): { name: string; description: string; key: string } {
   const unit = findUnit(state, v.spec.unitId)
   const output = findResource(state, v.spec.outputId)
   return {
     name: `${unit?.name ?? '?'}: ${v.spec.name}`,
-    description: `${v.spec.description || v.spec.name} (makes ${output?.name ?? '?'})`
+    description: `${v.spec.description || v.spec.name} (makes ${output?.name ?? '?'})`,
+    key: strategyKey(v.spec)
   }
 }
 
@@ -255,7 +260,7 @@ export function acceptStrategy(current: GameState, v: StrategyVerdict): Accepted
   const unit = findUnit(state, strategy.unitId)!
   state.inventions.push({ week: state.week, icon: unit.icon, name: strategy.name, kind: 'strategy' })
   const idea = strategyIdea(state, v)
-  recordIdea(state, 'strategy', idea.name, idea.description)
+  recordIdea(state, 'strategy', idea.name, idea.description, idea.key)
   state.decidedThisWeek = true
   if (!minIQ) {
     addStrategy(state, strategy)

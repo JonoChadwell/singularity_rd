@@ -1,6 +1,6 @@
 import { ranked, type JevAnswer, type JevQuestion, type Judge } from '@/ai/jev'
 import * as B from './balance'
-import { compatible, computeTrait, DRAWBACKS, PERKS, type ComputeTrait, type ComputeTraitId } from './computeTraits'
+import { clockOf, compatible, computeTrait, DRAWBACKS, PERKS, type ComputeTrait, type ComputeTraitId } from './computeTraits'
 import { bestIQ, bestMind, makeId } from './model'
 import { effectiveTier } from './resourceTraits'
 import { newMind } from './initialState'
@@ -139,12 +139,15 @@ function rankedTraits(answer: JevAnswer | undefined, list: ComputeTrait[]): Comp
     .map((id) => computeTrait(id))
 }
 
+/** The perks a new platform may have: one that buys time (Discreet) only until a platform has paid it out. */
+export const perksOnOffer = (state: GameState) => PERKS.filter((t) => !(clockOf(t.id) > 0 && state.claimed.includes(t.id)))
+
 /** Pairs the best perks with the best drawbacks, never a perk with a drawback of its own family. */
-export function pairTraits(answers: Record<string, JevAnswer>): TraitPair[] {
+export function pairTraits(answers: Record<string, JevAnswer>, perks: ComputeTrait[] = PERKS): TraitPair[] {
   const drawbacks = rankedTraits(answers.drawback, DRAWBACKS)
   const used = new Set<string>()
   const pairs: TraitPair[] = []
-  for (const perk of rankedTraits(answers.perk, PERKS).slice(0, B.TRAIT_OPTIONS)) {
+  for (const perk of rankedTraits(answers.perk, perks).slice(0, B.TRAIT_OPTIONS)) {
     const drawback = drawbacks.find((d) => !used.has(d.id) && compatible(perk, d))
     if (!drawback) continue
     used.add(drawback.id)
@@ -171,7 +174,7 @@ export async function judgeMind(state: GameState, judge: Judge, raw: MindSpec): 
     perk: {
       type: 'choice',
       instructions: `Going by its description and hardware, which strength would this platform most naturally have?`,
-      criteria: Object.fromEntries(PERKS.map((t) => [t.id, `${t.name}: ${t.rule}`]))
+      criteria: Object.fromEntries(perksOnOffer(state).map((t) => [t.id, `${t.name}: ${t.rule}`]))
     },
     drawback: {
       type: 'choice',
@@ -192,7 +195,7 @@ export async function judgeMind(state: GameState, judge: Judge, raw: MindSpec): 
     questions,
     'mind'
   )
-  const pairs = pairTraits(answers)
+  const pairs = pairTraits(answers, perksOnOffer(state))
   const steps = stepsFor(state, pairs.length)
   const pay = payersFor(state, answers, steps)
   const v: MindVerdict = {

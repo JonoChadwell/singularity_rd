@@ -105,8 +105,9 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
 - **IQ steps.** Both a new platform and a software upgrade add a flat step to your best IQ, never
   more than 100. Two new platforms, each with its software upgrade at full size, take 100 to 500.
 - **Jev is torn** sometimes. The game then shows its top two answers and you pick.
-- **Repeats are worth less.** Jev checks a new Procurement, strategy or storage expansion against
-  the ones you've already done; a repeat is one step less effective.
+- **Repeats are worth less.** A new Procurement, strategy or storage expansion with the same name
+  for the same thing as one you've already done is a repeat; Jev also checks for the same idea
+  under another name. A repeat is one step less effective.
 
 ## Setup
 
@@ -129,7 +130,7 @@ Their games use your Jev key and each browser keeps its own save.
 Optional settings in `.env.local`: `JEV_BASE_URL` (default `https://openrouter.ai/api`) and
 `JEV_MODEL` (default `jev-latest`).
 
-The game saves to your browser's local storage (`singularity-rd/save/v18`) after every change,
+The game saves to your browser's local storage (`singularity-rd/save/v19`) after every change,
 including Jev's answers, so the same proposal always gets the same verdict. Old save versions
 are dropped.
 
@@ -165,7 +166,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | Path | What |
 | --- | --- |
 | `src/ai/jev.ts` | Jev client, `Judge` interface, typed readers, torn-answer detection, `CachedJudge` |
-| `src/engine/types.ts` | `GameState` (v18) and everything in it |
+| `src/engine/types.ts` | `GameState` (v19) and everything in it |
 | `src/engine/balance.ts` | Every tuning number, in one place |
 | `src/engine/phase.ts`, `planProposal.ts`, `planPresets.ts` | Phases, clocks, unlocks; plan proposals and their ready-made ideas |
 | `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Procurement deliveries, storage caps, trait rules |

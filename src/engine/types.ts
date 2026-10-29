@@ -188,6 +188,8 @@ export interface Idea {
   name: string
   description: string
   week: number
+  /** What it was for and what it was called, normalized: the same key is the same idea, whatever Jev says. */
+  key?: string
 }
 
 /** One change an upgrade makes. */
@@ -347,7 +349,7 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 18
+  version: 19
   runId: string
   week: number
   phase: PhaseState
@@ -371,6 +373,8 @@ export interface GameState {
   deliveries: Delivery[]
   /** Ideas accepted so far, for spotting repeats. */
   ideas: Idea[]
+  /** Perks that pay out once a run (Discreet's weeks), once they have. */
+  claimed: string[]
   /** Names of finished upgrades, for the log and the end of a run. */
   upgrades: { name: string; targetId: string; week: number; key?: string }[]
   /** One action a week: a research proposal (not a resource) or a Procurement. */

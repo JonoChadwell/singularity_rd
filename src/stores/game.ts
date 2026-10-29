@@ -17,13 +17,13 @@ import { describeError, logEvent, snapshot, type LogStream } from '@/telemetry'
 
 export type { ProposalInput, Verdict }
 
-const SAVE_KEY = 'singularity-rd/save/v18'
+const SAVE_KEY = 'singularity-rd/save/v19'
 
 function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    if (parsed?.version !== 18) return null
+    if (parsed?.version !== 19) return null
     // Saves from before repeat ideas were tracked.
     parsed.ideas ??= []
     return parsed

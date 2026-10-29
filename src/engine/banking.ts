@@ -130,7 +130,7 @@ export function bankVerdict(current: GameState, v: BankableVerdict, only?: numbe
   if (v.kind === 'storage') recordIdea(state, v.kind, first.name, v.spec.description)
   if (v.kind === 'strategy') {
     const idea = strategyIdea(state, v)
-    recordIdea(state, 'strategy', idea.name, idea.description)
+    recordIdea(state, 'strategy', idea.name, idea.description, idea.key)
   }
   state.decidedThisWeek = true
   let last: Accepted | undefined

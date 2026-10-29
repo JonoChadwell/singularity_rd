@@ -323,8 +323,20 @@ export function repeatQuestion(state: GameState, kind: Idea['kind']): Record<str
   }
 }
 
-/** The earlier idea Jev picked as repeated, or null. */
-export function repeatOf(state: GameState, answers: Record<string, JevAnswer>): string | null {
+/** An idea's key: what it was for and what it was called, ignoring case, spacing and punctuation. */
+export const ideaKey = (target: string, name: string) =>
+  `${target}|${name
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()}`
+
+/**
+ * The earlier idea this one repeats, or null: one of the same kind with the same key (the same
+ * name for the same thing, which Jev doesn't reliably spot), else the one Jev picked.
+ */
+export function repeatOf(state: GameState, answers: Record<string, JevAnswer>, same?: { kind: Idea['kind']; key: string }): string | null {
+  const exact = same && state.ideas.find((idea) => idea.kind === same.kind && idea.key === same.key)
+  if (exact) return exact.name
   const a = answers.repeat
   if (a?.type !== 'choice' || a.choice === 'none') return null
   return state.ideas[Number(a.choice.slice(1))]?.name ?? null
@@ -337,8 +349,8 @@ export function efficiencyLevel(v: Pick<VerdictBase, 'answers' | 'picks' | 'repe
 }
 
 /** Remembers an accepted idea, so later ones can be checked against it. */
-export function recordIdea(state: GameState, kind: Idea['kind'], name: string, description: string) {
-  state.ideas.push({ kind, name, description: description || name, week: state.week })
+export function recordIdea(state: GameState, kind: Idea['kind'], name: string, description: string, key?: string) {
+  state.ideas.push({ kind, name, description: description || name, week: state.week, ...(key ? { key } : {}) })
 }
 
 const pct = (p: number) => `${Math.round(p * 100)}%`

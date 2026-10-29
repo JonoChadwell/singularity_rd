@@ -31,7 +31,7 @@ different one for each take where possible.
 | Perk | Drawback | Effect |
 | --- | --- | --- |
 | Frugal | Costly | Research you propose costs 20% less / 30% more |
-| Discreet | Noisy | +6 / −6 weeks on the Phase 2 clock, once, when it arrives |
+| Discreet | Noisy | +6 / −6 weeks on the Phase 2 clock, once, when it arrives. Discreet pays out once a run: after that no platform is offered it, and Jev isn't asked about it |
 | | Thirsty | Burns 5% of your richest stock (by worth) every week. Running dry costs nothing |
 | Fabricator, Strategist, Inventor, Tinkerer, Deceiver | Butterfingers, Short-sighted, Unimaginative, Clumsy, Honest to a fault | ±50 IQ counted for Procurements, strategies, unit designs and sourcing, unit upgrades, cover |
 
