@@ -720,7 +720,7 @@ async function run(args: string[], slot: string): Promise<number> {
       save.verdict = null
       await log(save.state, 'accept', { kind: v.kind, picks: v.picks, outcome: result.outcome })
       say(result.outcome.kind === 'added' ? `added: ${result.outcome.name}` : `research: ${result.outcome.research.id} needs IQ ${result.outcome.research.minIQ}`)
-      if (v.kind === 'unit' && v.spec.first) say('Next: create some from its starter batch, and give them something to do with `propose strategy`.')
+      if (v.kind === 'unit' && v.spec.first) say('Next: Procure some (a contract or units now), and give them something to do with `propose strategy`.')
       if (v.kind === 'cover') for (const e of save.state.log.slice(-1)) say(`  ${e.text}`)
       if (v.kind === 'plan') {
         say('')

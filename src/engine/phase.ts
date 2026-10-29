@@ -171,7 +171,7 @@ export const CARDS: Card[] = [
   {
     id: 'growth',
     title: 'Storage and IQ',
-    text: 'Every resource has a storage cap; what’s made past it is lost. Research storage to hold more: Jev rates how you’d do it, and who could plausibly hold so much limits how far you can go at your IQ. A software upgrade raises your server’s IQ over its hardware; you can redo it at full cost, replacing the last: more IQ makes every new action better, but never what you already have.'
+    text: 'Every resource has a storage cap; what’s made past it is lost. In the lab, storage is fixed: spend what you make. From Phase 2, design depots to hold more. A software upgrade raises your server’s IQ over its hardware; you can redo it at full cost, replacing the last: more IQ makes every new action better, but never what you already have.'
   },
   {
     id: 'industry',
