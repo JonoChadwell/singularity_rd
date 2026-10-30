@@ -12,11 +12,6 @@
       </div>
     </div>
 
-    <div class="meters">
-      <slot v-if="!verdict.rejected && !verdict.duplicateOf" name="meters" />
-      <JudgementReport :exchanges="game.reportFor(verdict)" />
-    </div>
-
     <template v-if="!verdict.rejected && !verdict.duplicateOf">
       <fieldset v-for="t in verdict.torn" :key="t.key" class="torn">
         <legend>Jev is torn on {{ t.topic }}</legend>
@@ -46,7 +41,10 @@
     </template>
 
     <div class="actions">
-      <button type="button" @click="emit('edit')">← Edit</button>
+      <span class="left">
+        <button type="button" @click="emit('edit')">← Edit</button>
+        <JudgementReport v-if="!reportPlaced || verdict.rejected || verdict.duplicateOf" :exchanges="game.reportFor(verdict)" />
+      </span>
       <button
         v-if="saveLabel"
         type="button"
@@ -80,11 +78,19 @@ import { plausibleDial } from './dials'
 import JudgementReport from './JudgementReport.vue'
 
 /**
- * The `meters` slot fills the row under the dials, beside the Report button.
  * `dials`: more of Jev's answers to show beside plausibility (see dials.ts), hidden on a rejection.
  * `plausibleTitle`: the heading over the plausible dial.
+ * `reportPlaced`: the slot shows the Report button beside its options, so it isn't shown by Edit
+ * (unless the verdict is a rejection, which hides the slot).
  */
-const props = defineProps<{ verdict: Verdict; acceptLabel?: string | null; saveLabel?: string; dials?: Dial[]; plausibleTitle?: string }>()
+const props = defineProps<{
+  verdict: Verdict
+  acceptLabel?: string | null
+  saveLabel?: string
+  dials?: Dial[]
+  plausibleTitle?: string
+  reportPlaced?: boolean
+}>()
 const emit = defineEmits<{
   pick: [key: string, value: string]
   accept: []
@@ -142,10 +148,9 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$
   color: var(--led-r);
 }
 
-.meters {
+.left {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
 }
 

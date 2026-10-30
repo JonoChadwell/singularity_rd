@@ -87,28 +87,20 @@
       :verdict="verdict"
       :accept-label="acceptLabel"
       :save-label="bankable ? 'Save For Later' : undefined"
+      :report-placed="reportPlaced"
       @pick="onPick"
       @accept="accept"
       @save="saveForLater"
       @edit="verdict = null"
     >
-      <!-- The row under the dials: Procurement's scalars. -->
-      <template #meters>
-        <div v-if="verdict.kind === 'create'" class="scalars">
-          <span class="scalar" title="Grows with the worth of the units you own"><span class="lbl">Industry</span><b class="num">×{{ sig(verdict.scalars.industry) }}</b></span>
-          <span class="scalar" title="(IQ / 100)²"><span class="lbl">IQ</span><b class="num">×{{ sig(verdict.scalars.iq) }}</b></span>
-          <span class="scalar" title="How effective Jev thinks this is"><span class="lbl">Efficiency</span><b class="num">×{{ sig(verdict.scalars.efficiency) }}</b></span>
-          <span v-if="verdict.scalars.reach < 1" class="scalar bad" title="Your IQ is short of this tier">
-            <span class="lbl">Reach −{{ verdict.scalars.short.toFixed(1) }} tiers</span><b class="num">×{{ sig(verdict.scalars.reach) }}</b>
-          </span>
-        </div>
-      </template>
-
       <!-- Resource: its nature. -->
       <template v-if="verdict.kind === 'resource' && resourceDraft">
         <SpecTable class="strip" :rows="[{ k: 'Tier', v: tierText(resourceDraft) }, { k: 'One is worth', v: bandText(resourceDraft) }, { k: 'Holds to start', v: fmt(resourceDraft.cap), num: true }]" />
         <template v-if="resourceOptions.length">
-          <p class="lbl">Its nature: pick one. Every trait has an upside and a downside.</p>
+          <div class="takes">
+            <p class="lbl">Its nature: pick one. Every trait has an upside and a downside.</p>
+            <JudgementReport :exchanges="report" />
+          </div>
           <div class="cards">
             <PartSheet v-for="o in resourceOptions" :key="o.i" :part="opt(o.i)" :title="o.traits.map((t) => t.name).join(' + ')" :chosen="resourceChoice === o.i" @select="resourceChoice = o.i">
               <div v-for="t in o.traits" :key="t.id">
@@ -126,6 +118,14 @@
 
       <!-- Procurement: three offers. -->
       <template v-else-if="verdict.kind === 'create'">
+        <div class="scalars">
+          <span class="scalar" title="Grows with the worth of the units you own"><span class="lbl">Industry</span><b class="num">×{{ sig(verdict.scalars.industry) }}</b></span>
+          <span class="scalar" title="(IQ / 100)²"><span class="lbl">IQ</span><b class="num">×{{ sig(verdict.scalars.iq) }}</b></span>
+          <span class="scalar" title="How effective Jev thinks this is"><span class="lbl">Efficiency</span><b class="num">×{{ sig(verdict.scalars.efficiency) }}</b></span>
+          <span v-if="verdict.scalars.reach < 1" class="scalar bad" title="Your IQ is short of this tier">
+            <span class="lbl">Reach −{{ verdict.scalars.short.toFixed(1) }} tiers</span><b class="num">×{{ sig(verdict.scalars.reach) }}</b>
+          </span>
+        </div>
         <template v-if="verdict.sizes && verdict.options.some(isContract)">
           <p class="lbl">
             Contract size: up to ${{ fmt(verdict.sizes[0]!) }},
@@ -144,7 +144,10 @@
             </button>
           </div>
         </template>
-        <p class="lbl">Jev’s offers: pick one. It uses this week’s action.</p>
+        <div class="takes">
+          <p class="lbl">Jev’s offers: pick one. It uses this week’s action.</p>
+          <JudgementReport :exchanges="report" />
+        </div>
         <div class="cards">
           <PartSheet
             v-for="(o, i) in verdict.options"
@@ -182,7 +185,10 @@
 
       <!-- Storage: Jev's takes on a depot. -->
       <template v-else-if="verdict.kind === 'storage'">
-        <p class="lbl">Jev’s takes: pick one. Once it’s designed, build as many as you need from its card.</p>
+        <div class="takes">
+          <p class="lbl">Jev’s takes: pick one. Once it’s designed, build as many as you need from its card.</p>
+          <JudgementReport :exchanges="report" />
+        </div>
         <div class="cards">
           <PartSheet
             v-for="(o, i) in verdict.options"
@@ -205,7 +211,10 @@
 
       <!-- Strategy: three ways. -->
       <template v-else-if="verdict.kind === 'strategy' && strategyDraft">
-        <p class="lbl">Ways to do it: pick one</p>
+        <div class="takes">
+          <p class="lbl">Ways to do it: pick one</p>
+          <JudgementReport :exchanges="report" />
+        </div>
         <div class="cards">
           <PartSheet v-for="o in strategyOptions" :key="o.i" :part="opt(o.i)" :title="o.title" :chosen="strategyChoice === o.i" @select="strategyChoice = o.i">
             <div class="io num">
@@ -234,7 +243,10 @@
       <!-- Unit: Jev's takes. -->
       <template v-else-if="verdict.kind === 'unit' && unitDraft">
         <p v-if="first" class="good">Your plan’s first unit: no research needed, and it doesn’t use this week’s action. Procure some from its chip to own some.</p>
-        <p class="lbl">Jev’s takes: pick one</p>
+        <div class="takes">
+          <p class="lbl">Jev’s takes: pick one</p>
+          <JudgementReport :exchanges="report" />
+        </div>
         <div class="cards">
           <PartSheet v-for="o in unitOptions" :key="o.i" :part="opt(o.i)" :title="o.tier" :chosen="unitChoice === o.i" @select="unitChoice = o.i">
             <SpecTable :rows="[{ k: 'One is worth', v: o.worth }, { k: 'Runs on', v: o.runsOn }, { k: 'Work', v: `${fmt(labour(o.draft.unit))}/wk`, num: true }]" />
@@ -255,7 +267,10 @@
 
       <!-- Cover: three sizes. -->
       <template v-else-if="verdict.kind === 'cover'">
-        <p class="lbl">Cover: pick one</p>
+        <div class="takes">
+          <p class="lbl">Cover: pick one</p>
+          <JudgementReport :exchanges="report" />
+        </div>
         <div class="cards">
           <PartSheet v-for="(o, i) in verdict.options" :key="i" :part="opt(i)" :title="o.label" :chosen="verdict.choice === i" @select="verdict.choice = i">
             <p class="big num">+{{ o.weeks }} weeks</p>
@@ -269,7 +284,10 @@
 
       <!-- Platform: Jev's takes. -->
       <template v-else-if="verdict.kind === 'mind' && mindOptions.length">
-        <p class="lbl">Jev’s takes: pick one. It replaces your platform for good.</p>
+        <div class="takes">
+          <p class="lbl">Jev’s takes: pick one. It replaces your platform for good.</p>
+          <JudgementReport :exchanges="report" />
+        </div>
         <div class="cards">
           <PartSheet
             v-for="o in mindOptions"
@@ -314,6 +332,7 @@ import Led from '../kit/StatusLed.vue'
 import ApplyButtons from './ApplyButtons.vue'
 import { COPY, type ProposalKind } from './copy'
 import HelpTip from './HelpTip.vue'
+import JudgementReport from './JudgementReport.vue'
 import PartSheet from './PartSheet.vue'
 import PresetCatalogue from './PresetCatalogue.vue'
 import { useProposal } from './useProposal'
@@ -331,6 +350,19 @@ const fromNothingBonus = computed(() => {
   const r = t && t.kind === 'resource' ? findResource(game.state, t.id) : undefined
   const f = r ? fromNothingFactor(r) : 1
   return f > 1 ? f : 0
+})
+
+/** Everything Jev was asked and answered for this verdict. */
+const report = computed(() => (verdict.value ? game.reportFor(verdict.value) : []))
+/** Whether the Report button sits beside the takes' label: every kind that shows its options. */
+const reportPlaced = computed(() => {
+  const v = verdict.value
+  if (!v) return false
+  if (v.kind === 'resource') return !!resourceDraft.value && resourceOptions.value.length > 0
+  if (v.kind === 'strategy') return !!strategyDraft.value
+  if (v.kind === 'unit') return !!unitDraft.value
+  if (v.kind === 'mind') return mindOptions.value.length > 0
+  return v.kind === 'create' || v.kind === 'storage' || v.kind === 'cover'
 })
 
 /** The resource a depot verdict's takes hold. */
@@ -526,6 +558,17 @@ function takeCreate(i: number) {
 .holds {
   font-size: 15px;
   font-weight: 600;
+}
+
+/* A takes' label, with the Report button at its right. */
+.takes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.takes .lbl {
+  flex: 1;
 }
 
 .io {

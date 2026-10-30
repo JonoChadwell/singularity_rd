@@ -14,9 +14,6 @@
       <strong>replaces</strong> that +{{ redo.iq }}; it doesn’t add to it. Each option’s IQ is the hardware plus its new size, at full cost.
     </p>
 
-    <div v-if="offer" class="meters">
-      <JudgementReport :exchanges="game.reportFor(offer)" />
-    </div>
     <div v-if="offer" class="cards">
       <PartSheet v-for="(o, i) in offer.options" :key="o.key" :part="`OPT-${String.fromCharCode(65 + i)}`" :title="o.name">
         <p>
@@ -39,6 +36,7 @@
       </PartSheet>
     </div>
     <div v-if="offer" class="actions">
+      <JudgementReport :exchanges="game.reportFor(offer)" />
       <button type="button" class="primary" :disabled="game.busy" title="Banks every option to the Research tab, for one action" @click="choose()">
         Save For Later
       </button>
@@ -163,9 +161,9 @@ function choose(index?: number, now = false) {
   color: var(--ink-2);
 }
 
-.actions,
-.meters {
+.actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
 }
 </style>

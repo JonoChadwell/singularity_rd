@@ -131,10 +131,6 @@ async function copy() {
 </script>
 
 <style scoped>
-.report {
-  margin-left: auto;
-}
-
 .judgement {
   width: min(860px, calc(100vw - 24px));
   max-height: calc(100vh - 32px);
