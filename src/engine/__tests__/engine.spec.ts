@@ -1133,6 +1133,19 @@ describe('storage', () => {
     expect(yard.rejected).toMatch(/could hold Steel/)
   })
 
+  it('holds more per dollar the bigger it is, and less when a lower tier than what it holds', async () => {
+    const s = world()
+    const v = await drum(s)
+    const holds = (band: number) => v.options.find((o) => o.band === band)!.holds
+    expect(holds(2)).toBe(D)
+    expect(holds(3)).toBe(B.nice(B.UNIT_VALUE[3]![1] * B.DEPOT_SCALE[3]!))
+    expect(holds(1)).toBe(B.nice(B.UNIT_VALUE[1]![1] * B.DEPOT_SCALE[1]!))
+    // A basic drum for tier 2 Steel still works, two tiers short.
+    findResource(s, 'steel')!.tier = 2
+    const low = await drum(s)
+    expect(low.options[0]).toMatchObject({ tier: 0, band: 2, holds: B.nice(D * B.TIER_PENALTY[2]!) })
+  })
+
   it('is research that adds a depot, built from its card as needed, with nothing to pay or lose each week', async () => {
     let s = world()
     findResource(s, MONEY_ID)!.amount = 1e7

@@ -174,9 +174,14 @@ one adds `holds.amount` of its resource to the cap.
 - **Jev also judges** `value` (what one is worth, `UNIT_VALUE`), `tier` (how advanced, `UNIT_TIERS`),
   `parts` (what one is built from, never what it stores), the icon, who pays for the design, Jev's alarm, and `same_as`
   against the resource's other depots.
+- **Economy of scale.** What a depot holds is then multiplied by `DEPOT_SCALE`, by its value band:
+  ×0.8 for a toolbox, 0.9 a bicycle, 1 a car, 1.25 a truck, 1.5 a factory line, 2 a city.
+- **Reaching up.** A depot a lower tier than what it holds still works, but holds less: the standard
+  tier penalty (`TIER_PENALTY`: ×0.5, 0.2, 0.07, 0.02 for one to four tiers short), so a basic
+  shelf of tier 4 nanobots holds a fiftieth as much.
 - **Up to three takes**, Jev's own first: the same depot at the sizes Jev weighed, each holding
-  its worth times the ratio, so a small one is as good a deal, only built in more pieces. Each
-  card shows its tier and how much one holds, not its worth or the ceiling. Once designed, the
+  its worth times the ratio and the factors above. A small one is nearly as good a deal, only
+  built in more pieces. Each card shows its tier and how much one holds, not its worth or the ceiling. Once designed, the
   depot's chip shows how many more it takes to hold the **target**, and its "enough" button builds
   that many. The target is worked out,
   never typed: the dearest waiting cost in the resource (the goal included), else

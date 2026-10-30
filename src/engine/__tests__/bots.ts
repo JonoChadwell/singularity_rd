@@ -173,12 +173,14 @@ export function depotRatio(): JevAnswer {
 }
 
 /**
- * Fake Jev's answers for a typical depot for a resource: tier 0, worth a car, holding about ten
- * times that, built from the most plentiful tier 0 stock (a player picks what they can spare).
+ * Fake Jev's answers for a typical depot for a resource: its own tier (a lower one holds far
+ * less), worth a car, holding about ten times that, built from the most plentiful tier 0 stock
+ * (a player picks what they can spare).
  */
-export function depotAnswers(s: GameState): Overrides {
+export function depotAnswers(s: GameState, resourceId: string): Overrides {
+  const tier = findResource(s, resourceId)?.tier ?? 0
   const pool = s.resources.filter((x) => x.tier === 0).sort((a, b) => b.amount * b.value - a.amount * a.value)
-  return { value: score(DEPOT_BOT_BAND), tier: score(0), ratio: depotRatio(), ...(pool[0] ? { parts: choice(pool[0].id) } : {}) }
+  return { value: score(DEPOT_BOT_BAND), tier: score(tier), ratio: depotRatio(), ...(pool[0] ? { parts: choice(pool[0].id) } : {}) }
 }
 
 /**
@@ -197,7 +199,7 @@ export async function depotIfShort(s: GameState, resourceId: string, need: numbe
   }
   const waiting = s.research.some((x) => x.effect.kind === 'depot' && x.effect.unit.holds?.resourceId === resourceId)
   if (s.proposedThisWeek || waiting) return null
-  const v = await judgeDepot(s, new FakeJudge({ ...TYPICAL, ...depotAnswers(s), ...answers }), { resourceId, name: fresh('Warehouse'), description: '' })
+  const v = await judgeDepot(s, new FakeJudge({ ...TYPICAL, ...depotAnswers(s, resourceId), ...answers }), { resourceId, name: fresh('Warehouse'), description: '' })
   if (v.rejected || !v.options.length) return null
   v.choice = 0
   return acceptDepot(s, v).state

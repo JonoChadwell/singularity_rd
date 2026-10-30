@@ -275,6 +275,11 @@ export const DEPOT_RATIO: [string, number][] = [
   ['Cheap: worth less than what it holds', 3],
   ['Very Cheap: worth far less than what it holds', 10]
 ]
+/**
+ * Economy of scale: what a depot holds is multiplied by this, by its UNIT_VALUE band. A toolbox
+ * holds a little less per dollar than a car-sized store, and a city-sized one twice as much.
+ */
+export const DEPOT_SCALE = [0.8, 0.9, 1, 1.25, 1.5, 2]
 /** With no ceiling (Phase 3), a depot's build contract allows this many. */
 export const DEPOT_OPEN = 1e9
 /** With no waiting cost too big to hold, a depot is sized for this many weeks of what you make. */

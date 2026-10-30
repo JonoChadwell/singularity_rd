@@ -3,7 +3,7 @@ import * as B from './balance'
 import { ceilingLabel, storageRoom } from './ceilings'
 import { previewWeek } from './economy'
 import { newUnit } from './initialState'
-import { capOf, depotsFor, findResource, fmt, makeId } from './model'
+import { capOf, depotsFor, findResource, fmt, makeId, tierFactor } from './model'
 import { lockReason } from './phase'
 import {
   addResearch,
@@ -188,9 +188,10 @@ export async function judgeDepot(state: GameState, judge: Judge, raw: DepotSpec)
 
 /**
  * Up to three takes, Jev's own first: the same kind of depot at the sizes Jev weighed. Each holds
- * its worth times Jev's ratio, so a smaller one is as good a deal, only built in more pieces, and
- * can be built from stock that a big one's parts wouldn't fit in. Each says how many it takes to
- * hold the target.
+ * its worth times Jev's ratio, cut if the depot is a lower tier than what it holds (as for any
+ * unit), and scaled by its size: bigger depots hold a little more per dollar (DEPOT_SCALE). A
+ * smaller one can be built from stock that a big one's parts wouldn't fit in. Each says how many
+ * it takes to hold the target.
  */
 export function depotOptions(state: GameState, v: Pick<DepotVerdict, 'answers' | 'picks' | 'spec' | 'target' | 'risk' | 'plausibility' | 'bar'>): DepotOption[] {
   const r = findResource(state, v.spec.resourceId)!
@@ -204,9 +205,12 @@ export function depotOptions(state: GameState, v: Pick<DepotVerdict, 'answers' |
   const pay = payerPerTake(v.answers, chosen.length).map((id) => (id === r.id ? undefined : id))
   const room = Math.max(0, v.target.amount - capOf(state, r))
   const risk = tracedRisk(r, v.risk)
+  // A lower-tier depot still works, just less well: the standard penalty for reaching up.
+  const reach = tierFactor(tier, r.tier)
   return chosen.map((band, i) => {
     const value = B.pick(B.UNIT_VALUE, band)[1]
-    const each = B.nice(((perDollar * value) / Math.max(1e-9, r.value)) * capFactor(r) * expansionFactor(r))
+    const scale = B.DEPOT_SCALE[band] ?? 1
+    const each = B.nice(((perDollar * value) / Math.max(1e-9, r.value)) * capFactor(r) * expansionFactor(r) * reach * scale)
     const pool = rankedIds(v.answers, 'parts', partsFor(state, r, tier))
     const parts = priceParts(state, pool.slice(0, B.PARTS_BY_TIER[tier] ?? 1), value)
     const needed = Math.ceil(room / Math.max(1e-9, each) - 1e-9)
