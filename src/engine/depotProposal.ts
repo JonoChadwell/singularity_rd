@@ -178,11 +178,16 @@ export async function judgeDepot(state: GameState, judge: Judge, raw: DepotSpec)
     ceilingLabel: ceilingLabel(r.ceiling),
     room: storageRoom(state, r)
   }
-  v.options = depotOptions(state, v)
+  // A depot that can't hold one whole unit is no depot: that take is dropped, and with none left,
+  // the player is sent back to propose another.
+  v.options = depotOptions(state, v).filter((o) => o.holds >= 1)
   gate(v, `Jev doesn’t think ${spec.name} could hold ${r.name}`, {
     key: 'same_as',
     names: Object.fromEntries(others.map((u) => [u.id, u.name]))
   })
+  if (!v.rejected && !v.duplicateOf && !v.options.length) {
+    v.rejected = `Even the biggest ${spec.name} Jev weighed would hold less than one ${r.name}.`
+  }
   return v
 }
 

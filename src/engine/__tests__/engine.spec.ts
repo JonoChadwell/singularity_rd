@@ -1146,6 +1146,21 @@ describe('storage', () => {
     expect(low.options[0]).toMatchObject({ tier: 0, band: 2, holds: B.nice(D * B.TIER_PENALTY[2]!) })
   })
 
+  it('drops a take that would hold less than one, and with none left, sends you back', async () => {
+    const s = world()
+    // At $1,000 a Steel, a bicycle-sized drum would hold 0.59: only the car and truck sizes are offered.
+    findResource(s, 'steel')!.value = 1000
+    const some = await drum(s)
+    expect(some.rejected).toBeNull()
+    expect(some.options.map((o) => o.band)).toEqual([2, 3])
+    // At $10M, none of them holds one.
+    findResource(s, 'steel')!.value = 1e7
+    const none = await drum(s)
+    expect(none.options).toEqual([])
+    expect(none.rejected).toMatch(/would hold less than one Steel/)
+    expect(() => acceptDepot(s, none)).toThrow(/Not accepted/)
+  })
+
   it('is research that adds a depot, built from its card as needed, with nothing to pay or lose each week', async () => {
     let s = world()
     findResource(s, MONEY_ID)!.amount = 1e7

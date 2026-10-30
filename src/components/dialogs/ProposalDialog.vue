@@ -199,6 +199,9 @@
             @select="verdict.choice = i"
           >
             <p class="holds">Each holds <span class="num">{{ fmt(o.holds) }}</span> {{ stored?.icon }} {{ stored?.name }}</p>
+            <p v-if="stored && tierFit(o.tier, stored.tier)">
+              <span class="chip bad" :title="`A lower tier than ${stored.name}, so it holds less`">{{ tierFit(o.tier, stored.tier)!.text }}</span>
+            </p>
             <p class="muted">Each built from {{ describeFlows(game.state, o.parts) }}.</p>
             <p class="muted">{{ researchText(o) }}</p>
             <p :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</p>

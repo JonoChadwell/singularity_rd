@@ -178,7 +178,10 @@ one adds `holds.amount` of its resource to the cap.
   ×0.8 for a toolbox, 0.9 a bicycle, 1 a car, 1.25 a truck, 1.5 a factory line, 2 a city.
 - **Reaching up.** A depot a lower tier than what it holds still works, but holds less: the standard
   tier penalty (`TIER_PENALTY`: ×0.5, 0.2, 0.07, 0.02 for one to four tiers short), so a basic
-  shelf of tier 4 nanobots holds a fiftieth as much.
+  shelf of tier 4 nanobots holds a fiftieth as much. Its card says so ("Struggling", "Far out of
+  its depth", "Hopeless").
+- **At least one.** A take that would hold less than one of the resource isn't offered. With none
+  left, the proposal is rejected and the player proposes another depot.
 - **Up to three takes**, Jev's own first: the same depot at the sizes Jev weighed, each holding
   its worth times the ratio and the factors above. A small one is nearly as good a deal, only
   built in more pieces. Each card shows its tier and how much one holds, not its worth or the ceiling. Once designed, the
