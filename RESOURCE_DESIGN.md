@@ -163,10 +163,11 @@ one adds `holds.amount` of its resource to the cap.
 - **Fit, not cleverness.** Jev's `plausible` question asks whether the place suits the resource:
   the kind of space, conditions and security it needs. The wrong kind of place fails, however
   inventive (a yard won't hold Encoded Transmissions). There is no efficiency question.
-- **Cheap or dear next to its contents.** Jev's `ratio` question asks whether the depot is
-  expensive next to the resource it holds, or cheap (`DEPOT_RATIO`, from "costs ten times its
-  contents" to "holds a million times what it costs"). A depot holds its own worth times that, in
-  the resource: a scrapyard is dear next to scrap, a drum is next to nothing next to nanobots. Cap
+- **Cheap or dear next to its contents.** Jev's `ratio` question compares the value of one depot
+  with the value of what it can hold (`DEPOT_RATIO`: Expensive, Similar, Cheap or Very Cheap). A
+  depot holds its own worth times ½, 1, 3 or 10 of the resource: a scrapyard is dear next to scrap,
+  a drum is cheap next to nanobots. For balance it never holds more than ten times its worth; an
+  older scale went up to a million times, and turned a $650 shelf into room for 1.3B Scrap Metal. Cap
   traits (Renewable, Liquid) and expansion traits (Cryogenic, Contraband) scale it. Asking for a
   count failed: Jev judges an abstract unit's size badly (it put ten thousand Scrap Steel, $5k of
   it, in a $35k scrapyard). Jev's API allows at most ten rungs on a score.

@@ -265,19 +265,15 @@ export const STARTING_STORAGE_WORTH = [2e5, 8e4, 2e4, 0]
  * How dear a depot is next to what it holds, Jev's realistic judgement: [label, worth of the
  * contents ÷ worth of the depot]. A depot holds its own worth times this, in the resource. Asked as
  * a ratio because Jev judges an abstract unit's size badly (it put ten thousand Scrap Steel, $5k
- * of it, in a $35k scrapyard), but knows a scrapyard is dear next to scrap and a drum is next to
- * nothing next to nanobots.
+ * of it, in a $35k scrapyard), but knows a scrapyard is dear next to scrap and a drum is cheap
+ * next to nanobots. For balance, no depot holds more than ten times its worth: the old top rung
+ * (a million times) turned a $650 shelf into room for 1.3B Scrap Metal.
  */
 export const DEPOT_RATIO: [string, number][] = [
-  ['Far dearer than what it holds: it costs ten times its contents', 0.1],
-  ['Dearer than what it holds: it costs about three times its contents', 0.3],
-  ['About as dear as what it holds', 1],
-  ['Cheap: it holds about three times what it costs', 3],
-  ['Cheap: it holds about ten times what it costs', 10],
-  ['Very cheap: it holds about thirty times what it costs', 30],
-  ['Very cheap: it holds about a hundred times what it costs', 100],
-  ['Almost free: it holds about a thousand times what it costs', 1000],
-  ['Next to nothing: it holds a million times what it costs, or more', 1e6]
+  ['Expensive: worth more than what it holds', 0.5],
+  ['Similar: worth about the same as what it holds', 1],
+  ['Cheap: worth less than what it holds', 3],
+  ['Very Cheap: worth far less than what it holds', 10]
 ]
 /** With no ceiling (Phase 3), a depot's build contract allows this many. */
 export const DEPOT_OPEN = 1e9

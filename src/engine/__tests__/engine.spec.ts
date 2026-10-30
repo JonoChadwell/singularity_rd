@@ -1099,7 +1099,7 @@ describe('storage', () => {
   })
 
   /** A drum for Steel, judged: worth a car ($35k), and about as dear as what it holds (35,000 Steel at $1). */
-  const drum = (s: GameState, answers = {}) => judgeDepot(s, new FakeJudge({ value: score(2), ratio: score(2), tier: score(0), ...answers }), spec)
+  const drum = (s: GameState, answers = {}) => judgeDepot(s, new FakeJudge({ value: score(2), ratio: score(1), tier: score(0), ...answers }), spec)
   /** What one drum holds. */
   const D = 35_000
 
@@ -1116,7 +1116,7 @@ describe('storage', () => {
     const s = world()
     // Waiting research that needs a million Steel: that's what to hold.
     s.research.push({ id: 'big', name: 'Big Thing', description: '', icon: '', minIQ: 100, cost: [{ resourceId: 'steel', amount: 1e6 }], effect: { kind: 'cover', weeks: 1 }, proposedWeek: 1 })
-    const judge = new FakeJudge({ value: score(2), ratio: score(2), tier: score(0) })
+    const judge = new FakeJudge({ value: score(2), ratio: score(1), tier: score(0) })
     const v = await judgeDepot(s, judge, spec)
     expect(judge.calls).toHaveLength(1)
     // Fit and realism, not cleverness: no efficiency question.

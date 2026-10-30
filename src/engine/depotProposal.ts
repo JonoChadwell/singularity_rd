@@ -134,8 +134,8 @@ export async function judgeDepot(state: GameState, judge: Judge, raw: DepotSpec)
     ratio: {
       type: 'score',
       instructions:
-        `Is one ${spec.name} expensive next to the ${r.name} it holds, or cheap? Compare what one costs with what the ${r.name} ` +
-        `in it is worth. One ${r.name} is worth about $${fmt(r.value)}: think about how much room that much of it takes, and what keeping it takes.`,
+        `Is one ${spec.name} expensive next to the ${r.name} it holds, or cheap? ` +
+        `Compare the value of one ${spec.name} with the value of the ${r.name} it can hold.`,
       criteria: scale(B.DEPOT_RATIO)
     },
     value: {
