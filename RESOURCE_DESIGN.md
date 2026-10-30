@@ -176,7 +176,9 @@ one adds `holds.amount` of its resource to the cap.
   against the resource's other depots.
 - **Up to three takes**, Jev's own first: the same depot at the sizes Jev weighed, each holding
   its worth times the ratio, so a small one is as good a deal, only built in more pieces. Each
-  shows how many it takes to hold the **target** and their parts' worth. The target is worked out,
+  card shows its tier and how much one holds, not its worth or the ceiling. Once designed, the
+  depot's chip shows how many more it takes to hold the **target**, and its "enough" button builds
+  that many. The target is worked out,
   never typed: the dearest waiting cost in the resource (the goal included), else
   `DEPOT_TARGET_WEEKS` (4) weeks of what you make, else ten times the room you have, never past
   the ceiling.

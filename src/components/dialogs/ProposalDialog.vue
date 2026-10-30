@@ -92,7 +92,7 @@
       @save="saveForLater"
       @edit="verdict = null"
     >
-      <!-- The row under the dials: Procurement's scalars, a depot's limits. -->
+      <!-- The row under the dials: Procurement's scalars. -->
       <template #meters>
         <div v-if="verdict.kind === 'create'" class="scalars">
           <span class="scalar" title="Grows with the worth of the units you own"><span class="lbl">Industry</span><b class="num">×{{ sig(verdict.scalars.industry) }}</b></span>
@@ -100,14 +100,6 @@
           <span class="scalar" title="How effective Jev thinks this is"><span class="lbl">Efficiency</span><b class="num">×{{ sig(verdict.scalars.efficiency) }}</b></span>
           <span v-if="verdict.scalars.reach < 1" class="scalar bad" title="Your IQ is short of this tier">
             <span class="lbl">Reach −{{ verdict.scalars.short.toFixed(1) }} tiers</span><b class="num">×{{ sig(verdict.scalars.reach) }}</b>
-          </span>
-        </div>
-        <div v-else-if="verdict.kind === 'storage'" class="scalars">
-          <span class="scalar" title="How many Jev thinks could exist in this phase, judged when the resource was added">
-            <span class="lbl">Can exist</span><b class="num">{{ verdict.room === Infinity ? 'No limit' : `~${verdict.ceilingLabel}` }}</b>
-          </span>
-          <span class="scalar" :title="`What you're storing towards: ${verdict.target.why}`">
-            <span class="lbl">To hold</span><b class="num">{{ fmt(verdict.target.amount) }}</b>
           </span>
         </div>
       </template>
@@ -196,13 +188,11 @@
             v-for="(o, i) in verdict.options"
             :key="i"
             :part="opt(i)"
-            :title="`${tierLabel(o.tier)}, $${fmt(UNIT_VALUE[o.band]![1])} each`"
+            :title="tierLabel(o.tier)"
             :chosen="verdict.choice === i"
             @select="verdict.choice = i"
           >
-            <p class="big num">Holds {{ fmt(o.holds) }}</p>
-            <p v-if="o.needed > 0">{{ fmt(o.needed) }} to hold {{ fmt(verdict.target.amount) }} ({{ verdict.target.why }}): about ${{ fmt(o.neededWorth) }} of parts.</p>
-            <p v-else class="muted">You already have room for {{ fmt(verdict.target.amount) }}.</p>
+            <p class="holds">Each holds <span class="num">{{ fmt(o.holds) }}</span> {{ stored?.icon }} {{ stored?.name }}</p>
             <p class="muted">Each built from {{ describeFlows(game.state, o.parts) }}.</p>
             <p class="muted">{{ researchText(o) }}</p>
             <p :class="o.risk ? 'warn' : 'muted'">{{ expansionRiskText(o.risk) }}</p>
@@ -307,7 +297,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { CONTRACT_SCALE, UNIT_VALUE, type CreateTiming } from '@/engine/balance'
+import { CONTRACT_SCALE, type CreateTiming } from '@/engine/balance'
 import { ceilingLabel } from '@/engine/ceilings'
 import { describeOption, iqTag, isContract, optionBlocker, overflowOf, resizeContracts } from '@/engine/createProposal'
 import { bandText, byTier, capOf, describeFlows, efficiencyWord, findResource, findUnit, fmt, labour, tierFit, tierLabel, tierText } from '@/engine/model'
@@ -341,6 +331,12 @@ const fromNothingBonus = computed(() => {
   const r = t && t.kind === 'resource' ? findResource(game.state, t.id) : undefined
   const f = r ? fromNothingFactor(r) : 1
   return f > 1 ? f : 0
+})
+
+/** The resource a depot verdict's takes hold. */
+const stored = computed(() => {
+  const v = verdict.value
+  return v?.kind === 'storage' ? findResource(game.state, v.spec.resourceId) : undefined
 })
 
 const TAG: Record<ProposalKind, string> = {
@@ -524,6 +520,11 @@ function takeCreate(i: number) {
 
 .big {
   font-size: 20px;
+  font-weight: 600;
+}
+
+.holds {
+  font-size: 15px;
   font-weight: 600;
 }
 
