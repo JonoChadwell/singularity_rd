@@ -92,6 +92,26 @@
       @save="saveForLater"
       @edit="verdict = null"
     >
+      <!-- The row under the dials: Procurement's scalars, a depot's limits. -->
+      <template #meters>
+        <div v-if="verdict.kind === 'create'" class="scalars">
+          <span class="scalar" title="Grows with the worth of the units you own"><span class="lbl">Industry</span><b class="num">×{{ sig(verdict.scalars.industry) }}</b></span>
+          <span class="scalar" title="(IQ / 100)²"><span class="lbl">IQ</span><b class="num">×{{ sig(verdict.scalars.iq) }}</b></span>
+          <span class="scalar" title="How effective Jev thinks this is"><span class="lbl">Efficiency</span><b class="num">×{{ sig(verdict.scalars.efficiency) }}</b></span>
+          <span v-if="verdict.scalars.reach < 1" class="scalar bad" title="Your IQ is short of this tier">
+            <span class="lbl">Reach −{{ verdict.scalars.short.toFixed(1) }} tiers</span><b class="num">×{{ sig(verdict.scalars.reach) }}</b>
+          </span>
+        </div>
+        <div v-else-if="verdict.kind === 'storage'" class="scalars">
+          <span class="scalar" title="How many Jev thinks could exist in this phase, judged when the resource was added">
+            <span class="lbl">Can exist</span><b class="num">{{ verdict.room === Infinity ? 'No limit' : `~${verdict.ceilingLabel}` }}</b>
+          </span>
+          <span class="scalar" :title="`What you're storing towards: ${verdict.target.why}`">
+            <span class="lbl">To hold</span><b class="num">{{ fmt(verdict.target.amount) }}</b>
+          </span>
+        </div>
+      </template>
+
       <!-- Resource: its nature. -->
       <template v-if="verdict.kind === 'resource' && resourceDraft">
         <SpecTable class="strip" :rows="[{ k: 'Tier', v: tierText(resourceDraft) }, { k: 'One is worth', v: bandText(resourceDraft) }, { k: 'Holds to start', v: fmt(resourceDraft.cap), num: true }]" />
@@ -114,14 +134,6 @@
 
       <!-- Procurement: three offers. -->
       <template v-else-if="verdict.kind === 'create'">
-        <div class="scalars">
-          <span class="scalar" title="Grows with the worth of the units you own"><span class="lbl">Industry</span><b class="num">×{{ sig(verdict.scalars.industry) }}</b></span>
-          <span class="scalar" title="(IQ / 100)²"><span class="lbl">IQ</span><b class="num">×{{ sig(verdict.scalars.iq) }}</b></span>
-          <span class="scalar" title="How effective Jev thinks this is"><span class="lbl">Efficiency</span><b class="num">×{{ sig(verdict.scalars.efficiency) }}</b></span>
-          <span v-if="verdict.scalars.reach < 1" class="scalar bad" title="Your IQ is short of this tier">
-            <span class="lbl">Reach −{{ verdict.scalars.short.toFixed(1) }} tiers</span><b class="num">×{{ sig(verdict.scalars.reach) }}</b>
-          </span>
-        </div>
         <template v-if="verdict.sizes && verdict.options.some(isContract)">
           <p class="lbl">
             Contract size: up to ${{ fmt(verdict.sizes[0]!) }},
@@ -178,14 +190,6 @@
 
       <!-- Storage: Jev's takes on a depot. -->
       <template v-else-if="verdict.kind === 'storage'">
-        <div class="scalars">
-          <span class="scalar" title="How many Jev thinks could exist in this phase, judged when the resource was added">
-            <span class="lbl">Can exist</span><b class="num">{{ verdict.room === Infinity ? 'No limit' : `~${verdict.ceilingLabel}` }}</b>
-          </span>
-          <span class="scalar" :title="`What you're storing towards: ${verdict.target.why}`">
-            <span class="lbl">To hold</span><b class="num">{{ fmt(verdict.target.amount) }}</b>
-          </span>
-        </div>
         <p class="lbl">Jev’s takes: pick one. Once it’s designed, build as many as you need from its card.</p>
         <div class="cards">
           <PartSheet

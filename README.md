@@ -106,6 +106,9 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
 - **IQ steps.** Both a new platform and a software upgrade add a flat step to your best IQ, never
   more than 100. Two new platforms, each with its software upgrade at full size, take 100 to 500.
 - **Jev is torn** sometimes. The game then shows its top two answers and you pick.
+- **Report**, on any proposal, plan or upgrade result, opens its Judgement Report: the world text
+  and every question Jev was sent, in full, with the odds it gave each answer. It's kept for this
+  page load only, not in the save.
 - **Repeats are worth less.** A new Procurement or strategy with the same name
   for the same thing as one you've already done is a repeat; Jev also checks for the same idea
   under another name. A repeat is one step less effective.

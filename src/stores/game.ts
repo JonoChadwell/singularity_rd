@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, toRaw, watch } from 'vue'
-import { CachedJudge, checkJevHealth, JevJudge, type Judge } from '@/ai/jev'
+import { CachedJudge, checkJevHealth, JevJudge, type JevExchange, type Judge } from '@/ai/jev'
 import * as actions from '@/engine/actions'
 import { alertsFor } from '@/engine/alerts'
 import { runWeek } from '@/engine/cycle'
@@ -50,11 +50,32 @@ export const useGameStore = defineStore('game', () => {
   const loaded = load()
   const state = ref<GameState>(loaded ?? createInitialState())
   const raw = () => toRaw(state.value)
-  let judge: Judge = new CachedJudge(
-    new JevJudge(() => state.value.runId),
-    () => raw().jevCache,
-    () => raw().stats.jevCalls++
-  )
+  /** Jev's exchanges for each verdict or upgrade offer, for its Judgement Report. Not saved. */
+  const reports = new WeakMap<object, JevExchange[]>()
+  /** The exchanges of the judgement running now, if any. */
+  let collecting: JevExchange[] | null = null
+  const cachedJudge = (inner: Judge) =>
+    new CachedJudge(
+      inner,
+      () => raw().jevCache,
+      () => raw().stats.jevCalls++,
+      (x) => collecting?.push(x)
+    )
+  let judge: Judge = cachedJudge(new JevJudge(() => state.value.runId))
+  /** Runs one judgement, filing every Jev exchange it made under what it returns. */
+  async function judged<T extends object>(fn: () => Promise<T>): Promise<T> {
+    const exchanges: JevExchange[] = []
+    collecting = exchanges
+    try {
+      const result = await fn()
+      reports.set(result, exchanges)
+      return result
+    } finally {
+      collecting = null
+    }
+  }
+  /** The Jev exchanges behind a verdict or upgrade offer: none for one judged before this page loaded. */
+  const reportFor = (judgement: object): JevExchange[] => reports.get(toRaw(judgement)) ?? []
   const busy = ref(false)
   const jev = ref<JevStatus>({ kind: 'checking' })
   const lastError = ref('')
@@ -158,7 +179,7 @@ export const useGameStore = defineStore('game', () => {
     lastError.value = ''
     const input = JSON.parse(JSON.stringify(reactiveInput)) as ProposalInput
     try {
-      const verdict = await judgeAny(raw(), judge, input)
+      const verdict = await judged(() => judgeAny(raw(), judge, input))
       state.value.stats.proposals[input.kind]++
       if (verdict.rejected || verdict.duplicateOf) state.value.stats.rejections++
       log('proposal', {
@@ -227,7 +248,7 @@ export const useGameStore = defineStore('game', () => {
     busy.value = true
     lastError.value = ''
     try {
-      const offer = await judgeUpgrade(raw(), judge, target)
+      const offer = await judged(() => judgeUpgrade(raw(), judge, target))
       state.value.stats.proposals.upgrade++
       log('upgrade_offer', { target, options: offer.options.map((o) => ({ key: o.key, p: o.p, minIQ: o.minIQ, cost: o.cost })) })
       return offer
@@ -254,7 +275,7 @@ export const useGameStore = defineStore('game', () => {
 
   /** Swaps the proposal judge (used by tests). Keeps the cache. */
   function setJudge(next: Judge) {
-    judge = new CachedJudge(next, () => raw().jevCache, () => raw().stats.jevCalls++)
+    judge = cachedJudge(next)
   }
 
   function newGame() {
@@ -289,6 +310,7 @@ export const useGameStore = defineStore('game', () => {
     cards,
     projection,
     propose,
+    reportFor,
     accept,
     bank,
     bankOffer,

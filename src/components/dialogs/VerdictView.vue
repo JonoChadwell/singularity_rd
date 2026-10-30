@@ -12,6 +12,11 @@
       </div>
     </div>
 
+    <div class="meters">
+      <slot v-if="!verdict.rejected && !verdict.duplicateOf" name="meters" />
+      <JudgementReport :exchanges="game.reportFor(verdict)" />
+    </div>
+
     <template v-if="!verdict.rejected && !verdict.duplicateOf">
       <fieldset v-for="t in verdict.torn" :key="t.key" class="torn">
         <legend>Jev is torn on {{ t.topic }}</legend>
@@ -72,8 +77,10 @@ import { RISK_BONUS, riskText } from '@/engine/risk'
 import { useGameStore, type Verdict } from '@/stores/game'
 import VerdictDial, { type Dial } from '../kit/VerdictDial.vue'
 import { plausibleDial } from './dials'
+import JudgementReport from './JudgementReport.vue'
 
 /**
+ * The `meters` slot fills the row under the dials, beside the Report button.
  * `dials`: more of Jev's answers to show beside plausibility (see dials.ts), hidden on a rejection.
  * `plausibleTitle`: the heading over the plausible dial.
  */
@@ -133,6 +140,13 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$
 
 .risk {
   color: var(--led-r);
+}
+
+.meters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .torn {

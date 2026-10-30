@@ -14,6 +14,9 @@
       <strong>replaces</strong> that +{{ redo.iq }}; it doesn’t add to it. Each option’s IQ is the hardware plus its new size, at full cost.
     </p>
 
+    <div v-if="offer" class="meters">
+      <JudgementReport :exchanges="game.reportFor(offer)" />
+    </div>
     <div v-if="offer" class="cards">
       <PartSheet v-for="(o, i) in offer.options" :key="o.key" :part="`OPT-${String.fromCharCode(65 + i)}`" :title="o.name">
         <p>
@@ -57,6 +60,7 @@ import Led from '../kit/StatusLed.vue'
 import ApplyButtons from './ApplyButtons.vue'
 import { UPGRADE_HELP } from './copy'
 import HelpTip from './HelpTip.vue'
+import JudgementReport from './JudgementReport.vue'
 import PartSheet from './PartSheet.vue'
 
 const props = defineProps<{ request: InventRequest }>()
@@ -159,7 +163,8 @@ function choose(index?: number, now = false) {
   color: var(--ink-2);
 }
 
-.actions {
+.actions,
+.meters {
   display: flex;
   justify-content: flex-end;
 }

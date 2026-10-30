@@ -199,24 +199,39 @@ function hash(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
 }
 
+/** One question-and-answer round with Jev, exactly as sent and received. */
+export interface JevExchange {
+  purpose: string
+  state: string
+  questions: Questions
+  answers: Record<string, JevAnswer>
+  /** Answered from the save's cache, not a new call. */
+  cached: boolean
+}
+
 /**
  * Remembers every answer, so asking the same thing about the same world never re-rolls Jev.
- * The cache is a plain record so it can live in the save.
+ * The cache is a plain record so it can live in the save. `onAsk` sees every exchange, cached or not.
  */
 export class CachedJudge implements Judge {
   constructor(
     private readonly inner: Judge,
     private readonly cache: () => Record<string, Record<string, JevAnswer>>,
-    private readonly onCall: () => void = () => {}
+    private readonly onCall: () => void = () => {},
+    private readonly onAsk: (exchange: JevExchange) => void = () => {}
   ) {}
 
   async ask<Q extends Questions>(state: string, questions: Q, purpose = ''): Promise<Answers<Q>> {
     const key = hash(`${purpose}\n${state}\n${JSON.stringify(questions)}`)
     const hit = this.cache()[key]
-    if (hit && Object.keys(questions).every((k) => hit[k])) return hit as Answers<Q>
+    if (hit && Object.keys(questions).every((k) => hit[k])) {
+      this.onAsk({ purpose, state, questions, answers: hit, cached: true })
+      return hit as Answers<Q>
+    }
     const answers = await this.inner.ask(state, questions, purpose)
     this.onCall()
     this.cache()[key] = answers
+    this.onAsk({ purpose, state, questions, answers, cached: false })
     return answers
   }
 }
