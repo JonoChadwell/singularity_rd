@@ -396,7 +396,7 @@ export function draftUnit(state: GameState, v: UnitVerdict): UnitDraft {
     tier,
     plausibility: v.plausibility,
     upkeep,
-    ceiling: readCeiling(state, v.answers, 'unit'),
+    ceiling: readCeiling(v.answers, 'unit'),
     traits: ids,
     boosts: param('boosts'),
     byproduct: param('by-product'),

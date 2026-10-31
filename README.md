@@ -98,8 +98,9 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
   one holds, and works out how many it takes to hold what you need. The design is research; then
   you build as many as you like in that box at no action, never past how many of the resource the
   AI could plausibly have in its phase. Depots aren't units: no chip, strategies, upgrades or
-  Procurement. That **ceiling** is set once, when a resource or unit is added, judged again when
-  Phase 2 begins, and gone in Phase 3. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
+  Procurement. That **ceiling** (the "Phase 2 Limit") exists only in Phase 2: judged for
+  everything when Phase 2 begins and for each thing added during it. Phase 1 and Phase 3 have none.
+  Resources of tier 2 and up start with no storage, so holding any takes a depot. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
   When demand outstrips supply, every user gets the same share.
 - **Resources have a nature:** one or two traits from a fixed list of 20, each an upside with a
   downside (Energetic: costs in it are half, but half of what's left is lost each week). A plan's

@@ -259,8 +259,8 @@ export const RISK_SOURCING = 10
  */
 export const PROCURE_NOW_ODDS: [number, number] = [0.2, 0.8]
 
-/** Worth a resource of each tier can be stored to at the start, before depots. Tier 3 up starts with none. */
-export const STARTING_STORAGE_WORTH = [2e5, 8e4, 2e4, 0]
+/** Worth a resource of each tier can be stored to at the start, before depots. Tier 2 up starts with none. */
+export const STARTING_STORAGE_WORTH = [2e5, 8e4, 0]
 /**
  * How dear a depot is next to what it holds, Jev's realistic judgement: [label, worth of the
  * contents ÷ worth of the depot]. A depot holds its own worth times this, in the resource. Asked as
@@ -296,21 +296,6 @@ export const STORAGE_CEILINGS: [string, number][] = [
   'a hundred quadrillion',
   'ten quintillion'
 ].map((label, i) => [label, 10 ** (2 * i + 3)])
-/** How many of a resource the AI could have while stuck in the lab (Phase 1): [label, units]. One rung per power of ten. */
-export const LAB_CEILINGS: [string, number][] = [
-  'ten',
-  'a hundred',
-  'a thousand',
-  'ten thousand',
-  'a hundred thousand',
-  'a million',
-  'ten million',
-  'a hundred million'
-].map((label, i) => [label, 10 ** (i + 1)])
-/** In the lab, no resource's ceiling is worth more than this. */
-export const LAB_CEILING_WORTH = 1e8
-/** In the lab, a resource's ceiling is at least this many times its storage, so it can always grow. */
-export const LAB_CEILING_ROOM = 2
 /** How many of a unit the AI could have at most: [label, units]. One rung per power of ten. */
 export const UNIT_CEILINGS: [string, number][] = [
   'ten',

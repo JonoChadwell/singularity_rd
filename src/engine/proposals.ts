@@ -10,7 +10,7 @@ import {
   type Judge
 } from '@/ai/jev'
 import * as B from './balance'
-import { boundLabCeiling, ceilingQuestion, readCeiling } from './ceilings'
+import { ceilingQuestion, readCeiling } from './ceilings'
 import { makeId, namesInUse, startingCap } from './model'
 import { costMultiplier, priceCost, spendable } from './research'
 import { lockReason } from './phase'
@@ -541,9 +541,8 @@ export function resourceFrom(
     amount: 0,
     cap: B.nice(startingCap(tier, value) * capFactor({ traits })),
     traits,
-    ceiling: readCeiling(state, v.answers, 'resource', `${prefix}ceiling`)
+    ceiling: readCeiling(v.answers, 'resource', `${prefix}ceiling`)
   }
-  boundLabCeiling(state, r)
   return r
 }
 

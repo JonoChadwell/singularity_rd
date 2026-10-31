@@ -20,7 +20,7 @@ import { runWeek } from '../cycle'
 import { previewWeek } from '../economy'
 import { createInitialState, newMind, newResource, newUnit, SERVER_ID } from '../initialState'
 import { newPhase } from '../phase'
-import { ceilingLabel } from '../ceilings'
+import { ceilingLabel, limitName } from '../ceilings'
 import { acceptMind, DEFAULT_SOFTWARE, judgeMind, precheckMind, type MindSpec } from '../mindProposal'
 import {
   affordable,
@@ -1262,21 +1262,14 @@ describe('storage', () => {
     expect(ceilingLabel(r.ceiling)).toBe('5 billion')
   })
 
-  it('asks how many the AI could have in the lab, worth at most 100M and with room to grow', async () => {
+  it('has no ceilings in the lab: storage is fixed there, so Jev isn’t asked', async () => {
     const s = moneyWorld()
     s.phase = { ...newPhase(1, 1), status: 'playing' } as typeof s.phase
     const judge = new FakeJudge({ value: score(3) })
     const v = await judgeResource(s, judge, { name: 'Drug Designs', description: '' })
-    const q = judge.calls[0]!.questions.ceiling as { instructions: string; criteria: string[] }
-    expect(q.instructions).toMatch(/stuck in a supervised research lab/)
-    expect(q.criteria).toHaveLength(B.LAB_CEILINGS.length)
-    // The top rung is a hundred million, but at 700 each only about a hundred thousand fit under the worth cap.
-    expect(findResource(acceptResource(s, v).state, 'drug-designs')!.ceiling).toBe(1e5)
-    // A low rung still leaves the starting storage room to double.
-    const low = await judgeResource(s, new FakeJudge({ value: score(0), ceiling: score(0) }), { name: 'Favours', description: '' })
-    const r = findResource(acceptResource(s, low).state, 'favours')!
-    expect(r.ceiling).toBeGreaterThanOrEqual(2 * r.cap)
-    expect(r.ceiling).toBeLessThan(10 * r.cap)
+    expect(judge.calls[0]!.questions).not.toHaveProperty('ceiling')
+    expect(findResource(acceptResource(s, v).state, 'drug-designs')!.ceiling).toBeNull()
+    expect(limitName(s)).toBeNull()
   })
 
   it('spells ceilings in words', () => {

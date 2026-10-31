@@ -32,7 +32,7 @@ its costs, what's made and used of it, and what it loses or grows each week: see
 [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
 
 - **Starting cap:** `STARTING_STORAGE_WORTH[tier]` divided by the resource's value: $200k at
-  tier 0, $80k at tier 1, $20k at tier 2 and none from tier 3. In the lab, that's all there is.
+  tier 0, $80k at tier 1 and none from tier 2. In the lab, that's all there is.
 - **Overflow:** at the end of each week, anything past the cap is lost and shown as overflow.
 - **Stores trait:** each unit with it adds `STORE_WEEKS` weeks of its labour's worth of storage
   for one resource.
