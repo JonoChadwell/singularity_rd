@@ -149,16 +149,18 @@ datasheets show it as "Can exist".
 
 ## Storage is fixed in the lab
 
-Phase 1 has no "+ Store": the starting caps (`STARTING_STORAGE_WORTH`, $200k of a tier 0
+Phase 1 has no depots (Storage is locked): the starting caps (`STARTING_STORAGE_WORTH`, $200k of a tier 0
 resource, $80k of tier 1) already hold what the lab's goal needs, so storage there was only clicks.
 Playtest 1 showed the old storage expansions at their worst in Phase 2: about 19 of them, each
 re-proposed by hand, to hold the ~70M Nanobots the goal needed.
 
 ## Depots (Phase 2 and after)
 
-"+ Store" answers "what will it take to let me store X?" in one visit. It designs a **depot**: a
-place to keep one resource that the AI can build many of. A depot is a unit with `holds`: each
-one adds `holds.amount` of its resource to the cap.
+**Storage** on a resource's bus plate opens a box beside it, which answers "what will it take to
+let me store X?" in one visit. "+ Design depot" there designs a **depot**: a place to keep one
+resource that the AI can build many of. A depot is not a unit: it lives in `state.depots`
+(`Depot`, save version 20), and each one adds `holds` of its resource to the cap. Depots get no
+chip on the board, so they take no room among the units.
 
 - **Fit, not cleverness.** Jev's `plausible` question asks whether the place suits the resource:
   the kind of space, conditions and security it needs. The wrong kind of place fails, however
@@ -185,7 +187,7 @@ one adds `holds.amount` of its resource to the cap.
 - **Up to three takes**, Jev's own first: the same depot at the sizes Jev weighed, each holding
   its worth times the ratio and the factors above. A small one is nearly as good a deal, only
   built in more pieces. Each card shows its tier and how much one holds, not its worth or the ceiling. Once designed, the
-  depot's chip shows how many more it takes to hold the **target**, and its "enough" button builds
+  Storage box shows how many more it takes to hold the **target**, and its "enough" button builds
   that many. The target is worked out,
   never typed: the dearest waiting cost in the resource (the goal included), else
   `DEPOT_TARGET_WEEKS` (4) weeks of what you make, else ten times the room you have, never past
@@ -195,11 +197,12 @@ rated a reactor hangar tier 4). The design is never paid in the resource it stor
 what a payer can hold.
 - **The design is research**, priced by tier like a unit's (`TIERS`), and uses the week's action.
   Its clock weeks are Jev's alarm × the resource's clock traits. It can be banked like any design.
-- **Building is free of actions.** A designed depot comes with a build contract, "Build <depot>",
-  for as many as it takes to hold all that can exist (`DEPOT_OPEN`, a billion, with no ceiling).
-  Each is made from its parts on its card, which offers "enough" for the target.
-- **Depots only hold.** They have no strategies, no upkeep and no traits, are never idle, can't
-  be Procured, and don't count towards Industry. Their only upgrade is cheaper parts.
+- **Building is free of actions.** Each depot is built from its parts in the Storage box
+  (`buildDepots`), up to as many as it takes to hold all that can exist (`depotLimit`; `DEPOT_OPEN`,
+  a billion, with no ceiling). The box offers "enough" for the target and "max" for what the parts
+  on hand allow. There's no sourcing contract.
+- **Depots only hold.** They have no strategies, upkeep, traits or upgrades, can't be Procured,
+  and don't count towards Industry. Their datasheet only documents them; building happens in the box.
 
 The bots (`econBots.ts`) assume Jev's depot holds about `DEPOT_BOT_RATIO` (10) times its own
 worth of the resource; at that, holding the Phase 2 goal costs 3–30% of

@@ -141,7 +141,6 @@ export function precheckCreate(state: GameState, spec: CreateSpec): string | nul
   if (slot) return slot
   const thing = spec.target.kind === 'unit' ? findUnit(state, spec.target.id) : findResource(state, spec.target.id)
   if (!thing) return state.resources.length ? 'Choose what to make.' : 'Propose a resource first: something to make.'
-  if (spec.target.kind === 'unit' && (thing as UnitType).holds) return 'Depots are built from their card, not Procured.'
   if (spec.name.trim().length < 2) return 'Say what you’re doing, in a few words.'
   if (spec.target.kind === 'unit' && unitRoom(state, thing as UnitType) <= 0) return noRoom(thing as UnitType)
   return null

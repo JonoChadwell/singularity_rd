@@ -1,6 +1,6 @@
 import * as B from './balance'
 import { startingCap } from './model'
-import type { GameState, Mind, Resource, UnitType } from './types'
+import type { Depot, GameState, Mind, Resource, UnitType } from './types'
 
 export function newRunId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -25,13 +25,26 @@ export function newUnit(fields: Pick<UnitType, 'id' | 'name'> & Partial<UnitType
     boosts: null,
     byproduct: null,
     stores: null,
-    holds: null,
     overclocked: false,
     weeksRun: 0,
     pending: [],
     ramp: [],
     assign: {},
     rest: null,
+    ...fields
+  }
+}
+
+/** A depot with every optional field at its default, none built. */
+export function newDepot(fields: Pick<Depot, 'id' | 'name' | 'resourceId' | 'holds'> & Partial<Depot>): Depot {
+  return {
+    description: fields.name,
+    icon: '🏗️',
+    value: 1,
+    tier: 0,
+    plausibility: 1,
+    parts: [],
+    count: 0,
     ...fields
   }
 }
@@ -75,7 +88,7 @@ export function createInitialState(): GameState {
     starting: true
   })
   return {
-    version: 19,
+    version: 20,
     runId: newRunId(),
     week: 1,
     phase: {
@@ -95,6 +108,7 @@ export function createInitialState(): GameState {
     resources: [],
     minds: [server],
     units: [],
+    depots: [],
     sourcing: [],
     strategies: [],
     research: [],

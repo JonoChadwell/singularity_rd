@@ -17,13 +17,13 @@ import { describeError, logEvent, snapshot, type LogStream } from '@/telemetry'
 
 export type { ProposalInput, Verdict }
 
-const SAVE_KEY = 'singularity-rd/save/v19'
+const SAVE_KEY = 'singularity-rd/save/v20'
 
 function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const parsed = raw ? (JSON.parse(raw) as GameState) : null
-    if (parsed?.version !== 19) return null
+    if (parsed?.version !== 20) return null
     // Saves from before repeat ideas were tracked.
     parsed.ideas ??= []
     return parsed
@@ -153,6 +153,8 @@ export const useGameStore = defineStore('game', () => {
 
   const createUnits = (sourcingId: string, n: number) =>
     act('create', { sourcingId, n }, (s) => actions.createUnits(s, sourcingId, n))
+  const buildDepots = (depotId: string, n: number) =>
+    act('build_depots', { depotId, n }, (s) => actions.buildDepots(s, depotId, n))
   const assign = (unitId: string, taskId: string, n: number) =>
     act('assign', { unitId, taskId, n }, (s) => actions.assign(s, unitId, taskId, n))
   const assignRest = (unitId: string, taskId: string | null) =>
@@ -299,6 +301,7 @@ export const useGameStore = defineStore('game', () => {
     checkJev,
     nextWeek,
     createUnits,
+    buildDepots,
     assign,
     assignRest,
     assignAll,

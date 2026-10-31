@@ -2,7 +2,10 @@
   <table class="spec">
     <tbody>
       <tr v-for="(r, i) in rows" :key="i" :class="r.tone" :title="r.title">
-        <th scope="row">{{ r.k }}</th>
+        <th scope="row">
+          <button v-if="r.open" type="button" class="link" @click="r.open">{{ r.k }}</button>
+          <template v-else>{{ r.k }}</template>
+        </th>
         <td :class="{ num: r.num }">{{ r.v }}</td>
       </tr>
     </tbody>
@@ -16,6 +19,8 @@ export interface SpecRow {
   tone?: 'good' | 'warn' | 'bad'
   num?: boolean
   title?: string
+  /** Makes the label a link, e.g. to another datasheet. */
+  open?: () => void
 }
 
 defineProps<{ rows: SpecRow[] }>()

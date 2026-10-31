@@ -2,7 +2,7 @@ import * as B from './balance'
 import { iqShiftOf, type ResearchType } from './computeTraits'
 import { refundOf } from './resourceTraits'
 import { has, TRAITS } from './traits'
-import type { CreateTarget, Delivery, Flow, GameState, Mind, Research, Resource, Sourcing, Strategy, UnitType } from './types'
+import type { CreateTarget, Delivery, Depot, Flow, GameState, Mind, Research, Resource, Sourcing, Strategy, UnitType } from './types'
 
 // ---------------------------------------------------------------- formatting
 
@@ -92,6 +92,8 @@ export const findStrategy = (state: GameState, id: string): Strategy | undefined
   state.strategies.find((s) => s.id === id)
 export const findResearch = (state: GameState, id: string): Research | undefined =>
   state.research.find((r) => r.id === id)
+export const findDepot = (state: GameState, id: string): Depot | undefined =>
+  state.depots.find((d) => d.id === id)
 export const findSourcing = (state: GameState, id: string): Sourcing | undefined =>
   state.sourcing.find((c) => c.id === id)
 /** A unit type's sourcing contracts, oldest first. */
@@ -103,7 +105,7 @@ export const MONEY_ID = 'money'
 /** What a research will add to the world, if it's done. */
 function researchThing(r: Research): { id: string; name: string } | null {
   const e = r.effect
-  return e.kind === 'unit' ? e.unit : e.kind === 'mind' ? e.mind : e.kind === 'strategy' ? e.strategy : null
+  return e.kind === 'unit' ? e.unit : e.kind === 'mind' ? e.mind : e.kind === 'strategy' ? e.strategy : e.kind === 'depot' ? e.depot : null
 }
 
 /** Ids a research will add, for picking fresh ids. */
@@ -125,6 +127,7 @@ export function makeId(state: GameState, name: string): string {
     ...state.resources.map((r) => r.id),
     ...state.minds.map((m) => m.id),
     ...state.units.map((u) => u.id),
+    ...state.depots.map((d) => d.id),
     ...state.strategies.map((s) => s.id),
     ...state.research.map((r) => r.id),
     ...state.sourcing.map((c) => c.id),
@@ -149,6 +152,7 @@ export function namesInUse(state: GameState): Set<string> {
       ...state.resources.map((r) => r.name),
       ...state.minds.map((m) => m.name),
       ...state.units.map((u) => u.name),
+      ...state.depots.map((d) => d.name),
       ...state.strategies.map((s) => s.name),
       ...state.research.map((r) => r.name),
       ...state.research.flatMap((r) => researchThing(r)?.name ?? [])
@@ -196,7 +200,10 @@ export function describeDelivery(state: GameState, d: Delivery): string {
 }
 
 /** The depots that hold a resource. */
-export const depotsFor = (state: GameState, resourceId: string) => state.units.filter((u) => u.holds?.resourceId === resourceId)
+export const depotsFor = (state: GameState, resourceId: string) => state.depots.filter((d) => d.resourceId === resourceId)
+
+/** Room all of a depot design adds, before the ceiling. */
+export const depotRoom = (d: Depot) => d.count * d.holds
 
 /**
  * What a resource can hold: its cap, units that Store it, and its depots. Depots only count up to
@@ -204,12 +211,27 @@ export const depotsFor = (state: GameState, resourceId: string) => state.units.f
  */
 export function capOf(state: GameState, r: Resource): number {
   let cap = r.cap
-  let depots = 0
   for (const u of state.units) {
     if (u.stores === r.id && has(u, 'stores')) cap += (u.count * labour(u) * B.STORE_WEEKS) / Math.max(1e-9, r.value)
-    if (u.holds?.resourceId === r.id) depots += u.count * u.holds.amount
   }
+  const depots = depotsFor(state, r.id).reduce((n, d) => n + depotRoom(d), 0)
   return cap + Math.min(depots, Math.max(0, (r.ceiling ?? Infinity) - cap))
+}
+
+/**
+ * The most of a depot design you may own: as many as it takes to hold all of the resource that can
+ * exist (a billion with no ceiling).
+ */
+export function depotLimit(state: GameState, d: Depot): number {
+  const ceiling = findResource(state, d.resourceId)?.ceiling
+  return ceiling == null ? B.DEPOT_OPEN : Math.max(1, Math.ceil(ceiling / Math.max(1e-9, d.holds)))
+}
+
+/** The most of a depot you can build right now, keeping `reserve` back: its parts, and how many more you may own. */
+export function depotAffordable(state: GameState, d: Depot, reserve: Record<string, number> = {}): number {
+  const per = new Map<string, number>()
+  for (const p of d.parts) per.set(p.resourceId, (per.get(p.resourceId) ?? 0) + p.amount)
+  return Math.min(Math.max(0, depotLimit(state, d) - d.count), mostFrom(state, per, reserve))
 }
 
 /** The cap a new resource of this tier and value starts with. */
@@ -312,12 +334,14 @@ export const unitCap = (state: GameState, unitId: string) =>
 /** Slots left on a contract. */
 export const openSlots = (c: Sourcing) => Math.max(0, c.total - c.used)
 
-/** What you own, at value: the stock you can hold, and every unit (depots too). */
+/** What you own, at value: the stock you can hold, every unit and every depot. */
 export const ownedWorth = (state: GameState) =>
-  state.resources.reduce((n, r) => n + Math.min(r.amount, capOf(state, r)) * r.value, 0) + state.units.reduce((n, u) => n + owned(u) * u.value, 0)
+  state.resources.reduce((n, r) => n + Math.min(r.amount, capOf(state, r)) * r.value, 0) +
+  industryWorth(state) +
+  state.depots.reduce((n, d) => n + d.count * d.value, 0)
 
-/** Worth of every unit you own that works (not depots): what the Industry scalar grows with. */
-export const industryWorth = (state: GameState) => state.units.reduce((n, u) => n + (u.holds ? 0 : owned(u) * u.value), 0)
+/** Worth of every unit you own (depots aren't units): what the Industry scalar grows with. */
+export const industryWorth = (state: GameState) => state.units.reduce((n, u) => n + owned(u) * u.value, 0)
 
 /**
  * The highest tier of unit that makes anything: what your industry can reach without strain. At

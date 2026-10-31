@@ -186,7 +186,7 @@
       <!-- Storage: Jev's takes on a depot. -->
       <template v-else-if="verdict.kind === 'storage'">
         <div class="takes">
-          <p class="lbl">Jev’s takes: pick one. Once it’s designed, build as many as you need from its card.</p>
+          <p class="lbl">Jev’s takes: pick one. Once it’s designed, build as many as you need from Storage on the resource’s bus.</p>
           <JudgementReport :exchanges="report" />
         </div>
         <div class="cards">

@@ -32,7 +32,7 @@ export type Tab = 'board' | 'research' | 'manual' | 'log'
 
 /** A datasheet: everything about one thing, on paper, in the drawer. */
 export type SheetRef =
-  | { kind: 'resource' | 'unit' | 'mind' | 'strategy' | 'research'; id: string; draft?: Resource }
+  | { kind: 'resource' | 'unit' | 'depot' | 'mind' | 'strategy' | 'research'; id: string; draft?: Resource }
   | { kind: 'trait' | 'rtrait' | 'ctrait'; id: string }
   | { kind: 'jev' }
 
@@ -52,6 +52,8 @@ export const useUiStore = defineStore('ui', () => {
   const zoom = ref(1)
   /** The net under the pointer on the board: a resource, unit or strategy id, to light up. */
   const hover = ref<string | null>(null)
+  /** The resource whose Storage box is open beside its bus plate. */
+  const storageOpen = ref<string | null>(null)
 
   const log = (event: string, data: Record<string, unknown>) => useGameStore().logTo('ui', event, data)
 
@@ -84,6 +86,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeSheets() {
     if (sheets.value.length) log('sheet', { kind: null })
     sheets.value = []
+  }
+
+  /** Opens a resource's Storage box, or closes it if it's open. */
+  function toggleStorage(resourceId: string | null) {
+    storageOpen.value = resourceId && storageOpen.value !== resourceId ? resourceId : null
+    if (storageOpen.value) log('storage_box', { resourceId })
   }
 
   function setZoom(z: number) {
@@ -126,7 +134,9 @@ export const useUiStore = defineStore('ui', () => {
       case 'source':
         return openInvent({ kind: 'create', unitId: prompt.unitId })
       case 'storage':
-        return openInvent({ kind: 'storage', resourceId: prompt.resourceId })
+        tab.value = 'board'
+        storageOpen.value = prompt.resourceId
+        return
       case 'research':
         tab.value = 'research'
         return
@@ -145,6 +155,8 @@ export const useUiStore = defineStore('ui', () => {
     sheets,
     zoom,
     hover,
+    storageOpen,
+    toggleStorage,
     openInvent,
     closeInvent,
     openSheet,

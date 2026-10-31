@@ -14,16 +14,7 @@
       </div>
     </section>
 
-    <section v-if="u.holds">
-      <h4>Depot</h4>
-      <p>
-        Each holds {{ fmt(u.holds.amount) }} {{ findResource(game.state, u.holds.resourceId)?.icon }}
-        {{ findResource(game.state, u.holds.resourceId)?.name }}, adding to its storage. Depots don’t work, so they need no
-        strategies or upkeep. Build them from their card.
-      </p>
-    </section>
-
-    <section v-else>
+    <section>
       <h4>Pinout</h4>
       <table v-if="pins.length" class="pinout">
         <thead>
@@ -59,10 +50,8 @@
     </section>
 
     <template #foot>
-      <template v-if="!u.holds">
-        <button class="small" @click="ui.openInvent({ kind: 'strategy', unitId: u.id })">+ Strategy</button>
-        <button class="small" @click="ui.openInvent({ kind: 'create', unitId: u.id })">Procure</button>
-      </template>
+      <button class="small" @click="ui.openInvent({ kind: 'strategy', unitId: u.id })">+ Strategy</button>
+      <button class="small" @click="ui.openInvent({ kind: 'create', unitId: u.id })">Procure</button>
       <button
         class="small"
         :disabled="!!lockReason(game.state, 'unit-upgrade')"

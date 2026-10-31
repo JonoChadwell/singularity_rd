@@ -49,6 +49,13 @@ export function describeState(state: GameState): string {
     'Industry units:',
     ...state.units.map(unitLine),
     '',
+    ...(state.depots.length
+      ? [
+          'Storage depots (places that only hold a resource):',
+          ...state.depots.map((d) => `- ${d.name} (holds ${state.resources.find((r) => r.id === d.resourceId)?.name ?? '?'}): ${d.description}`),
+          ''
+        ]
+      : []),
     'Strategies:',
     ...state.strategies
       .filter((s) => s.kind === 'make')

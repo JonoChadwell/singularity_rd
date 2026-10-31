@@ -22,7 +22,12 @@
       <SpecTable
         :rows="[
           { k: 'To start', v: fmt(r.cap), num: true },
-          ...depotsFor(game.state, r.id).map((u) => ({ k: `${u.icon} ${u.name} ×${fmtCount(u.count)}`, v: `+${fmt(u.count * (u.holds?.amount ?? 0))}`, num: true })),
+          ...depotsFor(game.state, r.id).map((d) => ({
+            k: `${d.icon} ${d.name} ×${fmtCount(d.count)}`,
+            v: `+${fmt(depotRoom(d))}`,
+            num: true,
+            open: () => ui.openSheet({ kind: 'depot', id: d.id }, true)
+          })),
           { k: 'Storage', v: fmt(cap), num: true },
           { k: 'Can exist', v: ceilingLabel(r.ceiling) }
         ]"
@@ -60,7 +65,7 @@
 
     <template v-if="!draft" #foot>
       <button class="small" :disabled="!!lockReason(game.state, 'create')" @click="ui.openInvent({ kind: 'create', outputId: r.id })">+ Procure</button>
-      <button class="small" :disabled="!!lockReason(game.state, 'storage')" @click="ui.openInvent({ kind: 'storage', resourceId: r.id })">+ Store</button>
+      <button class="small" :disabled="!!lockReason(game.state, 'storage')" @click="ui.openInvent({ kind: 'storage', resourceId: r.id })">+ Depot</button>
       <button v-if="!lockReason(game.state, 'strategy')" class="small" @click="ui.openInvent({ kind: 'strategy', outputId: r.id })">+ Strategy</button>
     </template>
   </DataSheet>
@@ -71,7 +76,7 @@ import { computed } from 'vue'
 import type { Resource } from '@/engine/types'
 import { ceilingLabel } from '@/engine/ceilings'
 import { netFlow } from '@/engine/economy'
-import { bandText, capOf, deliveryTiming, depotsFor, findResource, fmt, fmtCount, tierText } from '@/engine/model'
+import { bandText, capOf, deliveryTiming, depotRoom, depotsFor, findResource, fmt, fmtCount, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
 import { resourceTrait, speculativeFactor } from '@/engine/resourceTraits'
 import { useGameStore } from '@/stores/game'

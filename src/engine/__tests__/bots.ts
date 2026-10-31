@@ -1,6 +1,6 @@
 import type { JevAnswer } from '@/ai/jev'
 import * as B from '../balance'
-import { assign, assignAll, createUnits, doResearch, researchBlocker } from '../actions'
+import { assign, assignAll, buildDepots, createUnits, doResearch, researchBlocker } from '../actions'
 import { applyBlocker, applyVerdict } from '../banking'
 import { judgeCover } from '../coverProposal'
 import { acceptCreate, isContract, judgeCreate, optionBlocker } from '../createProposal'
@@ -10,7 +10,7 @@ import { previewWeek } from '../economy'
 import { computeTrait } from '../computeTraits'
 import { acceptMind, judgeMind } from '../mindProposal'
 import { createInitialState, newResource, SERVER_ID } from '../initialState'
-import { affordable, bestIQ, capOf, contractsFor, creatable, currentIQ, depotsFor, findResource, findUnit, MONEY_ID, openSlots, weeklyUse } from '../model'
+import { bestIQ, capOf, contractsFor, creatable, currentIQ, depotAffordable, depotsFor, findResource, findUnit, MONEY_ID, openSlots, weeklyUse } from '../model'
 import { coversLeft, newPhase } from '../phase'
 import { acceptPlan, judgePlan, type PlanSpec } from '../planProposal'
 import { goalOf } from '../projection'
@@ -192,12 +192,11 @@ export async function depotIfShort(s: GameState, resourceId: string, need: numbe
   const r = findResource(s, resourceId)!
   if (capOf(s, r) >= need) return null
   const depot = depotsFor(s, resourceId)[0]
-  if (depot?.holds) {
-    const c = contractsFor(s, depot.id)[0]
-    const n = c ? Math.min(openSlots(c), Math.ceil((need - capOf(s, r)) / depot.holds.amount - 1e-9), affordable(s, c)) : 0
-    return n > 0 ? createUnits(s, c!.id, n) : null
+  if (depot) {
+    const n = Math.min(Math.ceil((need - capOf(s, r)) / depot.holds - 1e-9), depotAffordable(s, depot))
+    return n > 0 ? buildDepots(s, depot.id, n) : null
   }
-  const waiting = s.research.some((x) => x.effect.kind === 'depot' && x.effect.unit.holds?.resourceId === resourceId)
+  const waiting = s.research.some((x) => x.effect.kind === 'depot' && x.effect.depot.resourceId === resourceId)
   if (s.proposedThisWeek || waiting) return null
   const v = await judgeDepot(s, new FakeJudge({ ...TYPICAL, ...depotAnswers(s, resourceId), ...answers }), { resourceId, name: fresh('Warehouse'), description: '' })
   if (v.rejected || !v.options.length) return null
@@ -345,7 +344,7 @@ export function steady(style: Phase2Style): Turn {
     }
     const has = (name: string) => s.strategies.some((x) => x.name === name) || s.research.some((r) => r.name === name)
     const waiting = (kind: string, id?: string) =>
-      s.research.some((r) => r.effect.kind === kind && (!id || (r.effect.kind === 'depot' ? r.effect.unit.holds?.resourceId === id : true)))
+      s.research.some((r) => r.effect.kind === kind && (!id || (r.effect.kind === 'depot' ? r.effect.depot.resourceId === id : true)))
     const strategy = (name: string, outputId: string, unitId: string): ProposalInput => ({
       kind: 'strategy',
       spec: { name, description: '', unitId, outputId }

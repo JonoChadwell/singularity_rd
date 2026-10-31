@@ -1,6 +1,7 @@
 import { it } from 'vitest'
 import { grossIncome, runningNet, worthOf } from '../actionValue'
 import { previewWeek } from '../economy'
+import { newDepot } from '../initialState'
 import { bestIQ, findResource } from '../model'
 import { fleetShape, trackContracts, type ContractRecord } from './econBots'
 import type { GameState } from '../types'
@@ -45,8 +46,14 @@ it.skipIf(!env.PLAYER_LOG)('turns a run log into weekly economy rows', async () 
   const seen = new Map<string, ContractRecord>()
   for (const [week, s] of [...snaps].sort((a, b) => a[0] - b[0])) {
     if (s.phase.n !== 2) continue
-    // Logs from before save version 19 have no depots, and storage expansions instead: count them in the cap.
-    for (const u of s.units) u.holds ??= null
+    // Logs from save version 19 kept depots as units with `holds`; older ones have no depots, and
+    // storage expansions instead: count them in the cap.
+    s.depots ??= []
+    s.units = s.units.filter((u) => {
+      const h = (u as typeof u & { holds?: { resourceId: string; amount: number } | null }).holds
+      if (h) s.depots.push(newDepot({ id: u.id, name: u.name, resourceId: h.resourceId, holds: h.amount, value: u.value, tier: u.tier, count: u.count }))
+      return !h
+    })
     for (const r of s.resources) {
       const old = r as typeof r & { expansions?: { added: number }[] }
       r.cap += (old.expansions ?? []).reduce((n, e) => n + e.added, 0)

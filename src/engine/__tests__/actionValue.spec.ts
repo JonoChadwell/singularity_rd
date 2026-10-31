@@ -4,7 +4,7 @@ import { createUnits } from '../actions'
 import { deliveryStream, fillStream, HORIZON, paybackWeeks, runningNet, valueAt, valueChange, worthOf } from '../actionValue'
 import { acceptCreate, judgeCreate } from '../createProposal'
 import { runWeek } from '../cycle'
-import { createInitialState, newResource, newUnit } from '../initialState'
+import { createInitialState, newDepot, newResource, newUnit } from '../initialState'
 import { baseLabour, findResource, labourOf, MONEY_ID } from '../model'
 import { newPhase } from '../phase'
 import { applyUnitChanges } from '../research'
@@ -67,7 +67,7 @@ describe('action values', () => {
     money.cap = 51_000
     // 3,000 a week made into 1,000 of room: 2,000 overflows. A depot holding a million ends it.
     const after = structuredClone(before)
-    after.units.push(newUnit({ id: 'vault', name: 'Vault', value: 1000, count: 1, holds: { resourceId: MONEY_ID, amount: 1e6 } }))
+    after.depots.push(newDepot({ id: 'vault', name: 'Vault', value: 1000, count: 1, resourceId: MONEY_ID, holds: 1e6 }))
     const v = valueChange(before, after, 'storage', 'Vault')
     expect(v.weekly[0]).toBeCloseTo(2_000)
     expect(played(after) - played(before)).toBeCloseTo(v.weekly[0]!)

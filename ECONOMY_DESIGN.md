@@ -36,11 +36,12 @@ its costs, what's made and used of it, and what it loses or grows each week: see
 - **Overflow:** at the end of each week, anything past the cap is lost and shown as overflow.
 - **Stores trait:** each unit with it adds `STORE_WEEKS` weeks of its labour's worth of storage
   for one resource.
-- **Depots (Phase 2 on):** "+ Store" designs a depot for one resource: Jev judges whether the
-  place suits it and, realistically, how many one holds. Once designed, depots are built from
-  their card at no action, up to the resource's ceiling, and need no upkeep. See "Storage
-  limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md). (Playtest 1 needed about 19 hand-proposed
-  storage expansions to hold the goal; a depot is one design plus Create clicks.)
+- **Depots (Phase 2 on):** Storage on a resource's bus opens a box where you design a depot for it:
+  Jev judges whether the place suits it and, realistically, how many one holds. Once designed,
+  depots are built in that box at no action, up to the resource's ceiling, and need no upkeep.
+  Depots aren't units (no chips, strategies, upgrades or contracts). See "Depots" in
+  [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md). (Playtest 1 needed about 19 hand-proposed storage
+  expansions to hold the goal; a depot is one design plus Build clicks.)
 
 ## Units
 

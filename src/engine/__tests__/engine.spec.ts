@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CachedJudge, type Questions } from '@/ai/jev'
 import * as B from '../balance'
-import { assign, assignRest, createUnits, doResearch, dropResearch, researchBlocker } from '../actions'
+import { assign, assignRest, buildDepots, createUnits, doResearch, dropResearch, researchBlocker } from '../actions'
 import { alertsFor } from '../alerts'
 import {
   acceptCreate,
@@ -27,7 +27,8 @@ import {
   allocation,
   byTier,
   capOf,
-  contractsFor,
+  depotAffordable,
+  depotLimit,
   creatable,
   currentIQ,
   deliveryLeft,
@@ -208,7 +209,7 @@ describe('formatting', () => {
 describe('the start', () => {
   it('has only the Starting Server, and waits for a Phase 1 plan', () => {
     const s = createInitialState()
-    expect(s.version).toBe(19)
+    expect(s.version).toBe(20)
     expect(s.phase).toMatchObject({ n: 1, status: 'planning', deadline: null, goalId: null })
     expect(s.resources).toEqual([])
     expect(s.minds).toHaveLength(1)
@@ -1161,29 +1162,43 @@ describe('storage', () => {
     expect(() => acceptDepot(s, none)).toThrow(/Not accepted/)
   })
 
-  it('is research that adds a depot, built from its card as needed, with nothing to pay or lose each week', async () => {
+  it('is research that adds a depot (not a unit), built as needed at no action, with nothing to pay or lose each week', async () => {
     let s = world()
     findResource(s, MONEY_ID)!.amount = 1e7
     s = acceptDepot(s, await drum(s)).state
     expect(s.research[0]!.effect.kind).toBe('depot')
     s = doResearch(s, s.research[0]!.id)
-    const depot = s.units.find((u) => u.holds)!
-    expect(depot).toMatchObject({ name: 'Steel Drum', count: 0, holds: { resourceId: 'steel', amount: D }, upkeep: [] })
-    // It comes with its build contract, open-ended with no ceiling.
-    const build = contractsFor(s, depot.id)[0]!
-    expect(build).toMatchObject({ name: 'Build Steel Drum', total: B.DEPOT_OPEN })
-    s = createUnits(s, build.id, 3)
+    const depot = s.depots[0]!
+    expect(depot).toMatchObject({ name: 'Steel Drum', count: 0, resourceId: 'steel', holds: D })
+    expect(depot.parts.length).toBeGreaterThan(0)
+    // Not a unit: no chip, contract, strategies, upgrades, Industry or Procurement.
+    expect(s.units).toHaveLength(0)
+    expect(s.sourcing).toHaveLength(0)
+    expect(depotLimit(s, depot)).toBe(B.DEPOT_OPEN)
+    s.proposedThisWeek = false
+    const money = findResource(s, MONEY_ID)!.amount
+    s = buildDepots(s, depot.id, 3)
+    expect(s.proposedThisWeek).toBe(false)
+    expect(s.depots[0]!.count).toBe(3)
+    expect(findResource(s, MONEY_ID)!.amount).toBeLessThan(money)
     const steel = findResource(s, 'steel')!
     expect(capOf(s, steel)).toBe(W + 3 * D)
-    // Depots don't work: never idle, no strategies, no Industry, no Procurement.
-    s.proposedThisWeek = false
-    expect(previewWeek(s).units[depot.id]!.unassigned).toBe(0)
     expect(industryWorth(s)).toBe(0)
-    expect(precheckCreate(s, createSpec({ target: { kind: 'unit', id: depot.id } }))).toMatch(/built from their card/)
-    expect(upgradeCandidates(s, { kind: 'unit', id: depot.id }).every((c) => c.key.startsWith('parts_'))).toBe(true)
+    expect(precheckCreate(s, createSpec({ target: { kind: 'unit', id: depot.id } }))).toMatch(/Choose what to make/)
     steel.amount = W + 3 * D
     const next = runWeek(s)
     expect(findResource(next, 'steel')!.amount).toBe(W + 3 * D)
+  })
+
+  it('builds depots only from parts you have', async () => {
+    let s = world()
+    findResource(s, MONEY_ID)!.amount = 1e7
+    s = doResearch(acceptDepot(s, await drum(s)).state, 'design-steel-drum')
+    const depot = s.depots[0]!
+    for (const p of depot.parts) findResource(s, p.resourceId)!.amount = p.amount * 2
+    expect(depotAffordable(s, depot)).toBe(2)
+    expect(() => buildDepots(s, depot.id, 3)).toThrow(/You need/)
+    expect(buildDepots(s, depot.id, 2).depots[0]!.count).toBe(2)
   })
 
   it('counts depots only up to how many can exist, and refuses once there’s room for that', async () => {
@@ -1191,12 +1206,13 @@ describe('storage', () => {
     findResource(s, MONEY_ID)!.amount = 1e9
     findResource(s, 'steel')!.ceiling = 1e6
     s = doResearch(acceptDepot(s, await drum(s)).state, 'design-steel-drum')
-    const depot = s.units.find((u) => u.holds)!
-    const build = contractsFor(s, depot.id)[0]!
-    // Enough drums to hold the million that can exist.
-    expect(build.total).toBe(Math.ceil(1e6 / D))
-    s = createUnits(s, build.id, Math.ceil(1e6 / D))
+    const depot = s.depots[0]!
+    // Enough drums to hold the million that can exist, and no more.
+    expect(depotLimit(s, depot)).toBe(Math.ceil(1e6 / D))
+    expect(() => buildDepots(s, depot.id, Math.ceil(1e6 / D) + 1)).toThrow(/Only/)
+    s = buildDepots(s, depot.id, Math.ceil(1e6 / D))
     expect(capOf(s, findResource(s, 'steel')!)).toBe(1e6)
+    expect(() => buildDepots(s, depot.id, 1)).toThrow(/already holds all/)
     s.proposedThisWeek = false
     expect(precheckDepot(s, { ...spec, name: 'Silo' })).toMatch(/Only about a million Steel can exist/)
   })

@@ -8,6 +8,7 @@
     <div class="paper">
       <ResourceSheet v-if="top.kind === 'resource'" :id="top.id" :draft="top.draft" :key="`r-${top.id}`" />
       <UnitSheet v-else-if="top.kind === 'unit'" :id="top.id" :key="`u-${top.id}`" />
+      <DepotSheet v-else-if="top.kind === 'depot'" :id="top.id" :key="`d-${top.id}`" />
       <MindSheet v-else-if="top.kind === 'mind'" :id="top.id" :key="`m-${top.id}`" />
       <StrategySheet v-else-if="top.kind === 'strategy'" :id="top.id" :key="`s-${top.id}`" />
       <ResearchSheet v-else-if="top.kind === 'research'" :id="top.id" :key="`w-${top.id}`" />
@@ -20,6 +21,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useUiStore } from '@/stores/ui'
+import DepotSheet from './DepotSheet.vue'
 import JevSheet from './JevSheet.vue'
 import MindSheet from './MindSheet.vue'
 import ResearchSheet from './ResearchSheet.vue'

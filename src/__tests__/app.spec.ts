@@ -8,7 +8,7 @@ import VerdictView from '@/components/dialogs/VerdictView.vue'
 import * as B from '@/engine/balance'
 import type { PayoutOption } from '@/engine/createProposal'
 import { approachValue } from '@/engine/planProposal'
-import { newResource, newUnit, SERVER_ID } from '@/engine/initialState'
+import { newDepot, newResource, newUnit, SERVER_ID } from '@/engine/initialState'
 import { newPhase } from '@/engine/phase'
 import { findResource, MONEY_ID } from '@/engine/model'
 import { useGameStore } from '@/stores/game'
@@ -183,9 +183,42 @@ describe('App', () => {
       game.state.units.push(newUnit({ id: 'bot', name: 'Bot', count: 3, value: 10 }), newUnit({ id: 'new', name: 'Fresh Design', value: 10 }))
       game.state.sourcing.push({ id: 'deal', unitId: 'bot', name: 'Bulk order', description: '', parts: [{ resourceId: MONEY_ID, amount: 10 }], total: 25, used: 3, risky: true })
     })
-    for (const text of ['1,500', '/ 200k', '+ Store', 'Bulk order', '3/25', 'risky', 'Procure', 'you can’t own any until you Procure some']) {
+    for (const text of ['1,500', '/ 200k', 'Storage', 'Bulk order', '3/25', 'risky', 'Procure', 'you can’t own any until you Procure some']) {
       expect(html).toContain(text)
     }
+  })
+
+  it('keeps depots off the board’s chips: Storage on the bus opens a box to build them, and their datasheet only documents', async () => {
+    let game!: Store
+    const setup = (g: Store) => {
+      game = g
+      g.state.resources.push(newResource({ id: MONEY_ID, name: 'Money', amount: 1000 }), newResource({ id: 'steel', name: 'Steel' }))
+      g.state.depots.push(newDepot({ id: 'drum', name: 'Steel Drum', resourceId: 'steel', holds: 500, count: 2, parts: [{ resourceId: MONEY_ID, amount: 100 }] }))
+    }
+    const closed = await render((g, ui) => {
+      setup(g)
+      ui.tab = 'board'
+    })
+    expect(closed).toContain('Storage 1')
+    expect(closed).not.toContain('Steel Drum')
+    expect(closed).not.toContain('data-chip="drum"')
+    const open = await render((g, ui) => {
+      setup(g)
+      ui.tab = 'board'
+      ui.toggleStorage('steel')
+    })
+    for (const text of ['Storage · ', 'Steel Drum', '×2', 'each holds 500', '+1,000', 'Build 1', 'max 10', '+ Design depot']) {
+      expect(open).toContain(text)
+    }
+    game.buildDepots('drum', 3)
+    expect(game.state.depots[0]!.count).toBe(5)
+    expect(findResource(game.state, MONEY_ID)!.amount).toBe(700)
+    const sheet = await render((g, ui) => {
+      setup(g)
+      ui.openSheet({ kind: 'depot', id: 'drum' })
+    })
+    expect(sheet).toContain('About depots')
+    expect(sheet).not.toContain('Build 1')
   })
 
   it('draws the board: a bus per resource, a trace per strategy, and datasheets on demand', async () => {

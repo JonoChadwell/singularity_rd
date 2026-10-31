@@ -93,11 +93,12 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
   comes at its own size, 25 to 100 IQ, random each week but never all three the same; it may add
   a perk or remove a drawback). After that, only a new platform goes further.
 - **Resources** keep from week to week, up to a **storage cap**; what's made past it is lost.
-  In the lab, storage is fixed. From Phase 2, **+ Store** designs a **depot** for one resource:
-  Jev judges whether the place suits it and, realistically, how many one holds, and works out
-  how many it takes to hold what you need. The design is research; then you build as many as you
-  like from its card at no action, never past how many of the resource the AI could plausibly have
-  in its phase. That **ceiling** is set once, when a resource or unit is added, judged again when
+  In the lab, storage is fixed. From Phase 2, **Storage** on a resource's bus opens a box where you
+  design a **depot** for it: Jev judges whether the place suits it and, realistically, how many
+  one holds, and works out how many it takes to hold what you need. The design is research; then
+  you build as many as you like in that box at no action, never past how many of the resource the
+  AI could plausibly have in its phase. Depots aren't units: no chip, strategies, upgrades or
+  Procurement. That **ceiling** is set once, when a resource or unit is added, judged again when
   Phase 2 begins, and gone in Phase 3. See "Storage limits" in [RESOURCE_DESIGN.md](RESOURCE_DESIGN.md).
   When demand outstrips supply, every user gets the same share.
 - **Resources have a nature:** one or two traits from a fixed list of 20, each an upside with a
@@ -134,7 +135,7 @@ Their games use your Jev key and each browser keeps its own save.
 Optional settings in `.env.local`: `JEV_BASE_URL` (default `https://openrouter.ai/api`) and
 `JEV_MODEL` (default `jev-latest`).
 
-The game saves to your browser's local storage (`singularity-rd/save/v19`) after every change,
+The game saves to your browser's local storage (`singularity-rd/save/v20`) after every change,
 including Jev's answers, so the same proposal always gets the same verdict. Old save versions
 are dropped.
 
@@ -170,7 +171,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | Path | What |
 | --- | --- |
 | `src/ai/jev.ts` | Jev client, `Judge` interface, typed readers, torn-answer detection, `CachedJudge` |
-| `src/engine/types.ts` | `GameState` (v19) and everything in it |
+| `src/engine/types.ts` | `GameState` (v20) and everything in it |
 | `src/engine/balance.ts` | Every tuning number, in one place |
 | `src/engine/phase.ts`, `planProposal.ts`, `planPresets.ts` | Phases, clocks, unlocks; plan proposals and their ready-made ideas |
 | `src/engine/cycle.ts`, `economy.ts` | `runWeek`: rationing, upkeep, earnings, Procurement deliveries, storage caps, trait rules |
@@ -182,7 +183,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/actionValue.ts` | What an action is worth, from the state: worth now and the change each week after |
 | `src/stores/game.ts` | Pinia store: persistence, preview, Jev, actions, telemetry |
 | `src/stores/ui.ts` | UI state: open dialog, tab, datasheets, board zoom and hover |
-| `src/components/` | UI: `shell/` (top bar, side panel), `board/` (the circuit board; `layout.ts` places buses, chips and traces), `sheets/` (datasheets), `views/` (Research, Manual, Log, game over), `screens/` (the title screen and the full-page plan briefing), `dialogs/` (proposals, upgrades), `kit/` (LEDs, gauges, readouts) |
+| `src/components/` | UI: `shell/` (top bar, side panel), `board/` (the circuit board; `layout.ts` places buses, chips and traces; `StorageBox.vue` is a bus's depots), `sheets/` (datasheets), `views/` (Research, Manual, Log, game over), `screens/` (the title screen and the full-page plan briefing), `dialogs/` (proposals, upgrades), `kit/` (LEDs, gauges, readouts) |
 | `server/` | Vite plugins: Jev proxy and run logs |
 | `harness/` | Command-line harness |
 | `old/` | The original transformers.js prototype, archived and not built |

@@ -51,7 +51,7 @@ export const COPY: Record<
   },
   storage: {
     title: 'Design a depot',
-    help: 'Storage caps what each resource can hold; anything past it is lost. In the lab it is fixed. From Phase 2, design a depot for a resource: a place to keep it that you can build many of. Jev judges whether the place suits the resource (a yard won’t hold data, a drum will hold a billion nanobots) and, realistically, how many one holds, and works out how many it takes to hold what you need. The design is research and uses the week’s action; after that, build as many as you like from its card, at no action, paying their parts. Depots never hold more than Jev said could exist of the resource (judged again when Phase 2 begins; Phase 3 has no limit).',
+    help: 'Storage caps what each resource can hold; anything past it is lost. In the lab it is fixed. From Phase 2, design a depot for a resource: a place to keep it that you can build many of. Jev judges whether the place suits the resource (a yard won’t hold data, a drum will hold a billion nanobots) and, realistically, how many one holds, and works out how many it takes to hold what you need. The design is research and uses the week’s action; after that, build as many as you like from Storage on the resource’s bus, at no action, paying their parts. Depots aren’t units: they get no strategies, upgrades or Procurement. Depots never hold more than Jev said could exist of the resource (judged again when Phase 2 begins; Phase 3 has no limit).',
     presets: 'Pick one to fill the form, or write your own:',
     name: 'e.g. Shipping Container, Cold Store',
     description: 'What kind of place is it? (helps Jev)',

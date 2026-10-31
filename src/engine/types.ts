@@ -102,11 +102,6 @@ export interface UnitType {
   byproduct: string | null
   /** Stores: the resource it adds storage for. */
   stores: string | null
-  /**
-   * A depot: each one holds `amount` of a resource, adding to its cap. Depots don't work, so they
-   * have no strategies or upkeep, and they're built from their card, not Procured.
-   */
-  holds: { resourceId: string; amount: number } | null
   overclocked: boolean
   /** Weeks it has run (Learns on the job). */
   weeksRun: number
@@ -118,6 +113,29 @@ export interface UnitType {
   assign: Record<string, number>
   /** The strategy that takes every unit not counted in `assign`. */
   rest: string | null
+}
+
+/**
+ * A depot: a place that holds one resource, built many times over from its parts at no action.
+ * Each adds `holds` to the resource's storage. Depots aren't units: they do no work, so they have
+ * no strategies, upkeep, traits, sourcing or upgrades.
+ */
+export interface Depot {
+  id: string
+  name: string
+  description: string
+  icon: string
+  resourceId: string
+  /** Of the resource, per depot. */
+  holds: number
+  /** Worth of one, in Money. */
+  value: number
+  tier: number
+  /** Jev's plausibility, kept for its datasheet. */
+  plausibility: number
+  /** What building one uses. */
+  parts: Flow[]
+  count: number
 }
 
 /**
@@ -207,8 +225,8 @@ export type ResearchEffect =
   | { kind: 'mind'; mind: Mind }
   | { kind: 'strategy'; strategy: Strategy }
   | { kind: 'upgrade'; target: UpgradeTarget; changes: Change[] }
-  /** A depot design: the unit, and the build contract it comes with (what each one is made from). */
-  | { kind: 'depot'; unit: UnitType; parts: Flow[] }
+  /** A depot design, with none built yet. */
+  | { kind: 'depot'; depot: Depot }
   /** A phase's goal: researching it wins the phase. */
   | { kind: 'goal'; phase: PhaseNumber }
   /** Cover: moves the deadline back by `weeks`. */
@@ -345,7 +363,7 @@ export interface UnitWeek {
 }
 
 export interface GameState {
-  version: 19
+  version: 20
   runId: string
   week: number
   phase: PhaseState
@@ -361,6 +379,8 @@ export interface GameState {
   /** The active platform, and nothing else: a new platform replaces it. */
   minds: Mind[]
   units: UnitType[]
+  /** Storage depots, each for one resource. */
+  depots: Depot[]
   /** Sourcing contracts: what caps each unit type. */
   sourcing: Sourcing[]
   strategies: Strategy[]

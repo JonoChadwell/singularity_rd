@@ -4,7 +4,7 @@ import { bestMind, contractsFor, defaultTask, findMind, findResource, findStrate
 import { moveClock, winPhase } from './phase'
 import { costFactor } from './resourceTraits'
 import { has, type TraitId } from './traits'
-import type { Change, Cost, Flow, GameState, Mind, Research, Resource, Sourcing, Strategy, UnitType } from './types'
+import type { Change, Cost, Flow, GameState, Mind, Research, Resource, Strategy, UnitType } from './types'
 
 // ---------------------------------------------------------------- costs
 
@@ -234,17 +234,6 @@ export function addMind(state: GameState, mind: Mind) {
   for (const t of traits) gainTrait(state, mind, t)
 }
 
-/**
- * A depot's build contract: as many as it takes to hold all of the resource that can exist (a
- * billion with no ceiling), each made from `parts`. Depots are built, never Procured.
- */
-export function depotBuild(state: GameState, unit: UnitType, parts: Flow[]): Sourcing {
-  const r = findResource(state, unit.holds?.resourceId ?? '')
-  const each = Math.max(1e-9, unit.holds?.amount ?? 1)
-  const total = r?.ceiling == null ? B.DEPOT_OPEN : Math.max(1, Math.ceil(r.ceiling / each))
-  return { id: makeId(state, `build ${unit.name}`), unitId: unit.id, name: `Build ${unit.name}`, description: `Build ${unit.name}.`, parts, total, used: 0, risky: false }
-}
-
 /** Applies a research's effect. Returns a line for the log. */
 export function completeResearch(state: GameState, r: Research): string {
   const effect = r.effect
@@ -256,11 +245,10 @@ export function completeResearch(state: GameState, r: Research): string {
       return `${effect.unit.icon} ${effect.unit.name} is designed. Procure some from its card to own some.`
     }
     case 'depot': {
-      const unit = effect.unit
-      const res = findResource(state, unit.holds?.resourceId ?? '')
-      addUnit(state, unit)
-      state.sourcing.push(depotBuild(state, unit, effect.parts))
-      return `${unit.icon} ${unit.name} is designed: each holds ${fmt(unit.holds?.amount ?? 0)} ${res?.name ?? ''}. Build them on its card.`
+      const d = effect.depot
+      const res = findResource(state, d.resourceId)
+      state.depots.push(d)
+      return `${d.icon} ${d.name} is designed: each holds ${fmt(d.holds)} ${res?.name ?? ''}. Build them from Storage on its bus.`
     }
     case 'goal':
       return winPhase(state, effect.phase)

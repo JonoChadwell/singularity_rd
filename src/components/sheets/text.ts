@@ -21,7 +21,7 @@ export function effectText(state: GameState, r: Research): string {
     case 'goal':
       return 'Researching it wins the phase.'
     case 'depot':
-      return `A depot: each ${e.unit.name} holds ${fmt(e.unit.holds?.amount ?? 0)} ${findResource(state, e.unit.holds?.resourceId ?? '')?.name ?? ''}. Build them from its card.`
+      return `A depot: each ${e.depot.name} holds ${fmt(e.depot.holds)} ${findResource(state, e.depot.resourceId)?.name ?? ''}. Build them from Storage on its bus.`
     case 'cover':
       return `Adds ${e.weeks} weeks to the clock, once researched.`
     case 'unit':

@@ -2,8 +2,8 @@ import type { JevQuestion, Judge } from '@/ai/jev'
 import * as B from './balance'
 import { ceilingLabel, storageRoom } from './ceilings'
 import { previewWeek } from './economy'
-import { newUnit } from './initialState'
-import { capOf, depotsFor, findResource, fmt, makeId, tierFactor } from './model'
+import { newDepot } from './initialState'
+import { capOf, depotLimit, depotsFor, findResource, fmt, makeId, tierFactor } from './model'
 import { lockReason } from './phase'
 import {
   addResearch,
@@ -29,12 +29,13 @@ import {
 import { capFactor, clockFactor, expansionFactor } from './resourceTraits'
 import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
-import type { Cost, Flow, GameState, Resource, Risk, UnitType } from './types'
+import type { Cost, Depot, Flow, GameState, Resource, Risk, WeekReport } from './types'
 import { levelsByOdds, partPool, priceParts, rankedIds } from './unitProposal'
 
-// Storage in Phase 2 and after: "+ Store" designs a depot for one resource, a unit whose work is
-// holding it. Jev judges how well the place suits the resource and, realistically, how many one
-// holds; you then build as many as you need from its card. See RESOURCE_DESIGN.md, Storage.
+// Storage in Phase 2 and after: a bus's Storage box designs a depot for one resource, a place
+// that holds it (not a unit: it does no work). Jev judges how well the place suits the resource
+// and, realistically, how many one holds; you then build as many as you need from that box. See
+// RESOURCE_DESIGN.md, Storage.
 
 /** A place to keep one resource: the player says what it is. */
 export interface DepotSpec {
@@ -94,14 +95,17 @@ export function precheckDepot(state: GameState, spec: DepotSpec): string | null 
   return precheckName(state, spec.name)
 }
 
-/** How many of the resource depots need to hold: the dearest waiting cost in it, else four weeks of what you make, else ten times its room. */
-export function depotTarget(state: GameState, r: Resource): DepotTarget {
+/**
+ * How many of the resource depots need to hold: the dearest waiting cost in it, else four weeks of
+ * what you make, else ten times its room. `preview` is next week's, if you have it.
+ */
+export function depotTarget(state: GameState, r: Resource, preview: WeekReport = previewWeek(state)): DepotTarget {
   const cap = capOf(state, r)
   const fits = (n: number) => Math.min(n, r.ceiling ?? Infinity)
   const costs = state.research.flatMap((x) => x.cost.filter((c) => c.resourceId === r.id).map((c) => ({ amount: c.amount, name: x.name })))
   const dearest = costs.sort((a, b) => b.amount - a.amount)[0]
   if (dearest && dearest.amount > cap) return { amount: fits(dearest.amount), why: `what ${dearest.name} needs` }
-  const made = (previewWeek(state).flows[r.id] ?? []).reduce((n, f) => n + Math.max(0, f.amount), 0)
+  const made = (preview.flows[r.id] ?? []).reduce((n, f) => n + Math.max(0, f.amount), 0)
   if (made > 0 && r.amount + B.DEPOT_TARGET_WEEKS * made > cap) {
     return { amount: fits(r.amount + B.DEPOT_TARGET_WEEKS * made), why: `${B.DEPOT_TARGET_WEEKS} weeks of what you make` }
   }
@@ -259,21 +263,31 @@ function tracedRisk(r: Resource, risk: Risk | null): Risk | null {
   return weeks > 0 ? { ...risk, weeks } : null
 }
 
-/** The depot an option would design, and what each one is built from. */
-export function draftDepot(state: GameState, v: Pick<DepotVerdict, 'answers' | 'picks' | 'spec' | 'options'>, i: number): { unit: UnitType; parts: Flow[] } {
+/** The depot an option would design, with none built. */
+export function draftDepot(state: GameState, v: Pick<DepotVerdict, 'answers' | 'picks' | 'spec' | 'options' | 'plausibility'>, i: number): Depot {
   const o = v.options[i]!
-  const r = findResource(state, v.spec.resourceId)!
   const read = reader(v)
-  const unit = newUnit({
+  return newDepot({
     id: makeId(state, v.spec.name),
     name: v.spec.name,
     description: v.spec.description || v.spec.name,
     icon: B.icon(read.choice('icon', Object.keys(B.ICONS))),
+    resourceId: v.spec.resourceId,
+    holds: o.holds,
     value: B.pick(B.UNIT_VALUE, o.band)[1],
     tier: o.tier,
-    holds: { resourceId: r.id, amount: o.holds }
+    plausibility: v.plausibility,
+    parts: o.parts
   })
-  return { unit, parts: o.parts }
+}
+
+/** How many more of a depot it takes to hold what you're storing towards (none if already there). */
+export function depotsToTarget(state: GameState, d: Depot, preview?: WeekReport): { more: number; target: DepotTarget } | null {
+  const r = findResource(state, d.resourceId)
+  if (!r) return null
+  const target = depotTarget(state, r, preview)
+  const more = Math.max(0, Math.ceil((target.amount - capOf(state, r)) / Math.max(1e-9, d.holds) - 1e-9))
+  return { more: Math.min(more, Math.max(0, depotLimit(state, d) - d.count)), target }
 }
 
 /** What researching an option does, in words. */
@@ -286,18 +300,18 @@ export function acceptDepot(current: GameState, v: DepotVerdict): Accepted {
   if (!o) throw new Error('Choose one of the options.')
   const state = structuredClone(current)
   claimProposal(state)
-  const { unit, parts } = draftDepot(state, v, v.choice)
-  state.inventions.push({ week: state.week, icon: unit.icon, name: unit.name, kind: 'storage' })
+  const depot = draftDepot(state, v, v.choice)
+  state.inventions.push({ week: state.week, icon: depot.icon, name: depot.name, kind: 'storage' })
   state.decidedThisWeek = true
   return addResearch(
     state,
     newResearch(state, {
-      name: `Design ${unit.name}`,
+      name: `Design ${depot.name}`,
       description: depotResearchText(state, v, o),
-      icon: unit.icon,
+      icon: depot.icon,
       minIQ: o.minIQ,
       cost: o.cost,
-      effect: { kind: 'depot', unit, parts },
+      effect: { kind: 'depot', depot },
       risk: o.risk
     })
   )

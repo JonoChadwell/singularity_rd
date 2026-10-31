@@ -1,7 +1,7 @@
 <template>
   <div
     class="plate"
-    :class="{ hot }"
+    :class="{ hot: hot || open }"
     :data-bus="r.id"
     :title="`${r.name}: open its datasheet`"
     @mouseenter="ui.hover = r.id"
@@ -32,23 +32,27 @@
         </button>
         <button
           class="link small"
+          :class="{ on: open }"
+          data-storage-toggle
           :disabled="!!lockReason(game.state, 'storage')"
-          :title="lockReason(game.state, 'storage') ?? `Design a depot for ${r.name}`"
-          @click.stop="ui.openInvent({ kind: 'storage', resourceId: r.id })"
+          :title="lockReason(game.state, 'storage') ?? `${r.name} storage: depots to build, or design one`"
+          :aria-expanded="open"
+          @click.stop="ui.toggleStorage(r.id)"
         >
-          + Store
+          {{ depots ? `Storage ${depots}` : 'Storage' }}
         </button>
       </span>
     </div>
 
-    <BusProbe :resource="r" class="probe" />
+    <BusProbe v-if="!open" :resource="r" class="probe" />
+    <StorageBox v-if="open" :r="r" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { netFlow } from '@/engine/economy'
-import { capOf, fmt } from '@/engine/model'
+import { capOf, depotsFor, fmt } from '@/engine/model'
 import { lockReason } from '@/engine/phase'
 import type { Resource } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
@@ -56,6 +60,7 @@ import { useUiStore } from '@/stores/ui'
 import Gauge from '../kit/SegGauge.vue'
 import Led from '../kit/StatusLed.vue'
 import BusProbe from './BusProbe.vue'
+import StorageBox from './StorageBox.vue'
 
 const props = defineProps<{ r: Resource; hot?: boolean }>()
 const game = useGameStore()
@@ -65,6 +70,9 @@ const full = computed(() => props.r.amount >= cap.value * 0.999)
 const net = computed(() => netFlow(game.preview, props.r.id))
 const wasted = computed(() => game.preview.wasted[props.r.id] ?? 0)
 const short = computed(() => game.preview.shares[props.r.id] ?? 1)
+const open = computed(() => ui.storageOpen === props.r.id)
+/** Depot designs for it. */
+const depots = computed(() => depotsFor(game.state, props.r.id).length)
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
 </script>
 
@@ -179,6 +187,11 @@ const signed = (n: number) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))}`
   padding: 0 4px;
   font-size: 10px;
   white-space: nowrap;
+}
+
+.buttons button.on {
+  color: var(--copper-hi);
+  text-decoration: underline;
 }
 
 .probe {

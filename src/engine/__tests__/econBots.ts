@@ -1,6 +1,6 @@
 import type { JevAnswer, Questions } from '@/ai/jev'
 import * as B from '../balance'
-import { assign, assignAll, createUnits, doResearch, researchBlocker } from '../actions'
+import { assign, assignAll, buildDepots, createUnits, doResearch, researchBlocker } from '../actions'
 import {
   addStreams,
   delay,
@@ -26,6 +26,7 @@ import {
   capOf,
   contractsFor,
   creatable,
+  depotAffordable,
   depotsFor,
   findResource,
   findUnit,
@@ -41,7 +42,7 @@ import {
 import { coversLeft } from '../phase'
 import { goalOf } from '../projection'
 import { acceptStrategy, judgeStrategy } from '../strategyProposal'
-import type { GameState, Research, Resource } from '../types'
+import type { Depot, GameState, Research, Resource } from '../types'
 import { acceptUnit, judgeUnit, runPool } from '../unitProposal'
 import { acceptUpgrade, judgeUpgrade } from '../upgrade'
 import { acceptDepot, judgeDepot } from '../depotProposal'
@@ -337,7 +338,7 @@ export const platform = (): Move => ({
 
 /** A depot for a resource, designed or waiting: building more of it takes no action. */
 const hasDepot = (s: GameState, resourceId: string) =>
-  depotsFor(s, resourceId).length > 0 || s.research.some((x) => x.effect.kind === 'depot' && x.effect.unit.holds?.resourceId === resourceId)
+  depotsFor(s, resourceId).length > 0 || s.research.some((x) => x.effect.kind === 'depot' && x.effect.depot.resourceId === resourceId)
 
 /**
  * Storage for a resource: designs a depot for it, Jev's own take, when it has none. Once it has
@@ -582,18 +583,17 @@ export function grow(state: GameState, ctx: Ctx): GameState {
     budget[r.id] = Math.min(spare, (wasted[r.id] ?? 0) + DEPOT_SHARE * spare)
   }
   // The worst overflow first.
-  const lost = (u: (typeof s.units)[number]) => (wasted[u.holds!.resourceId] ?? 0) * (findResource(s, u.holds!.resourceId)?.value ?? 0)
-  for (const u of s.units.filter((x) => x.holds).sort((a, b) => lost(b) - lost(a))) {
-    const r = findResource(s, u.holds!.resourceId)
-    const c = contractsFor(s, u.id)[0]
-    if (!r || !c || !openSlots(c)) continue
-    const want = Math.ceil((depotNeed(s, r) - capOf(s, r)) / u.holds!.amount - 1e-9)
+  const lost = (d: Depot) => (wasted[d.resourceId] ?? 0) * (findResource(s, d.resourceId)?.value ?? 0)
+  for (const d of [...s.depots].sort((a, b) => lost(b) - lost(a))) {
+    const r = findResource(s, d.resourceId)
+    if (!r) continue
+    const want = Math.ceil((depotNeed(s, r) - capOf(s, r)) / d.holds - 1e-9)
     const held = Object.fromEntries(s.resources.map((x) => [x.id, x.amount - (budget[x.id] ?? 0)]))
-    const n = Math.min(want, creatable(s, c, held))
-    for (const p of c.parts) budget[p.resourceId] = Math.max(0, (budget[p.resourceId] ?? 0) - Math.max(0, n) * p.amount)
+    const n = Math.min(want, depotAffordable(s, d, held))
+    for (const p of d.parts) budget[p.resourceId] = Math.max(0, (budget[p.resourceId] ?? 0) - Math.max(0, n) * p.amount)
     if (n <= 0) continue
     const before = worthOf(s).stock
-    s = createUnits(s, c.id, n)
+    s = buildDepots(s, d.id, n)
     ctx.spend.storage += Math.max(0, before - worthOf(s).stock)
   }
   return assignBest(s)
@@ -602,8 +602,8 @@ export function grow(state: GameState, ctx: Ctx): GameState {
 /** Share of a stock, past what would overflow and what research needs, that may go on depots in a week. */
 const DEPOT_SHARE = 0.25
 
-/** Units that work: everything but depots. */
-const workers = (s: GameState) => s.units.filter((u) => !u.holds)
+/** Units that work: all of them, now that depots aren't units. */
+const workers = (s: GameState) => s.units
 
 /** What a resource's depots should hold: its dearest waiting cost, or what it has plus four weeks of what's made. */
 function depotNeed(s: GameState, r: Resource): number {
@@ -648,7 +648,7 @@ function unsupplied(s: GameState): string[] {
   const coming = (unitId: string) => (findUnit(s, unitId)?.count ?? 0) > 0 || contractsFor(s, unitId).some((c) => openSlots(c) > 0)
   for (const u of s.units) if (coming(u.id)) for (const f of u.upkeep) needed.add(f.resourceId)
   // Parts of contracts with room left: units can't be made without them. Depots are built only as needed.
-  for (const c of s.sourcing) if (openSlots(c) && !findUnit(s, c.unitId)?.holds) for (const p of c.parts) needed.add(p.resourceId)
+  for (const c of s.sourcing) if (openSlots(c)) for (const p of c.parts) needed.add(p.resourceId)
   for (const x of s.strategies) {
     const u = findUnit(s, x.unitId)
     if (u && coming(u.id) && tasksFor(s, u).includes(x.id)) for (const f of x.inputs) needed.add(f.resourceId)
@@ -659,7 +659,7 @@ function unsupplied(s: GameState): string[] {
 /** Resources that open contracts' parts, upkeep or running strategies use up. */
 function inUse(s: GameState): string[] {
   const ids = new Set<string>()
-  for (const c of s.sourcing) if (openSlots(c) && !findUnit(s, c.unitId)?.holds) for (const p of c.parts) ids.add(p.resourceId)
+  for (const c of s.sourcing) if (openSlots(c)) for (const p of c.parts) ids.add(p.resourceId)
   for (const u of s.units) if (u.count) for (const f of u.upkeep) ids.add(f.resourceId)
   for (const x of s.strategies) if (findUnit(s, x.unitId)?.count) for (const f of x.inputs) ids.add(f.resourceId)
   return [...ids]
@@ -1161,8 +1161,8 @@ export interface ContractRecord {
   filled: number | null
 }
 
-/** The contracts in a state that aren't depot builds, by id. */
-export const signedContracts = (s: GameState) => s.sourcing.filter((c) => c.parts.length && !findUnit(s, c.unitId)?.holds)
+/** The contracts in a state that units can be created from, by id. */
+export const signedContracts = (s: GameState) => s.sourcing.filter((c) => c.parts.length)
 
 /** Notes the contracts signed or filled this week. */
 export function trackContracts(s: GameState, week: number, seen: Map<string, ContractRecord>) {
@@ -1176,11 +1176,11 @@ export function trackContracts(s: GameState, week: number, seen: Map<string, Con
 
 /** The biggest working unit type's share of the working fleet, the depots' worth, and whether a cost can't fit. */
 export function fleetShape(s: GameState): Pick<WeekRow, 'largestShare' | 'depotWorth' | 'capBlocked'> {
-  const working = s.units.filter((u) => !u.holds).map((u) => u.count * u.value)
+  const working = s.units.map((u) => u.count * u.value)
   const total = working.reduce((n, w) => n + w, 0)
   return {
     largestShare: total > 0 ? Math.max(...working) / total : 0,
-    depotWorth: s.units.filter((u) => u.holds).reduce((n, u) => n + u.count * u.value, 0),
+    depotWorth: s.depots.reduce((n, d) => n + d.count * d.value, 0),
     capBlocked: s.research.some((r) => r.cost.some((c) => { const x = findResource(s, c.resourceId); return !!x && c.amount > capOf(s, x) }))
   }
 }
@@ -1252,7 +1252,7 @@ export async function playEcon(bot: Bot, approach: number, limit = 120): Promise
     rec.rows.push(row(s, ctx, week, goalId, values))
     trackContracts(s, week, seen)
     rec.contracts = [...seen.values()]
-    rec.depots = s.units.filter((u) => u.holds).length
+    rec.depots = s.depots.length
     s = runWeek(s)
     if (s.phase.status === 'lost') {
       rec.lost = week

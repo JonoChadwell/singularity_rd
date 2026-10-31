@@ -84,15 +84,15 @@ function draftOption(state: GameState, v: BankableVerdict, i: number): Draft {
     case 'storage': {
       const o = v.options[i]!
       if (!findResource(state, v.spec.resourceId)) throw new Error('That resource is gone.')
-      const { unit, parts } = draftDepot(state, v, i)
+      const depot = draftDepot(state, v, i)
       return {
         label: `${tierLabel(o.tier)}, holds ${fmt(o.holds)}`,
-        name: `Design ${unit.name}`,
+        name: `Design ${depot.name}`,
         description: depotResearchText(state, v, o),
-        icon: unit.icon,
+        icon: depot.icon,
         minIQ: o.minIQ,
         cost: o.cost,
-        effect: { kind: 'depot', unit, parts },
+        effect: { kind: 'depot', depot },
         risk: o.risk
       }
     }

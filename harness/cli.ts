@@ -33,7 +33,10 @@ import {
   describeCost,
   describeDelivery,
   describeFlows,
+  depotAffordable,
+  depotRoom,
   depotsFor,
+  findDepot,
   efficiencyWord,
   findResource,
   findSourcing,
@@ -141,7 +144,7 @@ function load(slot: string): Save {
   const path = savePath(slot)
   if (!existsSync(path)) throw new Error(`No game in slot "${slot}". Start one with: new`)
   const save = JSON.parse(readFileSync(path, 'utf8')) as Save
-  if (save.state.version !== 19) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
+  if (save.state.version !== 20) throw new Error(`The game in slot "${slot}" is from an older version. Start a new one with: new`)
   return save
 }
 
@@ -248,7 +251,13 @@ function printStatus(s: GameState) {
         `${share !== undefined && share < 1 ? ` · SHORT: ${pct(share)} met` : ''}` +
         `${wasted ? ` · OVERFLOWS ${fmt(wasted)}` : ''}` +
         ` · can exist ${ceilingLabel(r.ceiling)}` +
-        `${depotsFor(s, r.id).length ? `\n      depots: ${depotsFor(s, r.id).map((u) => `${u.name} ×${fmtCount(u.count)} (+${fmt(u.count * (u.holds?.amount ?? 0))})`).join('; ')}` : ''}` +
+        depotsFor(s, r.id)
+          .map(
+            (d) =>
+              `\n      depot ${d.id} "${d.name}" ×${fmtCount(d.count)}, each holds ${fmt(d.holds)} (+${fmt(depotRoom(d))}) · value ${fmt(d.value)}` +
+              ` · parts ${d.parts.length ? describeFlows(s, d.parts) : 'nothing'} each · build with: build ${d.id} <n|max> · can build ${fmtCount(depotAffordable(s, d))} now`
+          )
+          .join('') +
         `${sources ? `\n      ${sources}` : ''}`
     )
   }
@@ -265,14 +274,6 @@ function printStatus(s: GameState) {
     for (const u of s.units) {
       const w = preview.units[u.id]
       const { byTask, free } = allocation(s, u)
-      if (u.holds) {
-        const c = contractsFor(s, u.id)[0]
-        say(
-          `  ${u.id} "${u.name}" DEPOT for ${u.holds.resourceId} ×${fmtCount(u.count)}, each holds ${fmt(u.holds.amount)} · value ${fmt(u.value)}` +
-            (c ? ` · build with: create ${c.id} <n|max> · parts ${describeFlows(s, partsFor(u, c))} each · can build ${fmtCount(creatable(s, c, weeklyUse(preview)))} now` : '')
-        )
-        continue
-      }
       say(`  ${u.id} "${u.name}" ${tierLabel(u.tier)} ×${fmtCount(u.count)} of ${fmtCount(unitCap(s, u.id))} allowed (built ${fmtCount(u.built)})`)
       say(
         `      upkeep ${u.upkeep.length ? describeFlows(s, u.upkeep) : 'none'} · value ${fmt(u.value)} (${unitValueText(u.value)})` +
@@ -319,7 +320,7 @@ function printStatus(s: GameState) {
     const e = r.effect
     const what =
       e.kind === 'depot'
-          ? ` · a depot: each holds ${fmt(e.unit.holds?.amount ?? 0)} ${e.unit.holds?.resourceId}`
+          ? ` · a depot: each holds ${fmt(e.depot.holds)} ${e.depot.resourceId}`
           : e.kind === 'cover'
             ? ` · adds ${e.weeks} weeks to the clock`
             : e.kind === 'goal'
@@ -546,7 +547,7 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
                                a mix of units now (with cap) and sourcing contracts (room for more, parts per unit). Pick with option <n>;
                                size <dollars> picks a contract size, up to Jev's limit or ten times what you own)
   propose storage '{"resourceId":"..","name":"..","description":".."}'   (Phase 2 on: design a depot for that resource,
-                               e.g. "Steel Drum"; Jev judges the fit and how many one holds. Once designed, build them with create)
+                               e.g. "Steel Drum"; Jev judges the fit and how many one holds. Once designed, build them with build)
   propose strategy '{"name":"..","description":"..","unitId":"..","outputId":".."}'
                                (Jev offers three ways, each using up different resources: none allowed for tier 0-1 outputs, 1+ for tier 2, two different for tier 3+; pick with option <n>)
   propose unit '{"name":"..","description":"..","first":false}'   (Jev picks its tier, value and what it runs on)
@@ -561,6 +562,7 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   research <researchId>        do a research now (any number a week; proposing is the week's one action)
   drop <researchId>            drop a research
   create <contractId> <n|max>   create units from a sourcing contract's parts (no action; up to its open slots)
+  build <depotId> <n|max>       build depots from their parts (no action; listed under their resource)
   assign <unitId> <strategyId> <n> | rest <unitId> <strategyId|none> | all <unitId> <strategyId>
   overclock <unitId> on|off
   next [n]                     run up to n weeks (default 1), stopping when something happens
@@ -776,6 +778,15 @@ async function run(args: string[], slot: string): Promise<number> {
       if (n < 1) throw new Error(openSlots(c) ? 'Can’t afford any.' : `${c.name} is full.`)
       await act('create', { sourcingId: c.id, n }, (st) => actions.createUnits(st, c.id, n))
       say(`created ${fmtCount(n)} ${u.name} from ${c.name}`)
+      break
+    }
+    case 'build': {
+      const d = findDepot(s(), rest[0]!)
+      if (!d) throw new Error(`No depot ${rest[0]}. Depots are listed under their resource in status.`)
+      const n = rest[1] === 'max' ? depotAffordable(s(), d) : num(rest[1])
+      if (n < 1) throw new Error('Can’t build any: short of parts, or they already hold all that can exist.')
+      await act('build_depots', { depotId: d.id, n }, (st) => actions.buildDepots(st, d.id, n))
+      say(`built ${fmtCount(n)} ${d.name}`)
       break
     }
     case 'assign':
