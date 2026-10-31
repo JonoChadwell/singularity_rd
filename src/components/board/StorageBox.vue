@@ -6,7 +6,7 @@
     </header>
     <p class="sum num">
       {{ fmt(r.cap) }} to start<template v-if="depots.length"> + {{ fmt(Math.max(0, cap - r.cap)) }} in depots</template> = {{ fmt(cap) }}
-      · can exist: {{ ceilingLabel(r.ceiling) }}
+      · Maximum Storage Limit: {{ ceilingLabel(r.ceiling) }}
     </p>
     <DepotRow v-for="d in depots" :key="d.id" :depot="d" />
     <p v-if="!depots.length" class="note">

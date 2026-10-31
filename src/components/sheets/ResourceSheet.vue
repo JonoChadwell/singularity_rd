@@ -29,7 +29,7 @@
             open: () => ui.openSheet({ kind: 'depot', id: d.id }, true)
           })),
           { k: 'Storage', v: fmt(cap), num: true },
-          { k: 'Can exist', v: ceilingLabel(r.ceiling) }
+          { k: 'Maximum Storage Limit', v: ceilingLabel(r.ceiling) }
         ]"
       />
     </section>
