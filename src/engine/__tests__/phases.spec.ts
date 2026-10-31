@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
-import { createUnits, dismissCard, doResearch, dropResearch, researchBlocker, shuffleIdeas } from '../actions'
+import { createUnits, dismissCard, doResearch, dropResearch, researchBlocker, shuffleIdeas, skipGoal } from '../actions'
 import { acceptCreate, isContract, judgeCreate, type ContractOption, type PayoutOption } from '../createProposal'
 import { applyBlocker, applyVerdict, bankVerdict } from '../banking'
 import { ceilingKey } from '../ceilings'
@@ -201,6 +201,20 @@ describe('the clock', () => {
     expect(s.phase).toMatchObject({ n: 2, status: 'playing', deadline: 80 })
     expect(s.phase.firstUnit).toEqual(nanotech.firstUnit)
     expect(s.research[0]!.minIQ).toBe(B.GOAL_APPROACH[1]![3])
+  })
+
+  it('skips a phase goal for testing: no IQ or cost, nothing paid, and only goals', async () => {
+    let s = await phase1()
+    const goal = s.research[0]!
+    findResource(s, MONEY_ID)!.amount = 0
+    expect(researchBlocker(s, goal.id)).not.toBeNull()
+    s = skipGoal(s, goal.id)
+    expect(s.phase).toMatchObject({ n: 2, status: 'planning' })
+    expect(s.history).toHaveLength(1)
+    expect(findResource(s, MONEY_ID)!.amount).toBe(0)
+    expect(s.log.some((l) => /Skipped .* \(testing\)/.test(l.text))).toBe(true)
+    s.research.push({ id: 'c', name: 'Cover', description: '', icon: '', minIQ: 100, cost: [], effect: { kind: 'cover', weeks: 1 }, proposedWeek: 1 })
+    expect(() => skipGoal(s, 'c')).toThrow(/Only a phase goal/)
   })
 
   it('wins Phase 2 into Ascension: no clock, everything unlocked', () => {

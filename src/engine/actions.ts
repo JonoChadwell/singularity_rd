@@ -167,6 +167,18 @@ export function doResearch(current: GameState, researchId: string): GameState {
   return state
 }
 
+/** For testing: completes a phase goal at once, ignoring its IQ and cost, to reach later phases quickly. */
+export function skipGoal(current: GameState, researchId: string): GameState {
+  if (current.phase.status === 'lost') throw new Error('The game is over.')
+  const state = draft(current)
+  const r = findResearch(state, researchId)
+  if (!r || r.effect.kind !== 'goal') throw new Error('Only a phase goal can be skipped.')
+  state.log.push({ week: state.week, tone: 'info', text: `Skipped ${r.name} (testing): no IQ or cost needed.` })
+  state.log.push({ week: state.week, tone: 'good', text: completeResearch(state, r) })
+  checkMilestones(state)
+  return state
+}
+
 /** Drops a research you no longer want. */
 export function dropResearch(current: GameState, researchId: string): GameState {
   const state = draft(current)

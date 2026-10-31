@@ -39,6 +39,7 @@
       <button class="small primary" :disabled="!!blocker" @click="game.research(r.id)">Research now</button>
       <button v-if="iq < r.minIQ" class="link" @click="smarter()">{{ softwareLeft ? 'Upgrade your software?' : 'Build a smarter platform?' }}</button>
       <button v-if="!isGoal" class="link drop" title="Drop this research" @click="game.dropResearch(r.id)">Drop</button>
+      <button v-else class="link drop" title="For testing: win the phase now, ignoring IQ and cost" @click="game.skipGoal(r.id)">Skip</button>
     </footer>
     <p v-if="blocker" class="why small">{{ blocker }}</p>
   </article>

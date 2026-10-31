@@ -169,6 +169,13 @@ export const useGameStore = defineStore('game', () => {
     if (done && state.value.phase.n !== before) log('phase_won', { phase: before, history: state.value.history })
     return done
   }
+  /** For testing: wins the phase without meeting its goal's IQ or cost. */
+  const skipGoal = (researchId: string) => {
+    const before = state.value.phase.n
+    const done = act('skip_goal', { researchId }, (s) => actions.skipGoal(s, researchId))
+    if (done && state.value.phase.n !== before) log('phase_won', { phase: before, history: state.value.history, skipped: true })
+    return done
+  }
   const dismissCard = (id: string) => act('dismiss_card', { id }, (s) => actions.dismissCard(s, id))
   const shuffleIdeas = () => act('shuffle_ideas', {}, (s) => actions.shuffleIdeas(s))
   const dropResearch = (researchId: string) =>
@@ -307,6 +314,7 @@ export const useGameStore = defineStore('game', () => {
     assignAll,
     setOverclock,
     research,
+    skipGoal,
     dropResearch,
     dismissCard,
     shuffleIdeas,
