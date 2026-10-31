@@ -31,6 +31,7 @@ import {
   refuseUnaccepted,
   scale,
   efficiencyLevel,
+  efficiencyQuestion,
   reader,
   recordIdea,
   repeatOf,
@@ -185,11 +186,7 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
       type: 'noul',
       instructions: `Could the AI plausibly get ${what} this way?`
     },
-    efficiency: {
-      type: 'score',
-      instructions: `How effective is this as a way to get ${what}?`,
-      criteria: scale(B.EFFICIENCY)
-    },
+    efficiency: efficiencyQuestion(what),
     ...(unit
       ? {
           mode: {

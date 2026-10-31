@@ -118,7 +118,7 @@ export async function createVia(
   answers: Overrides = {}
 ): Promise<GameState> {
   const spec = { name: fresh('Procure'), description: '', target }
-  const v = await judgeCreate(state, new FakeJudge({ ...TYPICAL, efficiency: score(2), timing: choice(timing), ...answers }), spec)
+  const v = await judgeCreate(state, new FakeJudge({ ...TYPICAL, efficiency: noul(B.EFFICIENCY_AT[2]!), timing: choice(timing), ...answers }), spec)
   if (v.rejected) throw new Error(`create rejected: ${v.rejected}`)
   const ok = v.options.map((o, i) => ({ o, i })).filter(({ o }) => !optionBlocker(state, o))
   const pick = ok.find(({ o }) => o.timing === timing) ?? ok[0]
@@ -332,7 +332,7 @@ const FAB = 'nanofab'
  * makes, and turn the fabs to the goal's resource. Procurements fill every week with nothing better.
  */
 export function steady(style: Phase2Style): Turn {
-  const answers: Overrides = { advancement: score(0), efficiency: score(2), value: score(2), ...style.answers }
+  const answers: Overrides = { advancement: score(0), efficiency: noul(B.EFFICIENCY_AT[2]!), value: score(2), ...style.answers }
   const alarm = { 'a_*': (answers.alarm as JevAnswer) ?? score(0) }
   return async (s0) => {
     let s = researchAll(s0)
@@ -360,7 +360,7 @@ export function steady(style: Phase2Style): Turn {
     const source = async (unitId: string) => {
       const v = await judgeCreate(
         s,
-        new FakeJudge({ ...TYPICAL, limit: score(2), efficiency: score(2), mode: choice('supply'), ...alarm, ...answers }),
+        new FakeJudge({ ...TYPICAL, limit: score(2), efficiency: noul(B.EFFICIENCY_AT[2]!), mode: choice('supply'), ...alarm, ...answers }),
         { target: { kind: 'unit', id: unitId }, name: fresh('Contract a factory'), description: '' }
       )
       const label = (i: number) => {

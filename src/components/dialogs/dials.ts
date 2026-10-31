@@ -1,4 +1,5 @@
-import { bandOf, type VerdictBase } from '@/engine/proposals'
+import { EFFICIENCY, EFFICIENCY_BOUNDS } from '@/engine/balance'
+import { bandOf, efficiencyLevel, efficiencyValue, type VerdictBase } from '@/engine/proposals'
 import type { GaugeZone } from '../kit/AnalogGauge.vue'
 import type { Dial } from '../kit/VerdictDial.vue'
 
@@ -57,4 +58,18 @@ export function bandDial(o: {
     ends: o.ends,
     verdict: { text: o.labels[bandOf(o.value, o.bounds)] ?? '', tone: 'info' }
   }
+}
+
+/** How effective Jev thinks a strategy or Procurement is, in EFFICIENCY's bands. The stamp counts a repeat's lost step. */
+export function efficiencyDial(v: Pick<VerdictBase, 'answers' | 'picks' | 'repeatOf'>): Dial {
+  const dial = bandDial({
+    key: 'efficiency',
+    title: 'Efficiency',
+    value: efficiencyValue(v),
+    bounds: EFFICIENCY_BOUNDS,
+    labels: EFFICIENCY.map(([label]) => label),
+    label: 'more effective than the ordinary way',
+    ends: ['Wasteful', 'Brilliant']
+  })
+  return { ...dial, verdict: { text: EFFICIENCY[efficiencyLevel(v)]![0], tone: v.repeatOf ? 'bad' : 'info' } }
 }

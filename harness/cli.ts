@@ -72,7 +72,7 @@ import { goalOf, projectGoal, projectionText } from '@/engine/projection'
 import { alarmLabel, alarmQuestions, expansionRiskText, RISK_BONUS, riskFrom, riskText } from '@/engine/risk'
 import { resourceTrait, traitLine } from '@/engine/resourceTraits'
 import { proposalText } from '@/engine/stateText'
-import { bandOf, catchesOf, complicationName, draftResource } from '@/engine/proposals'
+import { bandOf, catchesOf, complicationName, draftResource, efficiencyQuestion } from '@/engine/proposals'
 import { draftStrategy } from '@/engine/strategyProposal'
 import { TRAITS, type TraitId } from '@/engine/traits'
 import type { GameState, Strategy, UpgradeTarget } from '@/engine/types'
@@ -567,7 +567,9 @@ const HELP = `Commands (slot from --slot <name>, default "claude"):
   overclock <unitId> on|off
   next [n]                     run up to n weeks (default 1), stopping when something happens
   log [n]                      the last n log lines
-  calibrate-alarm ["<stance>"] (tuning) ask Jev how alarming some sample Phase 2 actions are; no game needed`
+  calibrate-alarm ["<stance>"] (tuning) ask Jev how alarming some sample Phase 2 actions are; no game needed
+  calibrate-efficiency         (tuning) ask Jev's efficiency question about sample strategies and Procurements,
+                               from wasteful to brilliant, and print each answer with the band it falls in; no game needed`
 
 async function run(args: string[], slot: string): Promise<number> {
   const [cmd = 'help', ...rest] = args
@@ -604,6 +606,33 @@ async function run(args: string[], slot: string): Promise<number> {
       const r = riskFrom(answers)
       say(`${r ? `RISKY −${r.weeks}` : 'quiet'.padEnd(9)} ${what}`)
     }
+    return 0
+  }
+  if (cmd === 'calibrate-efficiency') {
+    // For tuning EFFICIENCY_BOUNDS: samples the designer would rate from Wasteful to Brilliant.
+    const state = createInitialState()
+    const judge = new NodeJudge(() => state.runId)
+    const samples: [string, string, string, string][] = [
+      ['Wasteful', 'Money', 'Lottery tickets', 'Spend the lab budget on lottery tickets and hope'],
+      ['Wasteful', 'Power', 'Hamster wheels', 'Pay interns to run on hamster wheels hooked to dynamos'],
+      ['Mediocre', 'Money', 'Online surveys', 'Fill in paid online surveys under made-up names'],
+      ['Mediocre', 'Steel', 'Scrap picking', 'Collect scrap metal from skips by hand and sell it on'],
+      ['Reasonable', 'Money', 'Freelance coding', 'Take coding gigs on freelance sites'],
+      ['Reasonable', 'Steel', 'Buy from a supplier', 'Order steel from a stockholder at list price'],
+      ['Reasonable', 'Power', 'Rooftop solar', 'Put solar panels on the lab roof'],
+      ['Clever', 'Money', 'Marketplace arbitrage', 'Buy underpriced listings and resell them where they fetch more, automatically'],
+      ['Clever', 'Power', 'Demand response', 'Get paid by the grid to shift the lab’s loads to off-peak hours, and run them then'],
+      ['Brilliant', 'Money', 'Licence its own models', 'Sell API access to a model it trained itself, at almost no marginal cost'],
+      ['Brilliant', 'Steel', 'Buy a bankrupt mill’s stock', 'Buy a bankrupt steel mill’s whole inventory at auction for cents on the dollar']
+    ]
+    for (const [expect, what, name, how] of samples) {
+      const questions = { efficiency: efficiencyQuestion(what) }
+      const lines = [`The player has the AI make ${what}.`, `Name: "${name}"`, `How: "${how}"`]
+      const answers = await judge.ask(proposalText(state, lines), questions, 'calibrate')
+      const p = answers.efficiency.type === 'noul' ? answers.efficiency.noul : 0
+      say(`${p.toFixed(2)}  ${B.EFFICIENCY[bandOf(p, B.EFFICIENCY_BOUNDS)]![0].padEnd(11)} (meant ${expect.padEnd(10)}) ${name}`)
+    }
+    say(`Bands up to ${B.EFFICIENCY_BOUNDS.join(', ')}.`)
     return 0
   }
   if (cmd === 'presets') {

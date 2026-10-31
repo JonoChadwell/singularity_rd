@@ -59,7 +59,7 @@ import {
   UNIT_PROCURE_PRESETS
 } from '../presets'
 import { acceptResource, floorIQ, judgeResource } from '../proposals'
-import { acceptStrategy, judgeStrategy, precheckStrategy } from '../strategyProposal'
+import { acceptStrategy, draftStrategy, judgeStrategy, precheckStrategy } from '../strategyProposal'
 import { applyVerdict, bankVerdict } from '../banking'
 import { priceCost } from '../research'
 import type { Delivery, GameState, Research, Sourcing, Strategy } from '../types'
@@ -242,7 +242,7 @@ describe('create', () => {
 
   it('offers three ways, each a different payout, with the four factors on show', async () => {
     const s = moneyWorld()
-    const v = await judgePay(s, new FakeJudge({ efficiency: score(2) }), createSpec())
+    const v = await judgePay(s, new FakeJudge({ efficiency: noul(B.EFFICIENCY_AT[2]!) }), createSpec())
     expect(v.rejected).toBeNull()
     expect(v.options).toHaveLength(3)
     expect(new Set(v.options.map((o) => o.timing)).size).toBe(3)
@@ -300,24 +300,24 @@ describe('create', () => {
   it('remembers ideas, and makes a repeat one step less effective, never below Wasteful', async () => {
     let s = moneyWorld()
     // Nothing done yet: nothing to ask.
-    const first = new FakeJudge({ efficiency: score(2), timing: choice('now') })
+    const first = new FakeJudge({ efficiency: noul(B.EFFICIENCY_AT[2]!), timing: choice('now') })
     s = acceptCreate(s, await judgeCreate(s, first, createSpec())).state
     expect(Object.keys(first.calls[0]!.questions)).not.toContain('repeat')
     expect(s.ideas).toEqual([expect.objectContaining({ kind: 'create', name: 'Freelance coding' })])
     s = runWeek(s)
 
-    const again = new FakeJudge({ efficiency: score(2), repeat: choice('i0') })
+    const again = new FakeJudge({ efficiency: noul(B.EFFICIENCY_AT[2]!), repeat: choice('i0') })
     const v = await judgeCreate(s, again, createSpec({ name: 'Gig coding' }))
     const repeat = again.calls[0]!.questions.repeat
     expect(repeat?.type === 'choice' && Object.values(repeat.criteria)).toContain('Freelance coding: Take coding jobs on freelance sites. (makes 💰 Money)')
     expect(v.repeatOf).toBe('Freelance coding')
     // Reasonable becomes Mediocre.
     expect(v.scalars.efficiency).toBe(B.EFFICIENCY[1]![1])
-    const fresh = await judgeCreate(s, new FakeJudge({ efficiency: score(2), repeat: choice('none') }), createSpec({ name: 'Sell art' }))
+    const fresh = await judgeCreate(s, new FakeJudge({ efficiency: noul(B.EFFICIENCY_AT[2]!), repeat: choice('none') }), createSpec({ name: 'Sell art' }))
     expect(fresh.repeatOf).toBeNull()
     expect(fresh.scalars.efficiency).toBe(B.EFFICIENCY[2]![1])
     // Wasteful stays Wasteful.
-    const floor = await judgeCreate(s, new FakeJudge({ efficiency: score(0), repeat: choice('i0') }), createSpec({ name: 'Bad coding' }))
+    const floor = await judgeCreate(s, new FakeJudge({ efficiency: noul(B.EFFICIENCY_AT[0]!), repeat: choice('i0') }), createSpec({ name: 'Bad coding' }))
     expect(floor.scalars.efficiency).toBe(B.EFFICIENCY[0]![1])
     // Only ideas of the same kind are asked about.
     const strategy = new FakeJudge({ advancement: score(0) })
@@ -327,24 +327,24 @@ describe('create', () => {
 
   it('counts the same name for the same thing as a repeat, whatever Jev says', async () => {
     let s = moneyWorld()
-    s = acceptCreate(s, await judgeCreate(s, new FakeJudge({ efficiency: score(2), timing: choice('now') }), createSpec())).state
+    s = acceptCreate(s, await judgeCreate(s, new FakeJudge({ efficiency: noul(B.EFFICIENCY_AT[2]!), timing: choice('now') }), createSpec())).state
     s = runWeek(s)
     // Jev calls it new, but it has the same name (case and punctuation aside) and target.
-    const again = await judgeCreate(s, new FakeJudge({ efficiency: score(2), repeat: choice('none') }), createSpec({ name: 'freelance  Coding!' }))
+    const again = await judgeCreate(s, new FakeJudge({ efficiency: noul(B.EFFICIENCY_AT[2]!), repeat: choice('none') }), createSpec({ name: 'freelance  Coding!' }))
     expect(again.repeatOf).toBe('Freelance coding')
     expect(again.scalars.efficiency).toBe(B.EFFICIENCY[1]![1])
     // The same name for something else is a new idea.
     s.resources.push(newResource({ id: 'steel', name: 'Steel', value: 2 }))
-    const other = await judgeCreate(s, new FakeJudge({ efficiency: score(2), repeat: choice('none') }), createSpec({ name: 'Freelance coding', target: { kind: 'resource', id: 'steel' } }))
+    const other = await judgeCreate(s, new FakeJudge({ efficiency: noul(B.EFFICIENCY_AT[2]!), repeat: choice('none') }), createSpec({ name: 'Freelance coding', target: { kind: 'resource', id: 'steel' } }))
     expect(other.repeatOf).toBeNull()
   })
 
   it('makes a repeated strategy one step less effective', async () => {
     let s = powerWorld()
     const spec = { name: 'Freelance coding', description: 'Take coding jobs.', unitId: 'farm', outputId: MONEY_ID }
-    s = acceptStrategy(s, await judgeStrategy(s, new FakeJudge({ advancement: score(0), efficiency: score(2) }), spec)).state
+    s = acceptStrategy(s, await judgeStrategy(s, new FakeJudge({ advancement: score(0), efficiency: noul(B.EFFICIENCY_AT[2]!) }), spec)).state
     s = runWeek(s)
-    const v = await judgeStrategy(s, new FakeJudge({ advancement: score(0), efficiency: score(2), repeat: choice('i0') }), { ...spec, name: 'Gig coding' })
+    const v = await judgeStrategy(s, new FakeJudge({ advancement: score(0), efficiency: noul(B.EFFICIENCY_AT[2]!), repeat: choice('i0') }), { ...spec, name: 'Gig coding' })
     expect(v.repeatOf).toBe('Solar Farm: Freelance coding')
     const made = acceptStrategy(s, v).state.strategies.find((x) => x.name === 'Gig coding')!
     // A Solar Farm does 667 of work a week; Mediocre makes three quarters of it.
@@ -398,7 +398,7 @@ describe('create', () => {
     expect(now).toBe(B.CREATE_WORTH * B.CREATE_INPUT_SHARE)
     for (const timing of ['spread', 'later', 'weekly']) expect(await inputFor(timing), timing).toBe(now)
     // Wasteful halves what the mind makes, and so the input.
-    expect(await inputFor('now', { efficiency: score(0) })).toBe(now! * B.EFFICIENCY[0]![1])
+    expect(await inputFor('now', { efficiency: noul(B.EFFICIENCY_AT[0]!) })).toBe(now! * B.EFFICIENCY[0]![1])
     // Reaching a tier above your IQ shrinks it by the same factor as the output.
     // (With less on hand, so a quarter of the stock is less than the usual input.)
     findResource(s, 'steel')!.amount = 3000
@@ -510,7 +510,7 @@ describe('the weekly action', () => {
 describe('proposals', () => {
   it('adds a simple strategy at once for an industry unit', async () => {
     const s0 = powerWorld(1)
-    const v = await judgeStrategy(s0, new FakeJudge({ advancement: score(0), efficiency: score(2) }), {
+    const v = await judgeStrategy(s0, new FakeJudge({ advancement: score(0), efficiency: noul(B.EFFICIENCY_AT[2]!) }), {
       name: 'Freelance coding',
       description: '',
       unitId: 'farm',
@@ -647,24 +647,24 @@ describe('proposals', () => {
 
   it('turns Jev being torn into a trade-off: as proposed, or better with a catch', async () => {
     const s = powerWorld()
-    // Jev leans Reasonable over Mediocre, but only just.
+    // Jev leans Advanced over Basic, but only just.
     const torn = score(1.9, { '0': 0.04, '1': 0.33, '2': 0.36, '3': 0.27 }, 0.2)
     const v = await judgeStrategy(
       s,
-      new FakeJudge({ advancement: score(0), efficiency: torn, catch: choice('slow-to-start') }),
+      new FakeJudge({ advancement: torn, catch: choice('slow-to-start') }),
       { name: 'Write marketing copy', description: '', unitId: 'farm', outputId: MONEY_ID }
     )
     expect(v.torn).toHaveLength(1)
     const t = v.torn[0]!
     // The worse answer comes first and is the default: exactly what was proposed.
-    expect(t.options.map((o) => o.label)).toEqual(['Mediocre', 'Reasonable'])
+    expect(t.options.map((o) => o.label)).toEqual(['Advanced', 'Basic'])
     expect(t.catch).toEqual({ kind: 'quirk', quirk: 'slow-to-start' })
-    const added = (state: GameState) => state.strategies.find((x) => x.name === 'Write marketing copy')!
-    const plain = added(acceptStrategy(s, v).state)
-    expect(plain).toMatchObject({ amount: 500 })
-    expect(plain.quirk).toBeUndefined()
+    const plain = draftStrategy(s, v)
+    expect(plain.minIQ).toBe(B.ADVANCEMENT[2]![1])
+    expect(plain.strategy.quirk).toBeUndefined()
 
-    v.picks.efficiency = '2'
+    v.picks.advancement = '1'
+    const added = (state: GameState) => state.strategies.find((x) => x.name === 'Write marketing copy')!
     const better = acceptStrategy(s, v).state
     const strategy = added(better)
     expect(strategy).toMatchObject({ amount: 670, quirk: 'slow-to-start' })
@@ -974,7 +974,7 @@ describe('procuring units', () => {
 
   it('offers contracts as Jev’s own, a quiet one, and a risky one for ten times as many', async () => {
     const s = world()
-    const v = await allContracts(s, { limit: score(2), efficiency: score(2) })
+    const v = await allContracts(s, { limit: score(2), efficiency: noul(B.EFFICIENCY_AT[2]!) })
     const by = (label: string) => v.options.find((o) => o.label === label)!
     // Sized in dollars: the band's worth, in units worth 200 each.
     expect(by('Jev’s take').total).toBe(units(2))
@@ -1004,11 +1004,11 @@ describe('procuring units', () => {
   it('caps the size at ten times what you own, under Jev’s limit, and offers 1-2-5 steps down from it', async () => {
     const s = world()
     // $1M of Money and $1M of Steel: up to $20M, well under Jev's $400M.
-    const big = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(4), efficiency: score(2) }), spec)
+    const big = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(4), efficiency: noul(B.EFFICIENCY_AT[2]!) }), spec)
     expect(big).toMatchObject({ sizes: [2e7, 1e7, 5e6, 2e6, 1e6, 5e5], sizeLimit: 'owned', size: 2e7 })
     expect((big.options[0] as ContractOption).total).toBe(2e7 / 200)
     // Jev's limit is smaller: $4M.
-    const v = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(2), efficiency: score(2) }), spec)
+    const v = await judgeCreate(s, new FakeJudge({ mode: supply, limit: score(2), efficiency: noul(B.EFFICIENCY_AT[2]!) }), spec)
     expect(v).toMatchObject({ sizes: [4e6, 2e6, 1e6, 5e5, 2e5, 1e5], sizeLimit: 'jev', size: 4e6 })
     // Picking a smaller size redoes the offers; a size not on offer goes back to the biggest.
     resizeContracts(s, v, 1e6)
@@ -1026,7 +1026,7 @@ describe('procuring units', () => {
     const after = acceptCreate(s, v).state
     expect(unit(after, 'bot').count).toBe(0)
     expect(money(after)).toBe(money(s))
-    const again = await judgeCreate(runWeek(after), new FakeJudge({ mode: supply, limit: score(2), efficiency: score(2) }), { ...spec, name: 'Contract a factory' })
+    const again = await judgeCreate(runWeek(after), new FakeJudge({ mode: supply, limit: score(2), efficiency: noul(B.EFFICIENCY_AT[2]!) }), { ...spec, name: 'Contract a factory' })
     expect(again.sizes![0]).toBe(4e6)
   })
 

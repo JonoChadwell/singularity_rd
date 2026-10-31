@@ -10,6 +10,7 @@ import {
   cleanText,
   costFor,
   efficiencyLevel,
+  efficiencyQuestion,
   floorIQ,
   gate,
   ideaKey,
@@ -109,11 +110,7 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
       type: 'noul',
       instructions: `Could ${unit.name} plausibly do this every week to make ${output.name}?`
     },
-    efficiency: {
-      type: 'score',
-      instructions: `How effective is this as a way to get ${output.name}?`,
-      criteria: scale(B.EFFICIENCY)
-    },
+    efficiency: efficiencyQuestion(output.name),
     advancement: {
       type: 'score',
       instructions: 'How much research would it take to work out how to do this?',
@@ -152,7 +149,6 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
     'strategy'
   )
   const torn: TornSpec[] = [
-    { key: 'efficiency', topic: 'how well it works', better: 'higher' },
     { key: 'advancement', topic: 'how much research it needs', better: 'lower' },
     ...(pool.length ? [{ key: 'input_size', topic: 'how much it uses', better: 'lower' as const }] : [])
   ]

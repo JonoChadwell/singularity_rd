@@ -9,7 +9,7 @@ import { baseLabour, findResource, labourOf, MONEY_ID } from '../model'
 import { newPhase } from '../phase'
 import { applyUnitChanges } from '../research'
 import type { GameState } from '../types'
-import { choice, FakeJudge, score } from './fakeJudge'
+import { choice, FakeJudge, noul } from './fakeJudge'
 
 // What actionValue predicts, checked against what a played week actually does.
 
@@ -75,7 +75,7 @@ describe('action values', () => {
 
   it('lays out a Procurement’s payout week by week, and what it uses up at once', async () => {
     const s = mills(0)
-    const judge = new FakeJudge({ timing: choice('weekly'), efficiency: score(2) })
+    const judge = new FakeJudge({ timing: choice('weekly'), efficiency: noul(B.EFFICIENCY_AT[2]!) })
     const v = await judgeCreate(s, judge, { target: { kind: 'resource', id: 'steel' }, name: 'Buy steel', description: '' })
     v.choice = v.options.findIndex((o) => o.timing === 'weekly')
     const option = v.options[v.choice]!

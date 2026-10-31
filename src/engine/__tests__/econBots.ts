@@ -115,7 +115,7 @@ export const newCtx = (): Ctx => ({
 /** A fake Jev for one action: typical answers, efficiency by how often the action was used. */
 function judge(ctx: Ctx, key: string, answers: Overrides = {}): FakeJudge {
   const fresh = !ctx.stale && (ctx.uses.get(key) ?? 0) < FRESH_USES
-  return new FakeJudge({ ...TYPICAL, efficiency: score(fresh ? 2 : 0), ...answers })
+  return new FakeJudge({ ...TYPICAL, efficiency: noul(B.EFFICIENCY_AT[fresh ? 2 : 0]!), ...answers })
 }
 
 const used = (ctx: Ctx, key: string) => ctx.uses.set(key, (ctx.uses.get(key) ?? 0) + 1)

@@ -1,6 +1,7 @@
 import { it } from 'vitest'
 import { chain, chain2, covered, flat, idle, phase1, phase2, play, smart, smartest, steady, type Result } from './bots'
-import { score } from './fakeJudge'
+import { noul, score } from './fakeJudge'
+import * as B from '../balance'
 import { fmt } from '../model'
 
 // Prints how every scripted bot fares, for tuning. Run with BOT_REPORT=1. The assertions are in
@@ -37,7 +38,7 @@ it.skipIf(!env.BOT_REPORT)(
       line(`p2 covered a${approach}`, await play(await phase2(approach), steady({ reinvest: true, coverBelow: 30 }), 120))
       const reckless = { reinvest: true, answers: { alarm: score(3) } }
       line(`p2 reckless+cover a${approach}`, await play(await phase2(approach), steady({ ...reckless, coverBelow: 20 }), 120))
-      const clever = { reinvest: true, answers: { efficiency: score(3) }, firstUnit: { upkeep_0: score(0) } }
+      const clever = { reinvest: true, answers: { efficiency: noul(B.EFFICIENCY_AT[3]!) }, firstUnit: { upkeep_0: score(0) } }
       line(`p2 clever a${approach}`, await play(await phase2(approach), steady(clever), 120))
       const panic = { reinvest: true, answers: { alarm: score(4) } }
       line(`p2 panic a${approach}`, await play(await phase2(approach), steady(panic), 120))

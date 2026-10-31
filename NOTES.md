@@ -279,6 +279,17 @@ tool was available). The tests cover SSR rendering and pre-filled values only.
   - Two runs agreed to within about 0.04, and every preset kept its band. Rerun with
     `npm run play -- calibrate plans` after changing the question or the presets; the numbers
     are pinned in phases.spec ("reaches every approach from the ready-made plans").
+- **Efficiency, asked as one number (2026-10-31).** Strategies and Procurements used to ask it
+  as a 5-level `score`; it is now one `noul` (`efficiencyQuestion`: "more effectively than the
+  obvious, ordinary way?"), read against `EFFICIENCY_BOUNDS`. A noul can't be torn, so Jev is no
+  longer torn on a strategy's efficiency. The question says an ordinary way is "a toss-up", but
+  Jev still puts ordinary ways at 0.25–0.37 (freelance coding 0.37, buying steel from a
+  supplier 0.25, rooftop solar 0.35), so the bounds sit low: up to 0.10 / 0.22 / 0.45 / 0.70.
+  The samples then land: lottery tickets 0.04 and hamster wheels 0.05 (Wasteful), paid surveys
+  0.17 and scrap picking 0.11 (Mediocre), marketplace arbitrage 0.52 (Clever), licensing its own
+  model 0.75 (Brilliant). Demand response (0.36) and buying a bankrupt mill's stock (0.36) came
+  out Reasonable, a band or two below where they were meant to fall. Two runs agreed to within 0.03. Rerun with
+  `npm run play -- calibrate-efficiency`.
 
 ---
 

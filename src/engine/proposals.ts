@@ -342,9 +342,21 @@ export function repeatOf(state: GameState, answers: Record<string, JevAnswer>, s
   return state.ideas[Number(a.choice.slice(1))]?.name ?? null
 }
 
+/**
+ * The efficiency question: one number, read in EFFICIENCY_BOUNDS. Ordinary ways sit in the
+ * middle, so it asks how much better (or worse) than ordinary this is.
+ */
+export const efficiencyQuestion = (what: string): JevQuestion => ({
+  type: 'noul',
+  instructions: `Would this get ${what} more effectively than the obvious, ordinary way of getting it? A wasteful or roundabout way is a clear no; an ordinary one is a toss-up; a clever one is a yes.`
+})
+
+/** Jev's answer to the efficiency question, 0 to 1. */
+export const efficiencyValue = (v: Pick<VerdictBase, 'answers' | 'picks'>) => reader(v).noul('efficiency')
+
 /** Jev's effectiveness rating as a level of EFFICIENCY, a step lower for a repeat, never below Wasteful. */
 export function efficiencyLevel(v: Pick<VerdictBase, 'answers' | 'picks' | 'repeatOf'>): number {
-  const level = reader(v).level('efficiency', B.EFFICIENCY.length)
+  const level = reader(v).band('efficiency', B.EFFICIENCY_BOUNDS)
   return Math.max(0, level - (v.repeatOf ? B.REPEAT_PENALTY : 0))
 }
 

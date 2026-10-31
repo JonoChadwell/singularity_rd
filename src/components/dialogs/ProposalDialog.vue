@@ -88,6 +88,7 @@
       :accept-label="acceptLabel"
       :save-label="bankable ? 'Save For Later' : undefined"
       :report-placed="reportPlaced"
+      :dials="verdict.kind === 'strategy' || verdict.kind === 'create' ? [efficiencyDial(verdict)] : []"
       @pick="onPick"
       @accept="accept"
       @save="saveForLater"
@@ -334,6 +335,7 @@ import ConsoleDialog from '../kit/ConsoleDialog.vue'
 import Led from '../kit/StatusLed.vue'
 import ApplyButtons from './ApplyButtons.vue'
 import { COPY, type ProposalKind } from './copy'
+import { efficiencyDial } from './dials'
 import HelpTip from './HelpTip.vue'
 import JudgementReport from './JudgementReport.vue'
 import PartSheet from './PartSheet.vue'
