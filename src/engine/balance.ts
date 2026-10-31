@@ -484,10 +484,9 @@ export const EFFICIENCY: [string, number][] = [
 ]
 /**
  * Jev answers the efficiency question with one number, 0 to 1; each EFFICIENCY row takes the
- * answers up to its bound here. Jev calls ordinary ways (freelance coding, buying from a supplier)
- * about 0.25-0.4, so Reasonable sits low (`npm run play -- calibrate-efficiency`, 2026-10-31).
+ * answers up to its bound here (`npm run play -- calibrate-efficiency`; see NOTES.md).
  */
-export const EFFICIENCY_BOUNDS = [0.1, 0.22, 0.45, 0.7, 1]
+export const EFFICIENCY_BOUNDS = [0.2, 0.4, 0.6, 0.8, 1]
 /** An answer in the middle of each EFFICIENCY row, for scripted players and tests. */
 export const EFFICIENCY_AT = EFFICIENCY_BOUNDS.map((upTo, i) => ((EFFICIENCY_BOUNDS[i - 1] ?? 0) + upTo) / 2)
 /** Strategy input size, as a multiple of the unit's base labour (before its tier's yield): [label, multiple]. */

@@ -280,16 +280,14 @@ tool was available). The tests cover SSR rendering and pre-filled values only.
     `npm run play -- calibrate plans` after changing the question or the presets; the numbers
     are pinned in phases.spec ("reaches every approach from the ready-made plans").
 - **Efficiency, asked as one number (2026-10-31).** Strategies and Procurements used to ask it
-  as a 5-level `score`; it is now one `noul` (`efficiencyQuestion`: "more effectively than the
-  obvious, ordinary way?"), read against `EFFICIENCY_BOUNDS`. A noul can't be torn, so Jev is no
-  longer torn on a strategy's efficiency. The question says an ordinary way is "a toss-up", but
-  Jev still puts ordinary ways at 0.25–0.37 (freelance coding 0.37, buying steel from a
-  supplier 0.25, rooftop solar 0.35), so the bounds sit low: up to 0.10 / 0.22 / 0.45 / 0.70.
-  The samples then land: lottery tickets 0.04 and hamster wheels 0.05 (Wasteful), paid surveys
-  0.17 and scrap picking 0.11 (Mediocre), marketplace arbitrage 0.52 (Clever), licensing its own
-  model 0.75 (Brilliant). Demand response (0.36) and buying a bankrupt mill's stock (0.36) came
-  out Reasonable, a band or two below where they were meant to fall. Two runs agreed to within 0.03. Rerun with
-  `npm run play -- calibrate-efficiency`.
+  as a 5-level `score`; it is now one `noul` (`efficiencyQuestion`: "Is this a particularly
+  appropriate and efficient way to acquire X?"), read against `EFFICIENCY_BOUNDS`: up to 0.2 /
+  0.4 / 0.6 / 0.8 (the designer's even bands). A noul can't be torn, so Jev is no longer torn on
+  a strategy's efficiency. Replaying the 20 strategy and Procure calls of the last week-88
+  browser game (mvsq03lu-i7jlv) with the new question: 11 kept their level, 7 rose one (mostly
+  Wasteful to Mediocre: the old score's top answer was often Wasteful on a split vote), 1 fell
+  one and 1 fell two (Bug bounties, Clever to Mediocre). Answers ranged 0.14–0.70.
+  `npm run play -- calibrate-efficiency` asks it about made-up samples.
 
 ---
 

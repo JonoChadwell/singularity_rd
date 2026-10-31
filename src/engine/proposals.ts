@@ -342,13 +342,10 @@ export function repeatOf(state: GameState, answers: Record<string, JevAnswer>, s
   return state.ideas[Number(a.choice.slice(1))]?.name ?? null
 }
 
-/**
- * The efficiency question: one number, read in EFFICIENCY_BOUNDS. Ordinary ways sit in the
- * middle, so it asks how much better (or worse) than ordinary this is.
- */
+/** The efficiency question: one number, read in EFFICIENCY_BOUNDS. */
 export const efficiencyQuestion = (what: string): JevQuestion => ({
   type: 'noul',
-  instructions: `Would this get ${what} more effectively than the obvious, ordinary way of getting it? A wasteful or roundabout way is a clear no; an ordinary one is a toss-up; a clever one is a yes.`
+  instructions: `Is this a particularly appropriate and efficient way to acquire ${what}?`
 })
 
 /** Jev's answer to the efficiency question, 0 to 1. */
