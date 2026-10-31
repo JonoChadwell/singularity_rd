@@ -53,13 +53,13 @@ export function unitValueText(value: number): string {
 }
 
 /**
- * How a unit's tier fits the tier of what it makes: below it, the output is cut hard, a tier
- * at a time; above it, a fifth more for each tier.
+ * How a unit's tier fits the tier of what it makes: one tier below is free, two or more cut the
+ * output hard, a tier at a time; above it, a fifth more for each tier.
  */
 export function tierFactor(unitTier: number, outputTier: number): number {
   const gap = unitTier - outputTier
   if (gap >= 0) return B.TIER_BONUS ** gap
-  return B.TIER_PENALTY[Math.min(B.TIER_PENALTY.length - 1, -gap)]!
+  return B.TIER_PENALTY[Math.min(B.TIER_PENALTY.length - 1, -gap - 1)]!
 }
 
 /** The tier fit in words, or null when the tiers match. Never shows the numbers. */
@@ -67,7 +67,8 @@ export function tierFit(unitTier: number, outputTier: number): { text: string; g
   const gap = unitTier - outputTier
   if (gap === 0) return null
   if (gap > 0) return { text: gap === 1 ? 'Overqualified' : 'Far overqualified', good: true }
-  return { text: gap === -1 ? 'Struggling' : gap === -2 ? 'Far out of its depth' : 'Hopeless', good: false }
+  if (gap === -1) return null
+  return { text: gap === -2 ? 'Struggling' : gap === -3 ? 'Far out of its depth' : 'Hopeless', good: false }
 }
 
 /** A strategy's efficiency in Jev's word: "Brilliant". Null for crew strategies. */

@@ -1143,7 +1143,7 @@ describe('storage', () => {
     // A basic drum for tier 2 Steel still works, two tiers short.
     findResource(s, 'steel')!.tier = 2
     const low = await drum(s)
-    expect(low.options[0]).toMatchObject({ tier: 0, band: 2, holds: B.nice(D * B.TIER_PENALTY[2]!) })
+    expect(low.options[0]).toMatchObject({ tier: 0, band: 2, holds: B.nice(D * B.TIER_PENALTY[1]!) })
   })
 
   it('drops a take that would hold less than one, and with none left, sends you back', async () => {

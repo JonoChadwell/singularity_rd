@@ -55,7 +55,7 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
   action (they are alternatives: researching one drops the others). **Apply now** on one
   takes just that one and researches it at once; it is greyed out if your IQ or stocks fall short.
 - **Tiers.** Resources and units share one tier scale (0-4), tied to IQ. A unit making an output
-  of a higher tier than its own is heavily penalised; a lower one gets a bonus. Jev sets a unit's
+  one tier above its own is free, two or more are heavily penalised; a lower one gets a bonus. Jev sets a unit's
   tier, value and what it runs on, and offers three takes. A unit always runs on (pays its upkeep
   in) a resource one tier below its own, so tier 0 units run on nothing, and a tier needs a
   resource one below it to exist.
