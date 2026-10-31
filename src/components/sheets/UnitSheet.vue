@@ -46,7 +46,7 @@
         </tbody>
       </table>
       <p v-else class="note warn">None yet: you can’t own any until you Procure some.</p>
-      <p class="note">Can exist: {{ ceilingLabel(u.ceiling) }}</p>
+      <p v-if="limitName(game.state)" class="note">{{ limitName(game.state) }}: {{ ceilingLabel(u.ceiling) }}</p>
     </section>
 
     <template #foot>
@@ -81,7 +81,7 @@ import {
   unitCap,
   unitValueText
 } from '@/engine/model'
-import { ceilingLabel } from '@/engine/ceilings'
+import { ceilingLabel, limitName } from '@/engine/ceilings'
 import { lockReason } from '@/engine/phase'
 import { strategyRate } from '@/engine/research'
 import { TRAITS } from '@/engine/traits'

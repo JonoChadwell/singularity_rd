@@ -17,7 +17,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ceilingLabel } from '@/engine/ceilings'
+import { ceilingLabel, limitName } from '@/engine/ceilings'
 import { depotLimit, depotRoom, describeFlows, findDepot, findResource, fmt, fmtCount, tierLabel, unitValueText } from '@/engine/model'
 import { useGameStore } from '@/stores/game'
 import DataSheet from '../kit/DataSheet.vue'
@@ -42,7 +42,7 @@ const specs = computed<SpecRow[]>(() => {
     { k: 'Parts each', v: x.parts.length ? describeFlows(game.state, x.parts) : 'nothing' },
     { k: 'Built', v: ceiling === null ? fmtCount(x.count) : `${fmtCount(x.count)} of the ${fmtCount(depotLimit(game.state, x))} that are of use`, num: true },
     { k: 'Room added', v: `+${fmt(depotRoom(x))}`, num: true },
-    { k: 'Maximum Storage Limit', v: ceiling === null ? 'no limit' : `${ceilingLabel(ceiling)} ${res?.name ?? ''}` },
+    ...(limitName(game.state) && ceiling !== null ? [{ k: limitName(game.state)!, v: `${ceilingLabel(ceiling)} ${res?.name ?? ''}` }] : []),
     { k: 'Jev', v: `${Math.round(x.plausibility * 100)}% plausible` }
   ]
 })

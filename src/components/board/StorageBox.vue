@@ -6,7 +6,7 @@
     </header>
     <p class="sum num">
       {{ fmt(r.cap) }} to start<template v-if="depots.length"> + {{ fmt(Math.max(0, cap - r.cap)) }} in depots</template> = {{ fmt(cap) }}
-      · Maximum Storage Limit: {{ ceilingLabel(r.ceiling) }}
+      <template v-if="limitName(game.state)"> · {{ limitName(game.state) }}: {{ ceilingLabel(r.ceiling) }}</template>
     </p>
     <DepotRow v-for="d in depots" :key="d.id" :depot="d" />
     <p v-if="!depots.length" class="note">
@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ceilingLabel } from '@/engine/ceilings'
+import { ceilingLabel, limitName } from '@/engine/ceilings'
 import { capOf, depotsFor, fmt } from '@/engine/model'
 import type { Resource } from '@/engine/types'
 import { useGameStore } from '@/stores/game'

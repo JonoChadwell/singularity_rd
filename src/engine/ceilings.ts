@@ -16,6 +16,9 @@ const table = (state: GameState, kind: CeilingKind) =>
 /** Phases 1 and 2 have ceilings; Phase 3 doesn't. */
 export const hasCeilings = (state: GameState) => state.phase.n < 3
 
+/** What the UI calls a ceiling, named for the phase it holds in ("Phase 2 Limit"), or null in Phase 3. */
+export const limitName = (state: GameState) => (hasCeilings(state) ? `Phase ${state.phase.n} Limit` : null)
+
 /** Asks how many of a thing the AI could have in its phase, or nothing in Phase 3. */
 export function ceilingQuestion(state: GameState, kind: CeilingKind, name: string, key = 'ceiling'): Record<string, JevQuestion> {
   if (!hasCeilings(state)) return {}

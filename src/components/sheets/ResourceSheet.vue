@@ -29,7 +29,7 @@
             open: () => ui.openSheet({ kind: 'depot', id: d.id }, true)
           })),
           { k: 'Storage', v: fmt(cap), num: true },
-          { k: 'Maximum Storage Limit', v: ceilingLabel(r.ceiling) }
+          ...(limitName(game.state) ? [{ k: limitName(game.state)!, v: ceilingLabel(r.ceiling) }] : [])
         ]"
       />
     </section>
@@ -74,7 +74,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Resource } from '@/engine/types'
-import { ceilingLabel } from '@/engine/ceilings'
+import { ceilingLabel, limitName } from '@/engine/ceilings'
 import { netFlow } from '@/engine/economy'
 import { bandText, capOf, deliveryTiming, depotRoom, depotsFor, findResource, fmt, fmtCount, tierText } from '@/engine/model'
 import { lockReason } from '@/engine/phase'

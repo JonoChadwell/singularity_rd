@@ -3,7 +3,7 @@ import * as B from '../balance'
 import { createUnits, dismissCard, doResearch, dropResearch, researchBlocker, shuffleIdeas, skipGoal } from '../actions'
 import { acceptCreate, isContract, judgeCreate, type ContractOption, type PayoutOption } from '../createProposal'
 import { applyBlocker, applyVerdict, bankVerdict } from '../banking'
-import { ceilingKey } from '../ceilings'
+import { ceilingKey, limitName } from '../ceilings'
 import { coverOptions, judgeCover, precheckCover } from '../coverProposal'
 import { runWeek } from '../cycle'
 import { createInitialState, newResource, newUnit, SERVER_ID } from '../initialState'
@@ -230,7 +230,9 @@ describe('the clock', () => {
       proposedWeek: 1
     })
     s.phase.goalId = 'goal'
+    expect(limitName(s)).toBe('Phase 2 Limit')
     s = doResearch(s, 'goal')
+    expect(limitName(s)).toBeNull()
     expect(s.phase).toMatchObject({ n: 3, status: 'playing', deadline: null })
     expect(weeksLeft(s)).toBeNull()
     for (const f of ['strategy', 'unit', 'mind', 'unit-upgrade'] as Feature[]) expect(lockReason(s, f)).toBeNull()
