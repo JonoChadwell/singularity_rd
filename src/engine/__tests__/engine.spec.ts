@@ -18,7 +18,7 @@ import {
 } from '../createProposal'
 import { runWeek } from '../cycle'
 import { previewWeek } from '../economy'
-import { createInitialState, newMind, newResource, newUnit, SERVER_ID } from '../initialState'
+import { createInitialState, newDepot, newMind, newResource, newUnit, SERVER_ID } from '../initialState'
 import { newPhase } from '../phase'
 import { ceilingLabel, limitName } from '../ceilings'
 import { acceptMind, DEFAULT_SOFTWARE, judgeMind, precheckMind, type MindSpec } from '../mindProposal'
@@ -1174,7 +1174,8 @@ describe('storage', () => {
     // Not a unit: no chip, contract, strategies, upgrades, Industry or Procurement.
     expect(s.units).toHaveLength(0)
     expect(s.sourcing).toHaveLength(0)
-    expect(depotLimit(s, depot)).toBe(B.DEPOT_OPEN)
+    // No ceiling here: no limit on how many.
+    expect(depotLimit(s, depot)).toBe(Infinity)
     s.proposedThisWeek = false
     const money = findResource(s, MONEY_ID)!.amount
     s = buildDepots(s, depot.id, 3)
@@ -1201,18 +1202,26 @@ describe('storage', () => {
     expect(buildDepots(s, depot.id, 2).depots[0]!.count).toBe(2)
   })
 
-  it('counts depots only up to how many can exist, and refuses once there’s room for that', async () => {
+  it('builds depots only up to the Phase 2 Limit, counting the starting storage and other depots', async () => {
     let s = world()
     findResource(s, MONEY_ID)!.amount = 1e9
     findResource(s, 'steel')!.ceiling = 1e6
     s = doResearch(acceptDepot(s, await drum(s)).state, 'design-steel-drum')
     const depot = s.depots[0]!
-    // Enough drums to hold the million that can exist, and no more.
-    expect(depotLimit(s, depot)).toBe(Math.ceil(1e6 / D))
-    expect(() => buildDepots(s, depot.id, Math.ceil(1e6 / D) + 1)).toThrow(/Only/)
-    s = buildDepots(s, depot.id, Math.ceil(1e6 / D))
+    // Enough drums to fill storage from its starting W to the million, and no more.
+    const limit = Math.ceil((1e6 - W) / D)
+    expect(depotLimit(s, depot)).toBe(limit)
+    // What you can afford never passes the limit.
+    expect(depotAffordable(s, depot)).toBe(limit)
+    expect(() => buildDepots(s, depot.id, limit + 1)).toThrow(/Only \d+ more Steel Drum fit under the Phase 2 Limit/)
+    // Other depots for the resource count against it.
+    s.depots.push(newDepot({ id: 'silo', name: 'Silo', resourceId: 'steel', holds: 10 * D, count: 1 }))
+    expect(depotLimit(s, s.depots[0]!)).toBe(Math.ceil((1e6 - W - 10 * D) / D))
+    s.depots.pop()
+    s = buildDepots(s, depot.id, limit)
     expect(capOf(s, findResource(s, 'steel')!)).toBe(1e6)
-    expect(() => buildDepots(s, depot.id, 1)).toThrow(/already holds all/)
+    expect(depotLimit(s, s.depots[0]!)).toBe(0)
+    expect(() => buildDepots(s, depot.id, 1)).toThrow(/already at the Phase 2 Limit/)
     s.proposedThisWeek = false
     expect(precheckDepot(s, { ...spec, name: 'Silo' })).toMatch(/Only about a million Steel can exist/)
   })

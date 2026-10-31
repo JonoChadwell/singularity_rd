@@ -219,19 +219,21 @@ export function capOf(state: GameState, r: Resource): number {
 }
 
 /**
- * The most of a depot design you may own: as many as it takes to hold all of the resource that can
- * exist (a billion with no ceiling).
+ * How many more of a depot you may build: as many as it takes to fill the resource's storage to
+ * its ceiling (the Phase 2 Limit), after its starting storage and other depots. Infinity with no
+ * ceiling.
  */
 export function depotLimit(state: GameState, d: Depot): number {
-  const ceiling = findResource(state, d.resourceId)?.ceiling
-  return ceiling == null ? B.DEPOT_OPEN : Math.max(1, Math.ceil(ceiling / Math.max(1e-9, d.holds)))
+  const r = findResource(state, d.resourceId)
+  if (!r || r.ceiling === null) return Infinity
+  return Math.max(0, Math.ceil((r.ceiling - capOf(state, r)) / Math.max(1e-9, d.holds) - 1e-9))
 }
 
-/** The most of a depot you can build right now, keeping `reserve` back: its parts, and how many more you may own. */
+/** The most of a depot you can build right now, keeping `reserve` back: what its parts allow, never past its limit. */
 export function depotAffordable(state: GameState, d: Depot, reserve: Record<string, number> = {}): number {
   const per = new Map<string, number>()
   for (const p of d.parts) per.set(p.resourceId, (per.get(p.resourceId) ?? 0) + p.amount)
-  return Math.min(Math.max(0, depotLimit(state, d) - d.count), mostFrom(state, per, reserve))
+  return Math.min(depotLimit(state, d), mostFrom(state, per, reserve))
 }
 
 /** The cap a new resource of this tier and value starts with. */

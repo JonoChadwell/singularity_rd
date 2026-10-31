@@ -3,7 +3,7 @@ import * as B from './balance'
 import { ceilingLabel, storageRoom } from './ceilings'
 import { previewWeek } from './economy'
 import { newDepot } from './initialState'
-import { capOf, depotLimit, depotsFor, findResource, fmt, makeId, tierFactor } from './model'
+import { capOf, depotsFor, findResource, fmt, makeId, tierFactor } from './model'
 import { lockReason } from './phase'
 import {
   addResearch,
@@ -279,15 +279,6 @@ export function draftDepot(state: GameState, v: Pick<DepotVerdict, 'answers' | '
     plausibility: v.plausibility,
     parts: o.parts
   })
-}
-
-/** How many more of a depot it takes to hold what you're storing towards (none if already there). */
-export function depotsToTarget(state: GameState, d: Depot, preview?: WeekReport): { more: number; target: DepotTarget } | null {
-  const r = findResource(state, d.resourceId)
-  if (!r) return null
-  const target = depotTarget(state, r, preview)
-  const more = Math.max(0, Math.ceil((target.amount - capOf(state, r)) / Math.max(1e-9, d.holds) - 1e-9))
-  return { more: Math.min(more, Math.max(0, depotLimit(state, d) - d.count)), target }
 }
 
 /** What researching an option does, in words. */

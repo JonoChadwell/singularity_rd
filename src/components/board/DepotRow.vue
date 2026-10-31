@@ -7,7 +7,7 @@
       <span class="num count">×{{ fmtCount(depot.count) }}</span>
     </div>
     <div class="spec num">each holds {{ fmt(depot.holds) }} · all add +{{ fmt(depotRoom(depot)) }}</div>
-    <template v-if="left > 0">
+    <template v-if="limit > 0">
       <div class="spec num">parts each {{ depot.parts.length ? describeFlows(game.state, depot.parts) : 'nothing' }}</div>
       <div class="ctl">
         <input
@@ -15,30 +15,31 @@
           class="n"
           type="number"
           min="1"
+          :max="Number.isFinite(limit) ? limit : undefined"
           :aria-label="`How many ${depot.name} to build`"
           @input="count = Number(($event.target as HTMLInputElement).value)"
         />
         <button class="small" :disabled="!canBuild" @click="game.buildDepots(depot.id, n)">Build {{ fmtCount(n) }}</button>
+        <button class="link" :disabled="!max" title="The most you can afford to build right now" @click="count = max">Max {{ fmtCount(max) }}</button>
         <button
-          v-if="enough && enough.more > 0"
+          v-if="Number.isFinite(limit)"
           class="link"
-          :title="`As many as it takes to hold ${fmt(enough.target.amount)}: ${enough.target.why}`"
-          @click="count = enough.more"
+          title="As many as it takes to fill storage to the Phase 2 Limit"
+          @click="count = limit"
         >
-          enough {{ fmtCount(enough.more) }}
+          Limit {{ fmtCount(limit) }}
         </button>
-        <button class="link" :disabled="!max" title="The most you can pay the parts for right now" @click="count = max">max {{ fmtCount(max) }}</button>
       </div>
-      <p v-if="short" class="short">You need {{ short }}.</p>
+      <p v-if="overLimit" class="short">Only {{ fmtCount(limit) }} more fit under the Phase 2 Limit.</p>
+      <p v-else-if="short" class="short">You need {{ short }}.</p>
     </template>
-    <span v-else class="lbl">Full: these hold all that can exist</span>
+    <span v-else class="lbl">Full: storage is at the Phase 2 Limit</span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { createCost } from '@/engine/actions'
-import { depotsToTarget } from '@/engine/depotProposal'
 import { costShortfall, depotAffordable, depotLimit, depotRoom, describeFlows, fmt, fmtCount } from '@/engine/model'
 import type { Depot } from '@/engine/types'
 import { useGameStore } from '@/stores/game'
@@ -50,11 +51,13 @@ const ui = useUiStore()
 /** How many to build. */
 const count = ref(1)
 const n = computed(() => Math.max(0, Math.floor(count.value)))
-const left = computed(() => Math.max(0, depotLimit(game.state, props.depot) - props.depot.count))
+/** How many more fill storage to the Phase 2 Limit: Infinity in Phase 3. */
+const limit = computed(() => depotLimit(game.state, props.depot))
+/** The most you can afford, never past the limit. */
 const max = computed(() => depotAffordable(game.state, props.depot))
-const enough = computed(() => depotsToTarget(game.state, props.depot, game.preview))
+const overLimit = computed(() => n.value > limit.value)
 const short = computed(() => (n.value ? costShortfall(game.state, createCost(props.depot.parts, n.value)) : null))
-const canBuild = computed(() => n.value >= 1 && n.value <= left.value && !short.value)
+const canBuild = computed(() => n.value >= 1 && !overLimit.value && !short.value)
 </script>
 
 <style scoped>

@@ -181,9 +181,8 @@ chip on the board, so they take no room among the units.
   left, the proposal is rejected and the player proposes another depot.
 - **Up to three takes**, Jev's own first: the same depot at the sizes Jev weighed, each holding
   its worth times the ratio and the factors above. A small one is nearly as good a deal, only
-  built in more pieces. Each card shows its tier and how much one holds, not its worth or the ceiling. Once designed, the
-  Storage box shows how many more it takes to hold the **target**, and its "enough" button builds
-  that many. The target is worked out,
+  built in more pieces. Each card shows its tier and how much one holds, not its worth or the ceiling. Each take also says how many it
+  takes to hold the **target**, which is worked out,
   never typed: the dearest waiting cost in the resource (the goal included), else
   `DEPOT_TARGET_WEEKS` (4) weeks of what you make, else ten times the room you have, never past
   the ceiling.
@@ -193,9 +192,10 @@ what a payer can hold.
 - **The design is research**, priced by tier like a unit's (`TIERS`), and uses the week's action.
   Its clock weeks are Jev's alarm × the resource's clock traits. It can be banked like any design.
 - **Building is free of actions.** Each depot is built from its parts in the Storage box
-  (`buildDepots`), up to as many as it takes to hold all that can exist (`depotLimit`; `DEPOT_OPEN`,
-  a billion, with no ceiling). The box offers "enough" for the target and "max" for what the parts
-  on hand allow. There's no sourcing contract.
+  (`buildDepots`). In Phase 2 you can't build past the **limit**: as many as it takes to fill the
+  resource's storage, after its starting cap and other depots, to its ceiling (`depotLimit`).
+  Phase 3 has no limit. The box offers **Max** (the most the parts on hand allow, never past the
+  limit) and, in Phase 2, **Limit**. There's no sourcing contract.
 - **Depots only hold.** They have no strategies, upkeep, traits or upgrades, can't be Procured,
   and don't count towards Industry. Their datasheet only documents them; building happens in the box.
 

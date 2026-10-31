@@ -68,14 +68,14 @@ export function createUnits(current: GameState, sourcingId: string, n: number): 
   return state
 }
 
-/** Builds depots from their parts, up to how many you may own. Takes no action. */
+/** Builds depots from their parts, never past the Phase 2 Limit. Takes no action. */
 export function buildDepots(current: GameState, depotId: string, n: number): GameState {
   const state = draft(current)
   const d = findDepot(state, depotId)
   n = Math.floor(n)
   if (!d || n <= 0) throw new Error('Nothing to build.')
-  const left = Math.max(0, depotLimit(state, d) - d.count)
-  if (n > left) throw new Error(left ? `Only ${left} more ${d.name} would be any use.` : `${d.name} already holds all that can exist.`)
+  const left = depotLimit(state, d)
+  if (n > left) throw new Error(left ? `Only ${left} more ${d.name} fit under the Phase 2 Limit.` : `Storage is already at the Phase 2 Limit.`)
   const cost = createCost(d.parts, n)
   const short = costShortfall(state, cost)
   if (short) throw new Error(`You need ${short}.`)

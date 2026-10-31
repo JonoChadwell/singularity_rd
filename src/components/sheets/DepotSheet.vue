@@ -9,7 +9,7 @@
       <h4>About depots</h4>
       <p class="note">
         A depot only holds: it does no work, so it has no strategies, upkeep or upgrades, and isn’t Procured. Build them
-        from <b>Storage</b> on the {{ r?.name ?? '' }} bus, at no action. Room past how much {{ r?.name ?? '' }} can exist is no use.
+        from <b>Storage</b> on the {{ r?.name ?? '' }} bus, at no action. In Phase 2 they can’t be built past what fills {{ r?.name ?? '' }}’s storage to its Phase 2 Limit; Phase 3 has no limit.
       </p>
     </section>
   </DataSheet>
@@ -18,7 +18,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ceilingLabel, limitName } from '@/engine/ceilings'
-import { depotLimit, depotRoom, describeFlows, findDepot, findResource, fmt, fmtCount, tierLabel, unitValueText } from '@/engine/model'
+import { depotRoom, describeFlows, findDepot, findResource, fmt, tierLabel, unitValueText } from '@/engine/model'
 import { useGameStore } from '@/stores/game'
 import DataSheet from '../kit/DataSheet.vue'
 import SpecTable, { type SpecRow } from '../kit/SpecTable.vue'
@@ -40,7 +40,6 @@ const specs = computed<SpecRow[]>(() => {
     { k: 'Tier', v: tierLabel(x.tier) },
     { k: 'One is worth', v: unitValueText(x.value) },
     { k: 'Parts each', v: x.parts.length ? describeFlows(game.state, x.parts) : 'nothing' },
-    { k: 'Built', v: ceiling === null ? fmtCount(x.count) : `${fmtCount(x.count)} of the ${fmtCount(depotLimit(game.state, x))} that are of use`, num: true },
     { k: 'Room added', v: `+${fmt(depotRoom(x))}`, num: true },
     ...(limitName(game.state) && ceiling !== null ? [{ k: limitName(game.state)!, v: `${ceilingLabel(ceiling)} ${res?.name ?? ''}` }] : []),
     { k: 'Jev', v: `${Math.round(x.plausibility * 100)}% plausible` }

@@ -207,12 +207,27 @@ describe('App', () => {
       ui.tab = 'board'
       ui.toggleStorage('steel')
     })
-    for (const text of ['Storage · ', 'Steel Drum', '×2', 'each holds 500', '+1,000', 'Build 1', 'max 10', '+ Design depot']) {
+    for (const text of ['Storage · ', 'Steel Drum', '×2', 'each holds 500', '+1,000', 'Build 1', 'Max 10', '+ Design depot']) {
       expect(open).toContain(text)
     }
+    // Phase 3 has no limit, so no Limit button.
+    expect(open).not.toContain('Limit ')
     game.buildDepots('drum', 3)
     expect(game.state.depots[0]!.count).toBe(5)
     expect(findResource(game.state, MONEY_ID)!.amount).toBe(700)
+    // In Phase 2, room for three more under the limit: Max is held to it, and Limit offers it.
+    const limited = await render((g, ui) => {
+      setup(g)
+      g.state.phase = { ...newPhase(2, 1), status: 'playing' }
+      const steel = findResource(g.state, 'steel')!
+      steel.ceiling = steel.cap + 1000 + 1500
+      ui.tab = 'board'
+      ui.toggleStorage('steel')
+    })
+    for (const text of ['Max 3', 'Limit 3', 'Phase 2 Limit']) expect(limited).toContain(text)
+    // And building past it is refused.
+    expect(game.buildDepots('drum', 4)).toBe(false)
+    expect(game.state.depots[0]!.count).toBe(2)
     const sheet = await render((g, ui) => {
       setup(g)
       ui.openSheet({ kind: 'depot', id: 'drum' })
