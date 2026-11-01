@@ -535,6 +535,8 @@ export const BARS = {
   plan: 0.25,
   cover: 0.3
 }
+/** An input (of a strategy or Procurement) fits when Jev rates it at least this. */
+export const INPUT_BAR = 0.3
 /** Jev is torn when confidence is below this and its top two answers are this close. */
 export const TORN_CONFIDENCE = 0.4
 export const TORN_GAP = 0.1

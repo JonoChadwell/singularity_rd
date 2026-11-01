@@ -342,6 +342,29 @@ export function repeatOf(state: GameState, answers: Record<string, JevAnswer>, s
   return state.ideas[Number(a.choice.slice(1))]?.name ?? null
 }
 
+const inputKey = (id: string) => `uses_${id.replace(/-/g, '_')}`
+
+/**
+ * One noul per resource something could use up, each judged on its own rather than against the
+ * others, so "none of them" is an answer Jev can give.
+ */
+export function inputQuestions(pool: Resource[], ask: (r: Resource) => string): Record<string, JevQuestion> {
+  return Object.fromEntries(pool.map((r) => [inputKey(r.id), { type: 'noul', instructions: ask(r) } satisfies JevQuestion]))
+}
+
+/** The resources Jev thinks fit as inputs (at least INPUT_BAR), most fitting first. */
+export function fittingInputs(answers: Record<string, JevAnswer>, pool: Resource[]): { id: string; p: number }[] {
+  return pool
+    .map((r) => ({ id: r.id, p: answers[inputKey(r.id)] ? readNoul(answers[inputKey(r.id)]!) : 0 }))
+    .filter((x) => x.p >= B.INPUT_BAR)
+    .sort((a, b) => b.p - a.p)
+}
+
+/** The best fit Jev gave any input, 0 when there was nothing to ask. */
+export function bestInputFit(answers: Record<string, JevAnswer>, pool: Resource[]): number {
+  return Math.max(0, ...pool.map((r) => (answers[inputKey(r.id)] ? readNoul(answers[inputKey(r.id)]!) : 0)))
+}
+
 /** The efficiency question: one number, read in EFFICIENCY_BOUNDS. */
 export const efficiencyQuestion = (what: string): JevQuestion => ({
   type: 'noul',

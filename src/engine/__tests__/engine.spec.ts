@@ -375,7 +375,7 @@ describe('create', () => {
       newResource({ id: 'lemons', name: 'Lemons', value: 1, amount: 5000, cap: ROOMY }),
       newResource({ id: 'steel', name: 'Steel', value: 1, amount: 5000, cap: ROOMY })
     )
-    const v = await judgePay(s, new FakeJudge({ inputs: choice('steel', { steel: 0.6, lemons: 0.4 }), timing: choice('now') }), createSpec())
+    const v = await judgePay(s, new FakeJudge({ uses_steel: noul(0.6), uses_lemons: noul(0.4), timing: choice('now') }), createSpec())
     const used = v.options.map((o) => o.inputs.map((f) => f.resourceId).join('+'))
     expect(used.slice(0, 2)).toEqual(['steel', 'lemons'])
     // Inputs worth the base come back ×1.2, on top of the base.
@@ -531,8 +531,14 @@ describe('proposals', () => {
       for (let i = 0; i < extra; i++) s.resources.push(newResource({ id: `r${i}`, name: `R${i}`, value: 1, cap: ROOMY }))
       return s
     }
-    const ask = (s: GameState) =>
-      judgeStrategy(s, new FakeJudge({ advancement: score(0), inputs: choice('steel', { steel: 0.5, power: 0.3, r0: 0.1 }) }), spec)
+    const fakeFor = (inputs: Record<string, number>) =>
+      new FakeJudge({
+        advancement: score(0),
+        'uses_*': noul(0.1),
+        ...Object.fromEntries(Object.entries(inputs).map(([id, p]) => [`uses_${id}`, noul(p)]))
+      })
+    const ask = (s: GameState, inputs: Record<string, number> = { steel: 0.6, power: 0.5, r0: 0.4 }) =>
+      judgeStrategy(s, fakeFor(inputs), spec)
     const inputsOf = (v: { options: { inputIds: string[] }[] }) => v.options.map((o) => o.inputIds)
 
     it('always offers a way with no inputs for tier 0 and 1 outputs', async () => {
@@ -553,6 +559,23 @@ describe('proposals', () => {
       const s = world(3)
       s.resources = s.resources.filter((r) => r.id !== 'steel')
       expect(precheckStrategy(s, spec)).toMatch(/2 different inputs/)
+    })
+
+    it('rates each input on its own, and offers only those that fit', async () => {
+      const judge = fakeFor({ steel: 0.6, r0: 0.2 })
+      const v = await judgeStrategy(world(0, 1), judge, spec)
+      const asked = judge.calls[0]!.questions
+      expect(asked).toMatchObject({ uses_steel: { type: 'noul' }, uses_power: { type: 'noul' }, uses_r0: { type: 'noul' } })
+      expect(asked).not.toHaveProperty('inputs')
+      expect(v.rejected).toBeNull()
+      expect(inputsOf(v)).toEqual([[], ['steel']])
+    })
+
+    it('rejects a strategy that needs inputs when too few of your resources fit', async () => {
+      expect((await ask(world(2), { steel: 0.29 })).rejected).toMatch(/any of your resources.*29%/)
+      expect((await ask(world(2), { steel: 0.3 })).rejected).toBeNull()
+      expect((await ask(world(3), { steel: 0.6 })).rejected).toMatch(/only one/)
+      expect((await ask(world(0), {})).rejected).toBeNull()
     })
 
     it('makes the chosen option’s inputs the strategy’s', async () => {

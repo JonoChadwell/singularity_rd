@@ -62,7 +62,8 @@ Phase 1 allows one cover and Phase 2 three; a saved cover is dropped when its ph
 - **Strategies** are what a unit does every week. You say who runs it and what it makes; you don't
   pick its inputs or who pays. Jev offers three ways, each using up different resources: a tier 0
   or 1 output always gets a way with no inputs, tier 2 needs at least one, and tier 3 and up need
-  two different ones.
+  two different ones. Jev rates each of your resources as an input on its own, and only those it
+  gives 30% or more are used (in Procure too); a strategy that needs more inputs than fit is rejected.
 - **Procure** is the mind getting something directly: say what and how. For a resource, Jev
   offers three ways, each using a different resource (or nothing) and paying out now, spread
   out, later, or every week for 20 weeks. It grows with your industry and IQ², and reaching above

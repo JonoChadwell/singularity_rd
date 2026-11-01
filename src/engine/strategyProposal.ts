@@ -11,12 +11,14 @@ import {
   costFor,
   efficiencyLevel,
   efficiencyQuestion,
+  bestInputFit,
+  fittingInputs,
   floorIQ,
   gate,
   ideaKey,
+  inputQuestions,
   logProposal,
   newResearch,
-  options as criteriaOf,
   payQuestion,
   precheckName,
   proposalSlotBlocker,
@@ -38,7 +40,6 @@ import { alarmQuestions } from './risk'
 import { proposalText } from './stateText'
 import { QUIRK_IDS } from './traits'
 import type { Cost, GameState, Resource, Strategy } from './types'
-import { rankedIds } from './unitProposal'
 
 export const MAX_INPUTS = 2
 
@@ -116,13 +117,9 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
       instructions: 'How much research would it take to work out how to do this?',
       criteria: scale(B.ADVANCEMENT)
     },
+    ...inputQuestions(pool, (r) => `Doing this, would ${unit.name} naturally use up ${r.name} (${r.description}) to make ${output.name}?`),
     ...(pool.length
       ? {
-          inputs: {
-            type: 'choice',
-            instructions: `Doing this, which resource would ${unit.name} most naturally use up to make ${output.name}? How likely each is matters too: advanced things take several kinds.`,
-            criteria: criteriaOf(pool)
-          } satisfies JevQuestion,
           input_size: {
             type: 'score',
             instructions: `How much of each input would it use, compared with the work involved?`,
@@ -165,18 +162,27 @@ export async function judgeStrategy(state: GameState, judge: Judge, raw: Strateg
   }
   v.options = strategyOptions(state, v)
   gate(v, `Jev doesn’t think ${unit.name} could do this`, null)
+  // Something that must use up a resource, with none of yours fitting, can't be done here.
+  const fits = fittingInputs(answers, pool).length
+  if (!v.rejected && fits < min) {
+    v.rejected =
+      min === 1 || !fits
+        ? `Jev doesn’t think ${unit.name} would use up any of your resources to make ${output.name} (best ${Math.round(bestInputFit(answers, pool) * 100)}%).`
+        : `${output.name} takes ${min} different inputs, and Jev thinks only one of your resources fits.`
+  }
   return v
 }
 
 /**
- * Three ways to do it, differing in what they use up, in the order Jev finds natural. Simple
+ * Three ways to do it, differing in what they use up, in the order Jev finds natural, using only
+ * the resources Jev thinks fit. Simple
  * things always get a way with no inputs, then one input and two; tier 2 starts at one input; tier
  * 3 and up take two different ones each time. A small world may offer fewer than three.
  */
 export function strategyOptions(state: GameState, v: Pick<StrategyVerdict, 'answers' | 'spec'>): StrategyOption[] {
   const output = findResource(state, v.spec.outputId)!
   const { min } = inputRange(output)
-  const [a, b, c] = rankedIds(v.answers, 'inputs', inputPool(state, output.id))
+  const [a, b, c] = fittingInputs(v.answers, inputPool(state, output.id)).map((x) => x.id)
   const take = (...ids: (string | undefined)[]): string[][] => (ids.every(Boolean) ? [ids as string[]] : [])
   const sets =
     min === 0

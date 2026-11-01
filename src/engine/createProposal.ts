@@ -23,8 +23,10 @@ import {
   baseVerdict,
   claimProposal,
   cleanText,
+  fittingInputs,
   gate,
   ideaKey,
+  inputQuestions,
   logProposal,
   options,
   proposalSlotBlocker,
@@ -216,15 +218,7 @@ export async function judgeCreate(state: GameState, judge: Judge, raw: CreateSpe
             criteria: Object.fromEntries(B.CREATE_TIMINGS.map(([id, label]) => [id, label]))
           } satisfies JevQuestion
         }),
-    ...(pool.length
-      ? {
-          inputs: {
-            type: 'choice',
-            instructions: `Which of the AI's resources would this most naturally use up?`,
-            criteria: options(pool)
-          } satisfies JevQuestion
-        }
-      : {}),
+    ...inputQuestions(pool, (r) => `Would this naturally use up some of the AI's ${r.name} (${r.description})?`),
     ...alarmQuestions(state),
     ...repeatQuestion(state, 'create')
   }
@@ -301,11 +295,12 @@ export function createOptions(state: GameState, v: OptionsOf): CreateOption[] {
   return payouts(state, v, timingOrder.slice(0, B.CREATE_OPTIONS))
 }
 
-/** Payout offers at these timings, each using a different input (or nothing), one free when easy. */
+/**
+ * Payout offers at these timings, each using a different input Jev thinks fits (or nothing once
+ * those run out), one free when easy.
+ */
 function payouts(state: GameState, v: OptionsOf, timings: B.CreateTiming[]): PayoutOption[] {
-  const pool = inputPool(state, v.spec.target)
-  const named = v.answers.inputs ? ranked(v.answers.inputs).map(([id]) => id) : []
-  const inputIds: (string | null)[] = [...new Set([...named, ...pool.map((r) => r.id)])].filter((id) => pool.some((r) => r.id === id))
+  const inputIds = fittingInputs(v.answers, inputPool(state, v.spec.target)).map((x) => x.id)
   const picks = timings.map((timing, i) => ({ id: inputIds[i] ?? null, timing }))
   const tier = targetTier(state, v.spec.target, 'reach')
   const easy = B.techIQ(tier) <= bestIQ(state) * B.CREATE_EASY
