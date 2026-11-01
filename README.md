@@ -180,6 +180,7 @@ npm run play -- next 10     # up to 10 weeks, stopping when something happens
 | `src/engine/risk.ts`, `losses.ts`, `coverProposal.ts` | Phase 2 alarm, expansion weeks and clock moves; the loss conditions a plan can fail by; cover's three options |
 | `src/engine/model.ts`, `traits.ts`, `computeTraits.ts`, `resourceTraits.ts`, `ceilings.ts` | Lookups, IQ (and the IQ counted per research type), caps, contracts, creating units, allocation, costs; the 14 unit traits; the compute traits of a platform; the resource traits; how many of a resource or unit can exist |
 | `src/engine/research.ts`, `upgrade.ts`, `banking.ts` | Research costs and completion; upgrades; saving options for later or applying one now |
+| `src/engine/resourceIcons.ts` | Ready-made icons for every preset and plan resource name; a proposed resource with a matching name gets its icon from here and Jev isn't asked |
 | `src/engine/proposals.ts`, `strategyProposal.ts`, `unitProposal.ts`, `depotProposal.ts` (storage depots), `createProposal.ts` (Procure, sourcing contracts included), `mindProposal.ts`, `dispatch.ts` | Proposal verdicts and costs, one door for all kinds |
 | `src/engine/actions.ts`, `alerts.ts`, `projection.ts`, `stateText.ts` | Planning actions, alerts, goal projection, the world description Jev reads |
 | `src/engine/actionValue.ts` | What an action is worth, from the state: worth now and the change each week after |

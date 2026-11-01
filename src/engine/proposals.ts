@@ -14,6 +14,7 @@ import { ceilingQuestion, readCeiling } from './ceilings'
 import { makeId, namesInUse, startingCap } from './model'
 import { costMultiplier, priceCost, spendable } from './research'
 import { lockReason } from './phase'
+import { knownResourceIcon } from './resourceIcons'
 import { riskFrom } from './risk'
 import { proposalText } from './stateText'
 import { QUIRKS, TRAITS, type QuirkId, type TraitId } from './traits'
@@ -538,9 +539,14 @@ export function resourceQuestions(state: GameState, prefix = '', name = ''): Rec
       instructions: `Going by what ${it} really is, which of these traits fits it most naturally? Each has an upside and a downside; judge the fit, not which is best.`,
       criteria: Object.fromEntries(ALL_RESOURCE_TRAITS.map((t) => [t.id, traitLine(t.id)]))
     },
-    [`${prefix}icon`]: name
-      ? { ...iconQuestion, instructions: `Which icon best represents ${it}?` }
-      : iconQuestion,
+    // A name from the ready-made list brings its own icon, so Jev isn't asked.
+    ...(name && knownResourceIcon(name)
+      ? {}
+      : {
+          [`${prefix}icon`]: name
+            ? { ...iconQuestion, instructions: `Which icon best represents ${it}?` }
+            : iconQuestion
+        }),
     // How many can exist is settled now, not on every storage proposal.
     ...ceilingQuestion(state, 'resource', name ? `"${name}"` : 'of this resource', `${prefix}ceiling`)
   }
@@ -566,7 +572,7 @@ export function resourceFrom(
     id: makeId(state, spec.name),
     name: spec.name,
     description: spec.description || spec.name,
-    icon: B.icon(read.choice(`${prefix}icon`, Object.keys(B.ICONS))),
+    icon: knownResourceIcon(spec.name) ?? B.icon(read.choice(`${prefix}icon`, Object.keys(B.ICONS))),
     band,
     tier,
     value,
@@ -590,6 +596,7 @@ export async function judgeResource(state: GameState, judge: Judge, raw: Resourc
   const refusal = lockReason(state, 'resource') ?? precheckName(state, spec.name)
   if (refusal) throw new Error(refusal)
   const questions = resourceQuestions(state)
+  if (knownResourceIcon(spec.name)) delete questions.icon
   const answers = await judge.ask(
     proposalText(state, [
       'The player proposes a new resource: something the AI could have.',

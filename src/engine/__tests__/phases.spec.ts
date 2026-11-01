@@ -91,7 +91,8 @@ describe('phase plans', () => {
     const v = await judgePlan(s, judge, bribe)
     expect(judge.calls).toHaveLength(1)
     const keys = Object.keys(judge.calls[0]!.questions)
-    expect(keys).toEqual(expect.arrayContaining(['coherent', 'approach', 'top', 'r0_is_thing', 'r1_value', 'r2_value', 'r2_icon']))
+    expect(keys).toEqual(expect.arrayContaining(['coherent', 'approach', 'top', 'r0_is_thing', 'r1_value', 'r2_value']))
+    expect(keys.some((k) => k.endsWith('_icon'))).toBe(false)
     expect(keys.some((k) => k.endsWith('_kind'))).toBe(false)
     expect(v.rejected).toBeNull()
     expect(v.bar).toBe(B.BARS.plan)
@@ -689,7 +690,8 @@ describe('fixes', () => {
     await judgePlan(s, judge, bribe)
     const q = judge.calls[0]!.questions
     expect(q.r1_value!.instructions).toContain('"Story Ideas"')
-    expect(q.r2_icon!.instructions).toContain('"Published Novels"')
+    // Ready-made names carry their own icon, so Jev isn't asked.
+    expect(q.r2_icon).toBeUndefined()
   })
 
   it('counts IQ 100 with a 15 IQ software upgrade as IQ 115', () => {
@@ -789,5 +791,14 @@ describe('fixes', () => {
     const s = phase2()
     const v = await judgeResource(s, new FakeJudge({ same_as: choice(MONEY_ID) }), { name: 'Cash', description: '' })
     expect(() => acceptResource(s, v)).toThrow(/same as Money/)
+  })
+})
+
+describe('ready-made resource icons', () => {
+  it('names the list knows get its icon, case aside', async () => {
+    const { knownResourceIcon } = await import('../resourceIcons')
+    expect(knownResourceIcon('Lemons')).toBe('🍋')
+    expect(knownResourceIcon(' lemons ')).toBe('🍋')
+    expect(knownResourceIcon('Unobtainium')).toBeNull()
   })
 })
